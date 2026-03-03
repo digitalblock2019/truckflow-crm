@@ -1,0 +1,209 @@
+"use client";
+
+import { useState } from "react";
+import Topbar from "@/components/layout/Topbar";
+import DataGrid, { Column } from "@/components/ui/DataGrid";
+import Tabs from "@/components/ui/Tabs";
+import Badge from "@/components/ui/Badge";
+import Button from "@/components/ui/Button";
+import Modal from "@/components/ui/Modal";
+import Input from "@/components/ui/Input";
+import Select from "@/components/ui/Select";
+import LoadPipeline from "@/components/features/LoadPipeline";
+import { useLoads, useCreateLoad, useUpdateLoadStatus, useTruckers, useEmployees } from "@/lib/hooks";
+import { useAuthStore } from "@/lib/auth";
+import { totalPages, fmt } from "@/lib/utils";
+import type { Load } from "@/types";
+
+const statusColors: Record<string, "green" | "blue" | "orange" | "red" | "gray" | "purple"> = {
+  pending: "orange",
+  dispatched: "blue",
+  in_transit: "purple",
+  delivered: "green",
+  invoiced: "green",
+  paid: "green",
+  cancelled: "red",
+};
+
+const tabs = [
+  { key: "", label: "All" },
+  { key: "pending", label: "Pending" },
+  { key: "dispatched", label: "Dispatched" },
+  { key: "in_transit", label: "In Transit" },
+  { key: "delivered", label: "Delivered" },
+  { key: "paid", label: "Paid" },
+];
+
+const nextStatus: Record<string, string> = {
+  pending: "dispatched",
+  dispatched: "in_transit",
+  in_transit: "delivered",
+  delivered: "invoiced",
+  invoiced: "paid",
+};
+
+export default function LoadsPage() {
+  const [tab, setTab] = useState("");
+  const [page, setPage] = useState(1);
+  const [showCreate, setShowCreate] = useState(false);
+  const [selectedLoad, setSelectedLoad] = useState<Load | null>(null);
+  const isSup = useAuthStore((s) => s.isSupervisorOrAdmin());
+
+  const { data, isLoading } = useLoads({ status: tab, page, limit: 20 });
+  const createLoad = useCreateLoad();
+  const updateStatus = useUpdateLoadStatus();
+  const { data: truckersData } = useTruckers({ limit: 100 });
+  const { data: employeesData } = useEmployees({ type: "dispatcher", status: "active", limit: 100 });
+
+  const [form, setForm] = useState({
+    trucker_id: "",
+    dispatcher_id: "",
+    gross_load_amount_cents: "",
+    load_origin: "",
+    load_destination: "",
+  });
+
+  const columns: Column<Load>[] = [
+    { key: "order_number", header: "Order#", render: (r) => <span className="font-mono font-semibold">{r.order_number}</span> },
+    { key: "trucker_name", header: "Trucker" },
+    { key: "load_origin", header: "Origin" },
+    { key: "load_destination", header: "Destination" },
+    { key: "load_status", header: "Status", render: (r) => <Badge color={statusColors[r.load_status] ?? "gray"}>{(r.load_status ?? "—").replace(/_/g, " ")}</Badge> },
+    { key: "gross_load_amount_cents", header: "Gross", render: (r) => <span className="font-mono">{fmt(r.gross_load_amount_cents)}</span> },
+    { key: "dispatcher_name", header: "Dispatcher" },
+    { key: "created_at", header: "Created", render: (r) => new Date(r.created_at).toLocaleDateString() },
+  ];
+
+  const handleCreate = () => {
+    createLoad.mutate(
+      {
+        trucker_id: form.trucker_id,
+        dispatcher_id: form.dispatcher_id,
+        gross_load_amount_cents: parseInt(form.gross_load_amount_cents) * 100,
+        load_origin: form.load_origin,
+        load_destination: form.load_destination,
+      } as unknown as Partial<Load>,
+      {
+        onSuccess: () => {
+          setShowCreate(false);
+          setForm({ trucker_id: "", dispatcher_id: "", gross_load_amount_cents: "", load_origin: "", load_destination: "" });
+        },
+      }
+    );
+  };
+
+  return (
+    <>
+      <Topbar
+        title="Loads / Orders"
+        subtitle="Manage load records and status pipeline"
+        actions={
+          isSup ? <Button onClick={() => setShowCreate(true)}>+ New Load</Button> : undefined
+        }
+      />
+      <Tabs tabs={tabs} active={tab} onChange={(k) => { setTab(k); setPage(1); }} />
+      <div className="flex-1 overflow-y-auto p-6 bg-surface">
+        <DataGrid
+          columns={columns}
+          data={data?.data ?? []}
+          loading={isLoading}
+          page={page}
+          totalPages={totalPages(data)}
+          onPageChange={setPage}
+          onRowClick={(row) => setSelectedLoad(row as unknown as Load)}
+        />
+      </div>
+
+      <Modal
+        open={!!selectedLoad}
+        onClose={() => setSelectedLoad(null)}
+        title={selectedLoad ? `Load ${selectedLoad.order_number}` : ""}
+        width="600px"
+      >
+        {selectedLoad && (
+          <div>
+            <LoadPipeline status={selectedLoad.load_status} />
+            <div className="grid grid-cols-2 gap-4 text-xs mb-4">
+              <div>
+                <div className="text-[10px] font-mono text-txt-light uppercase">Trucker</div>
+                <div className="mt-0.5 text-txt">{selectedLoad.trucker_name ?? "—"}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-mono text-txt-light uppercase">Dispatcher</div>
+                <div className="mt-0.5 text-txt">{selectedLoad.dispatcher_name ?? "—"}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-mono text-txt-light uppercase">Origin</div>
+                <div className="mt-0.5 text-txt">{selectedLoad.load_origin ?? "—"}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-mono text-txt-light uppercase">Destination</div>
+                <div className="mt-0.5 text-txt">{selectedLoad.load_destination ?? "—"}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-mono text-txt-light uppercase">Gross Amount</div>
+                <div className="mt-0.5 text-txt font-mono font-semibold">{fmt(selectedLoad.gross_load_amount_cents)}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-mono text-txt-light uppercase">Company Net</div>
+                <div className="mt-0.5 text-txt font-mono">{fmt(selectedLoad.company_net_cents)}</div>
+              </div>
+            </div>
+            {isSup && nextStatus[selectedLoad.load_status] && (
+              <div className="flex justify-end pt-3 border-t border-border">
+                <Button
+                  onClick={() => {
+                    updateStatus.mutate(
+                      { id: selectedLoad.id, status: nextStatus[selectedLoad.load_status] },
+                      { onSuccess: () => setSelectedLoad(null) }
+                    );
+                  }}
+                  disabled={updateStatus.isPending}
+                >
+                  Advance to {nextStatus[selectedLoad.load_status].replace(/_/g, " ")}
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create New Load" width="560px">
+        <div className="grid grid-cols-2 gap-4">
+          <Select
+            label="Trucker"
+            value={form.trucker_id}
+            onChange={(e) => setForm({ ...form, trucker_id: e.target.value })}
+            options={[
+              { value: "", label: "Select trucker..." },
+              ...(truckersData?.data ?? []).map((t) => ({ value: t.id, label: t.legal_name })),
+            ]}
+          />
+          <Select
+            label="Dispatcher"
+            value={form.dispatcher_id}
+            onChange={(e) => setForm({ ...form, dispatcher_id: e.target.value })}
+            options={[
+              { value: "", label: "Select dispatcher..." },
+              ...(employeesData?.data ?? []).map((e) => ({ value: e.id, label: e.full_name })),
+            ]}
+          />
+          <Input
+            label="Gross Amount ($)"
+            type="number"
+            value={form.gross_load_amount_cents}
+            onChange={(e) => setForm({ ...form, gross_load_amount_cents: e.target.value })}
+          />
+          <Input label="Origin" value={form.load_origin} onChange={(e) => setForm({ ...form, load_origin: e.target.value })} />
+          <Input label="Destination" value={form.load_destination} onChange={(e) => setForm({ ...form, load_destination: e.target.value })} />
+        </div>
+        <div className="flex justify-end gap-2 mt-5">
+          <Button variant="secondary" onClick={() => setShowCreate(false)}>Cancel</Button>
+          <Button onClick={handleCreate} disabled={createLoad.isPending}>
+            {createLoad.isPending ? "Creating..." : "Create Load"}
+          </Button>
+        </div>
+      </Modal>
+    </>
+  );
+}
