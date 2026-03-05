@@ -20,8 +20,7 @@ const statusColors: Record<string, "green" | "blue" | "orange" | "red" | "gray" 
   dispatched: "blue",
   in_transit: "purple",
   delivered: "green",
-  invoiced: "green",
-  paid: "green",
+  payment_received: "green",
   cancelled: "red",
 };
 
@@ -31,15 +30,14 @@ const tabs = [
   { key: "dispatched", label: "Dispatched" },
   { key: "in_transit", label: "In Transit" },
   { key: "delivered", label: "Delivered" },
-  { key: "paid", label: "Paid" },
+  { key: "payment_received", label: "Paid" },
 ];
 
 const nextStatus: Record<string, string> = {
   pending: "dispatched",
   dispatched: "in_transit",
   in_transit: "delivered",
-  delivered: "invoiced",
-  invoiced: "paid",
+  delivered: "payment_received",
 };
 
 export default function LoadsPage() {
@@ -160,7 +158,7 @@ export default function LoadsPage() {
                   }}
                   disabled={updateStatus.isPending}
                 >
-                  Advance to {nextStatus[selectedLoad.load_status].replace(/_/g, " ")}
+                  Advance to {nextStatus[selectedLoad.load_status] === "payment_received" ? "Paid" : nextStatus[selectedLoad.load_status].replace(/_/g, " ")}
                 </Button>
               </div>
             )}

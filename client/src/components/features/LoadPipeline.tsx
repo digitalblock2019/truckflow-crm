@@ -3,8 +3,7 @@ const STEPS = [
   { key: "dispatched", label: "Dispatched" },
   { key: "in_transit", label: "In Transit" },
   { key: "delivered", label: "Delivered" },
-  { key: "invoiced", label: "Invoiced" },
-  { key: "paid", label: "Paid" },
+  { key: "payment_received", label: "Paid" },
 ];
 
 export default function LoadPipeline({ status }: { status: string }) {
