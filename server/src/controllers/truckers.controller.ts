@@ -41,4 +41,9 @@ export class TruckersController {
     const result = await svc.initiateOnboarding(req.params.id as string, req.user!.id);
     res.json(result);
   }
+
+  async delete(req: Request, res: Response) {
+    const result = await svc.delete(req.params.id as string, req.user!.id);
+    res.json(result);
+  }
 }

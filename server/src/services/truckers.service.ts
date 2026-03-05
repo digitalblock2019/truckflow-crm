@@ -98,7 +98,7 @@ export class TruckersService {
 
       // Auto-assign agent if not already assigned
       if (!old.assigned_agent_id) {
-        const userEmployee = await query('SELECT id FROM employees WHERE user_id = $1', [userId]);
+        const userEmployee = await query('SELECT id FROM employees WHERE crm_user_id = $1', [userId]);
         if (userEmployee.rows.length) {
           data.assigned_agent_id = userEmployee.rows[0].id;
         }
@@ -168,5 +168,23 @@ export class TruckersService {
     );
 
     return { message: 'Onboarding initiated' };
+  }
+
+  async delete(id: string, userId: string) {
+    const existing = await query('SELECT * FROM truckers WHERE id = $1', [id]);
+    if (!existing.rows.length) throw new AppError('Trucker not found', 404, 'NOT_FOUND');
+
+    // Delete related records first
+    await query('DELETE FROM trucker_status_history WHERE trucker_id = $1', [id]);
+    await query('DELETE FROM agent_commission_thresholds WHERE trucker_id = $1', [id]);
+    await query('DELETE FROM truckers WHERE id = $1', [id]);
+
+    await query(
+      `INSERT INTO audit_log (user_id, user_role, action, entity_type, entity_id, description)
+       VALUES ($1, (SELECT role FROM users WHERE id=$1), 'delete', 'trucker', $2, $3)`,
+      [userId, id, `Deleted trucker: ${existing.rows[0].legal_name} (MC# ${existing.rows[0].mc_number})`]
+    );
+
+    return { message: 'Trucker deleted' };
   }
 }

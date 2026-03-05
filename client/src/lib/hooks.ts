@@ -79,6 +79,15 @@ export function useUpdateTrucker() {
   });
 }
 
+export function useDeleteTrucker() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch(`/api/truckers/${id}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["truckers"] }),
+  });
+}
+
 export function useImportTruckers() {
   const qc = useQueryClient();
   return useMutation({

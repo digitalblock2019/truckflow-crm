@@ -11,7 +11,7 @@ import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
-import { useTruckers, useCreateTrucker, useUpdateTrucker, useInitiateOnboarding, useEmployees } from "@/lib/hooks";
+import { useTruckers, useCreateTrucker, useUpdateTrucker, useDeleteTrucker, useInitiateOnboarding, useEmployees } from "@/lib/hooks";
 import { useAuthStore } from "@/lib/auth";
 import { totalPages } from "@/lib/utils";
 import type { Trucker } from "@/types";
@@ -76,6 +76,7 @@ export default function TruckersPage() {
   const { data: agentsData } = useEmployees({ type: "sales_agent", status: "active", limit: 100 });
   const createTrucker = useCreateTrucker();
   const updateTrucker = useUpdateTrucker();
+  const deleteTrucker = useDeleteTrucker();
   const initiateOnboarding = useInitiateOnboarding();
 
   const [form, setForm] = useState({ mc_number: "", legal_name: "", phone: "", email: "", state: "" });
@@ -262,6 +263,27 @@ export default function TruckersPage() {
                 </Button>
               </div>
             </div>
+
+            {isSup && (
+              <div className="border-t border-border pt-4 mt-4">
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    if (confirm(`Delete ${selectedTrucker.legal_name}? This cannot be undone.`)) {
+                      deleteTrucker.mutate(selectedTrucker.id, {
+                        onSuccess: () => {
+                          setSelectedTrucker(null);
+                        },
+                      });
+                    }
+                  }}
+                  disabled={deleteTrucker.isPending}
+                  className="!text-red !border-red/30 hover:!bg-red/5"
+                >
+                  {deleteTrucker.isPending ? "Deleting..." : "Delete Trucker"}
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </Modal>
