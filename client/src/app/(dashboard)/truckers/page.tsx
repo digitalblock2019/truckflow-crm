@@ -11,7 +11,7 @@ import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
-import { useTruckers, useCreateTrucker, useUpdateTrucker, useInitiateOnboarding } from "@/lib/hooks";
+import { useTruckers, useCreateTrucker, useUpdateTrucker, useInitiateOnboarding, useEmployees } from "@/lib/hooks";
 import { useAuthStore } from "@/lib/auth";
 import { totalPages } from "@/lib/utils";
 import type { Trucker } from "@/types";
@@ -67,11 +67,13 @@ export default function TruckersPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [selectedTrucker, setSelectedTrucker] = useState<Trucker | null>(null);
   const [newStatus, setNewStatus] = useState("");
+  const [newAgentId, setNewAgentId] = useState("");
   const isSup = useAuthStore((s) => s.isSupervisorOrAdmin());
 
   const queryParams: Record<string, string | number> = { status: tab, search, page, limit: 20 };
   if (batchId) queryParams.batch = batchId;
   const { data, isLoading } = useTruckers(queryParams);
+  const { data: agentsData } = useEmployees({ type: "sales_agent", status: "active", limit: 100 });
   const createTrucker = useCreateTrucker();
   const updateTrucker = useUpdateTrucker();
   const initiateOnboarding = useInitiateOnboarding();
@@ -110,10 +112,24 @@ export default function TruckersPage() {
     );
   };
 
+  const handleAssignAgent = () => {
+    if (!selectedTrucker || !newAgentId) return;
+    updateTrucker.mutate(
+      { id: selectedTrucker.id, assigned_agent_id: newAgentId } as Partial<Trucker> & { id: string },
+      {
+        onSuccess: () => {
+          setSelectedTrucker(null);
+          setNewAgentId("");
+        },
+      }
+    );
+  };
+
   const openDetail = (row: Record<string, unknown>) => {
     const trucker = row as unknown as Trucker;
     setSelectedTrucker(trucker);
     setNewStatus(trucker.status_system || "");
+    setNewAgentId((trucker as any).assigned_agent_id || "");
   };
 
   return (
@@ -196,6 +212,30 @@ export default function TruckersPage() {
                 <div className="mt-0.5 text-txt">{selectedTrucker.agent_name || "—"}</div>
               </div>
             </div>
+
+            {isSup && (
+              <div className="border-t border-border pt-4 mb-4">
+                <div className="flex items-end gap-3">
+                  <div className="flex-1">
+                    <Select
+                      label="Assign Agent"
+                      value={newAgentId}
+                      onChange={(e) => setNewAgentId(e.target.value)}
+                      options={[
+                        { value: "", label: "Unassigned" },
+                        ...(agentsData?.data ?? []).map((e) => ({ value: e.id, label: e.full_name })),
+                      ]}
+                    />
+                  </div>
+                  <Button
+                    onClick={handleAssignAgent}
+                    disabled={updateTrucker.isPending || newAgentId === ((selectedTrucker as any).assigned_agent_id || "")}
+                  >
+                    {updateTrucker.isPending ? "Saving..." : "Assign"}
+                  </Button>
+                </div>
+              </div>
+            )}
 
             <div className="border-t border-border pt-4">
               <div className="text-[10px] font-mono text-txt-light uppercase mb-2">Current Status</div>
