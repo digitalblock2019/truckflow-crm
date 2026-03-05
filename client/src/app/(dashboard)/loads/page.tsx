@@ -40,6 +40,21 @@ const nextStatus: Record<string, string> = {
   delivered: "payment_received",
 };
 
+const prevStatus: Record<string, string> = {
+  dispatched: "pending",
+  in_transit: "dispatched",
+  delivered: "in_transit",
+  payment_received: "delivered",
+};
+
+const statusLabel: Record<string, string> = {
+  pending: "Pending",
+  dispatched: "Dispatched",
+  in_transit: "In Transit",
+  delivered: "Delivered",
+  payment_received: "Paid",
+};
+
 export default function LoadsPage() {
   const [tab, setTab] = useState("");
   const [page, setPage] = useState(1);
@@ -147,19 +162,39 @@ export default function LoadsPage() {
                 <div className="mt-0.5 text-txt font-mono">{fmt(selectedLoad.company_net_cents)}</div>
               </div>
             </div>
-            {isSup && nextStatus[selectedLoad.load_status] && (
-              <div className="flex justify-end pt-3 border-t border-border">
-                <Button
-                  onClick={() => {
-                    updateStatus.mutate(
-                      { id: selectedLoad.id, status: nextStatus[selectedLoad.load_status] },
-                      { onSuccess: () => setSelectedLoad(null) }
-                    );
-                  }}
-                  disabled={updateStatus.isPending}
-                >
-                  Advance to {nextStatus[selectedLoad.load_status] === "payment_received" ? "Paid" : nextStatus[selectedLoad.load_status].replace(/_/g, " ")}
-                </Button>
+            {isSup && (nextStatus[selectedLoad.load_status] || prevStatus[selectedLoad.load_status]) && (
+              <div className="flex justify-between pt-3 border-t border-border">
+                <div>
+                  {prevStatus[selectedLoad.load_status] && (
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        updateStatus.mutate(
+                          { id: selectedLoad.id, status: prevStatus[selectedLoad.load_status] },
+                          { onSuccess: () => setSelectedLoad(null) }
+                        );
+                      }}
+                      disabled={updateStatus.isPending}
+                    >
+                      Revert to {statusLabel[prevStatus[selectedLoad.load_status]]}
+                    </Button>
+                  )}
+                </div>
+                <div>
+                  {nextStatus[selectedLoad.load_status] && (
+                    <Button
+                      onClick={() => {
+                        updateStatus.mutate(
+                          { id: selectedLoad.id, status: nextStatus[selectedLoad.load_status] },
+                          { onSuccess: () => setSelectedLoad(null) }
+                        );
+                      }}
+                      disabled={updateStatus.isPending}
+                    >
+                      Advance to {statusLabel[nextStatus[selectedLoad.load_status]]}
+                    </Button>
+                  )}
+                </div>
               </div>
             )}
           </div>

@@ -131,7 +131,8 @@ export class LoadsService {
     const newIdx = STATUS_ORDER.indexOf(newStatus);
 
     if (newIdx < 0) throw new AppError('Invalid status', 400, 'VALIDATION_ERROR');
-    if (newIdx !== currentIdx + 1) throw new AppError(`Cannot transition from ${current} to ${newStatus}`, 422, 'INVALID_TRANSITION');
+    if (newIdx !== currentIdx + 1 && newIdx !== currentIdx - 1)
+      throw new AppError(`Cannot transition from ${current} to ${newStatus}`, 422, 'INVALID_TRANSITION');
 
     const updates: string[] = ['load_status = $1', 'updated_at = NOW()'];
     const params: any[] = [newStatus];
