@@ -33,7 +33,7 @@ export class TruckersController {
 
   async bulkImport(req: Request, res: Response) {
     if (!req.body.rows || !Array.isArray(req.body.rows)) throw new AppError('rows array required', 400, 'VALIDATION_ERROR');
-    const result = await svc.bulkImport(req.body.rows, req.user!.id);
+    const result = await svc.bulkImport(req.body.rows, req.user!.id, req.body.filename);
     res.status(201).json(result);
   }
 
@@ -44,6 +44,17 @@ export class TruckersController {
 
   async delete(req: Request, res: Response) {
     const result = await svc.delete(req.params.id as string, req.user!.id);
+    res.json(result);
+  }
+
+  async bulkDelete(req: Request, res: Response) {
+    if (!req.body.ids || !Array.isArray(req.body.ids)) throw new AppError('ids array required', 400, 'VALIDATION_ERROR');
+    const result = await svc.bulkDelete(req.body.ids, req.user!.id);
+    res.json(result);
+  }
+
+  async listBatches(_req: Request, res: Response) {
+    const result = await svc.listBatches();
     res.json(result);
   }
 }

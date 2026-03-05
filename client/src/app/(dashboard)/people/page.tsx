@@ -10,7 +10,7 @@ import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import { useEmployees, useTerminateEmployee } from "@/lib/hooks";
 import { useAuthStore } from "@/lib/auth";
-import { totalPages, initials } from "@/lib/utils";
+import { totalPages, initials, employeeTypeLabel } from "@/lib/utils";
 import type { Employee } from "@/types";
 
 const statusColors: Record<string, "green" | "red" | "gray"> = {
@@ -50,7 +50,7 @@ export default function PeoplePage() {
       ),
     },
     { key: "crm_email", header: "Email" },
-    { key: "employee_type", header: "Type", render: (r) => <Badge color="blue">{r.employee_type ?? "—"}</Badge> },
+    { key: "employee_type", header: "Type", render: (r) => <Badge color="blue">{employeeTypeLabel(r.employee_type)}</Badge> },
     { key: "employment_status", header: "Status", render: (r) => <Badge color={statusColors[r.employment_status ?? ""] ?? "gray"}>{r.employment_status ?? "—"}</Badge> },
     { key: "start_date", header: "Start Date", render: (r) => r.start_date ? new Date(r.start_date).toLocaleDateString() : "—" },
     { key: "phone", header: "Phone" },
@@ -89,7 +89,7 @@ export default function PeoplePage() {
               </div>
               <div>
                 <div className="text-base font-bold text-navy">{selectedEmployee.full_name}</div>
-                <div className="text-[11px] text-txt-light font-mono">{selectedEmployee.job_title ?? selectedEmployee.employee_type}</div>
+                <div className="text-[11px] text-txt-light font-mono">{selectedEmployee.job_title ?? employeeTypeLabel(selectedEmployee.employee_type)}</div>
                 <Badge color={statusColors[selectedEmployee.employment_status ?? ""] ?? "gray"} className="mt-1">
                   {selectedEmployee.employment_status ?? "—"}
                 </Badge>

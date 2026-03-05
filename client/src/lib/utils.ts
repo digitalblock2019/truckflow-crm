@@ -10,6 +10,18 @@ export function fmt(cents: number | null | undefined): string {
   return `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
 }
 
+const typeLabels: Record<string, string> = {
+  sales_agent: "Sales Rep",
+  dispatcher: "Dispatcher",
+  fixed_salary: "Staff",
+  contractor: "Contractor",
+};
+
+export function employeeTypeLabel(type: string | null | undefined): string {
+  if (!type) return "—";
+  return typeLabels[type] || type.replace(/_/g, " ");
+}
+
 export function initials(name: string | null | undefined): string {
   if (!name) return "?";
   return name

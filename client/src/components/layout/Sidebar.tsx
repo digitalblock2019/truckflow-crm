@@ -117,7 +117,7 @@ export default function Sidebar() {
             <div className="text-xs text-white truncate">
               {user.full_name}
             </div>
-            <div className="text-[10px] text-white/40 font-mono capitalize">{user.role}</div>
+            <div className="text-[10px] text-white/40 font-mono capitalize">{(user.role ?? "").replace(/_/g, " ")}</div>
           </div>
         </div>
       )}

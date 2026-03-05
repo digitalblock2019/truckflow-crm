@@ -7,7 +7,7 @@ import Topbar from "@/components/layout/Topbar";
 import UploadZone from "@/components/ui/UploadZone";
 import Button from "@/components/ui/Button";
 import Card, { CardHeader } from "@/components/ui/Card";
-import { useImportTruckers } from "@/lib/hooks";
+import { useImportTruckers, useTruckerBatches } from "@/lib/hooks";
 
 interface ParsedRow {
   [key: string]: string;
@@ -77,6 +77,7 @@ export default function UploadPage() {
   const [headers, setHeaders] = useState<string[]>([]);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const importMut = useImportTruckers();
+  const { data: batches } = useTruckerBatches();
 
   const handleFile = async (f: File) => {
     setFile(f);
@@ -110,7 +111,7 @@ export default function UploadPage() {
       }
       return out;
     });
-    importMut.mutate(mapped, {
+    importMut.mutate({ rows: mapped, filename: file?.name }, {
       onSuccess: (data) => {
         setImportResult(data as unknown as ImportResult);
       },
@@ -172,10 +173,56 @@ export default function UploadPage() {
       <Topbar title="Upload Truck Data" subtitle="Import trucker records from CSV or Excel" />
       <div className="flex-1 overflow-y-auto p-6 bg-surface">
         {!file ? (
-          <Card>
-            <CardHeader title="Upload File" subtitle="Drag and drop a CSV or Excel file, or click to browse" />
-            <UploadZone onFile={handleFile} accept=".csv,.xlsx,.xls" />
-          </Card>
+          <>
+            <Card>
+              <CardHeader title="Upload File" subtitle="Drag and drop a CSV or Excel file, or click to browse" />
+              <UploadZone onFile={handleFile} accept=".csv,.xlsx,.xls" />
+            </Card>
+
+            {batches && batches.length > 0 && (
+              <Card className="mt-4">
+                <CardHeader title="Import History" subtitle="Previous imports" />
+                <table className="w-full border-collapse text-xs">
+                  <thead className="bg-[#f8f9fb]">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-[11px] font-semibold text-txt-mid font-mono uppercase tracking-wide border-b border-border">Date</th>
+                      <th className="px-3 py-2 text-left text-[11px] font-semibold text-txt-mid font-mono uppercase tracking-wide border-b border-border">File</th>
+                      <th className="px-3 py-2 text-left text-[11px] font-semibold text-txt-mid font-mono uppercase tracking-wide border-b border-border">Uploaded By</th>
+                      <th className="px-3 py-2 text-center text-[11px] font-semibold text-txt-mid font-mono uppercase tracking-wide border-b border-border">Added</th>
+                      <th className="px-3 py-2 text-center text-[11px] font-semibold text-txt-mid font-mono uppercase tracking-wide border-b border-border">Skipped</th>
+                      <th className="px-3 py-2 text-center text-[11px] font-semibold text-txt-mid font-mono uppercase tracking-wide border-b border-border">Errors</th>
+                      <th className="px-3 py-2 text-left text-[11px] font-semibold text-txt-mid font-mono uppercase tracking-wide border-b border-border">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {batches.map((b) => (
+                      <tr key={b.id} className="hover:bg-[#f8faff]">
+                        <td className="px-3 py-2.5 border-b border-[#f0f2f5] text-txt whitespace-nowrap">
+                          {new Date(b.uploaded_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                          <span className="text-txt-light ml-1.5">
+                            {new Date(b.uploaded_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 border-b border-[#f0f2f5] text-txt font-mono">{b.filename}</td>
+                        <td className="px-3 py-2.5 border-b border-[#f0f2f5] text-txt">{b.uploaded_by_name || "—"}</td>
+                        <td className="px-3 py-2.5 border-b border-[#f0f2f5] text-center font-mono text-green font-semibold">{b.rows_added ?? 0}</td>
+                        <td className="px-3 py-2.5 border-b border-[#f0f2f5] text-center font-mono text-orange">{b.rows_skipped ?? 0}</td>
+                        <td className="px-3 py-2.5 border-b border-[#f0f2f5] text-center font-mono text-red">{b.rows_errored ?? 0}</td>
+                        <td className="px-3 py-2.5 border-b border-[#f0f2f5]">
+                          <button
+                            onClick={() => router.push(`/truckers?batch=${b.id}`)}
+                            className="text-blue hover:underline text-xs font-medium"
+                          >
+                            View Records
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Card>
+            )}
+          </>
         ) : (
           <>
             <Card>

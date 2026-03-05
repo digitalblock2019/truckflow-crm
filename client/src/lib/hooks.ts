@@ -88,12 +88,34 @@ export function useDeleteTrucker() {
   });
 }
 
+export function useBulkDeleteTruckers() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) =>
+      apiFetch("/api/truckers/bulk-delete", { method: "POST", body: JSON.stringify({ ids }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["truckers"] }),
+  });
+}
+
+export function useTruckerBatches() {
+  return useQuery({
+    queryKey: ["trucker-batches"],
+    queryFn: () => apiFetch<Array<{
+      id: string; filename: string; rows_added: number; rows_skipped: number;
+      rows_errored: number; uploaded_by_name: string; uploaded_at: string;
+    }>>("/api/truckers/batches"),
+  });
+}
+
 export function useImportTruckers() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (rows: Record<string, string>[]) =>
-      apiFetch("/api/truckers/import", { method: "POST", body: JSON.stringify({ rows }) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["truckers"] }),
+    mutationFn: ({ rows, filename }: { rows: Record<string, string>[]; filename?: string }) =>
+      apiFetch("/api/truckers/import", { method: "POST", body: JSON.stringify({ rows, filename }) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["truckers"] });
+      qc.invalidateQueries({ queryKey: ["trucker-batches"] });
+    },
   });
 }
 

@@ -120,10 +120,10 @@ export class TruckersService {
     return this.getById(id);
   }
 
-  async bulkImport(rows: any[], userId: string) {
+  async bulkImport(rows: any[], userId: string, filename?: string) {
     const batch = await query(
       'INSERT INTO trucker_upload_batches (filename, uploaded_by) VALUES ($1, $2) RETURNING id',
-      ['csv-import', userId]
+      [filename || 'import', userId]
     );
     const batchId = batch.rows[0].id;
 
@@ -186,5 +186,35 @@ export class TruckersService {
     );
 
     return { message: 'Trucker deleted' };
+  }
+
+  async bulkDelete(ids: string[], userId: string) {
+    let deleted = 0;
+    for (const id of ids) {
+      try {
+        await query('DELETE FROM trucker_status_history WHERE trucker_id = $1', [id]);
+        await query('DELETE FROM agent_commission_thresholds WHERE trucker_id = $1', [id]);
+        await query('DELETE FROM truckers WHERE id = $1', [id]);
+        deleted++;
+      } catch { /* skip errors */ }
+    }
+
+    await query(
+      `INSERT INTO audit_log (user_id, user_role, action, entity_type, entity_id, description)
+       VALUES ($1, (SELECT role FROM users WHERE id=$1), 'delete', 'trucker', $2, $3)`,
+      [userId, 'bulk', `Bulk deleted ${deleted} truckers`]
+    );
+
+    return { deleted };
+  }
+
+  async listBatches() {
+    const result = await query(
+      `SELECT b.*, e.full_name as uploaded_by_name
+       FROM trucker_upload_batches b
+       LEFT JOIN employees e ON e.crm_user_id = b.uploaded_by
+       ORDER BY b.uploaded_at DESC`
+    );
+    return result.rows;
   }
 }

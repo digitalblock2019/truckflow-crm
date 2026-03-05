@@ -11,9 +11,9 @@ import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
-import { useTruckers, useCreateTrucker, useUpdateTrucker, useDeleteTrucker, useInitiateOnboarding, useEmployees } from "@/lib/hooks";
+import { useTruckers, useCreateTrucker, useUpdateTrucker, useDeleteTrucker, useBulkDeleteTruckers, useInitiateOnboarding, useEmployees } from "@/lib/hooks";
 import { useAuthStore } from "@/lib/auth";
-import { totalPages } from "@/lib/utils";
+import { totalPages, employeeTypeLabel } from "@/lib/utils";
 import type { Trucker } from "@/types";
 
 const statusColors: Record<string, "green" | "blue" | "orange" | "red" | "gray" | "purple"> = {
@@ -68,20 +68,67 @@ export default function TruckersPage() {
   const [selectedTrucker, setSelectedTrucker] = useState<Trucker | null>(null);
   const [newStatus, setNewStatus] = useState("");
   const [newAgentId, setNewAgentId] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const isSup = useAuthStore((s) => s.isSupervisorOrAdmin());
 
   const queryParams: Record<string, string | number> = { status: tab, search, page, limit: 20 };
   if (batchId) queryParams.batch = batchId;
   const { data, isLoading } = useTruckers(queryParams);
+  // Fetch both sales agents and dispatchers for assignment
   const { data: agentsData } = useEmployees({ type: "sales_agent", status: "active", limit: 100 });
+  const { data: dispatchersData } = useEmployees({ type: "dispatcher", status: "active", limit: 100 });
+  const allAssignees = [
+    ...(agentsData?.data ?? []).map((e) => ({ value: e.id, label: `${e.full_name} (${employeeTypeLabel(e.employee_type)})` })),
+    ...(dispatchersData?.data ?? []).map((e) => ({ value: e.id, label: `${e.full_name} (${employeeTypeLabel(e.employee_type)})` })),
+  ];
+
   const createTrucker = useCreateTrucker();
   const updateTrucker = useUpdateTrucker();
   const deleteTrucker = useDeleteTrucker();
+  const bulkDelete = useBulkDeleteTruckers();
   const initiateOnboarding = useInitiateOnboarding();
 
   const [form, setForm] = useState({ mc_number: "", legal_name: "", phone: "", email: "", state: "" });
 
+  const rows = data?.data ?? [];
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === rows.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(rows.map((r) => r.id)));
+    }
+  };
+
   const columns: Column<Trucker>[] = [
+    ...(isSup ? [{
+      key: "select" as const,
+      header: (
+        <input
+          type="checkbox"
+          checked={rows.length > 0 && selectedIds.size === rows.length}
+          onChange={toggleSelectAll}
+          className="accent-blue"
+        />
+      ) as unknown as string,
+      render: (r: Trucker) => (
+        <input
+          type="checkbox"
+          checked={selectedIds.has(r.id)}
+          onChange={(e) => { e.stopPropagation(); toggleSelect(r.id); }}
+          onClick={(e) => e.stopPropagation()}
+          className="accent-blue"
+        />
+      ),
+    }] : []),
     { key: "mc_number", header: "MC#", render: (r) => <span className="font-mono font-semibold">{r.mc_number}</span> },
     { key: "legal_name", header: "Legal Name" },
     { key: "dba_name", header: "DBA" },
@@ -104,26 +151,24 @@ export default function TruckersPage() {
     if (!selectedTrucker || !newStatus) return;
     updateTrucker.mutate(
       { id: selectedTrucker.id, status_system: newStatus } as Partial<Trucker> & { id: string },
-      {
-        onSuccess: () => {
-          setSelectedTrucker(null);
-          setNewStatus("");
-        },
-      }
+      { onSuccess: () => { setSelectedTrucker(null); setNewStatus(""); } }
     );
   };
 
   const handleAssignAgent = () => {
-    if (!selectedTrucker || !newAgentId) return;
+    if (!selectedTrucker) return;
     updateTrucker.mutate(
-      { id: selectedTrucker.id, assigned_agent_id: newAgentId } as Partial<Trucker> & { id: string },
-      {
-        onSuccess: () => {
-          setSelectedTrucker(null);
-          setNewAgentId("");
-        },
-      }
+      { id: selectedTrucker.id, assigned_agent_id: newAgentId || null } as Partial<Trucker> & { id: string },
+      { onSuccess: () => { setSelectedTrucker(null); setNewAgentId(""); } }
     );
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Delete ${selectedIds.size} trucker(s)? This cannot be undone.`)) return;
+    bulkDelete.mutate(Array.from(selectedIds), {
+      onSuccess: () => setSelectedIds(new Set()),
+    });
   };
 
   const openDetail = (row: Record<string, unknown>) => {
@@ -139,12 +184,22 @@ export default function TruckersPage() {
         title="Truckers"
         subtitle="Manage trucker/carrier database"
         actions={
-          isSup ? (
-            <Button onClick={() => setShowCreate(true)}>+ Add Trucker</Button>
-          ) : undefined
+          <div className="flex gap-2">
+            {isSup && selectedIds.size > 0 && (
+              <Button
+                variant="secondary"
+                onClick={handleBulkDelete}
+                disabled={bulkDelete.isPending}
+                className="!text-red !border-red/30 hover:!bg-red/5"
+              >
+                {bulkDelete.isPending ? "Deleting..." : `Delete Selected (${selectedIds.size})`}
+              </Button>
+            )}
+            {isSup && <Button onClick={() => setShowCreate(true)}>+ Add Trucker</Button>}
+          </div>
         }
       />
-      <Tabs tabs={tabs} active={tab} onChange={(k) => { setTab(k); setPage(1); }} />
+      <Tabs tabs={tabs} active={tab} onChange={(k) => { setTab(k); setPage(1); setSelectedIds(new Set()); }} />
       {batchId && (
         <div className="mx-6 mt-4 px-3 py-2 bg-blue-light/10 border border-blue-light/30 rounded-md text-xs text-blue flex items-center justify-between">
           <span>Showing imported batch only</span>
@@ -154,11 +209,11 @@ export default function TruckersPage() {
       <div className="flex-1 overflow-y-auto p-6 bg-surface">
         <DataGrid
           columns={columns}
-          data={data?.data ?? []}
+          data={rows}
           loading={isLoading}
           page={page}
           totalPages={totalPages(data)}
-          onPageChange={setPage}
+          onPageChange={(p) => { setPage(p); setSelectedIds(new Set()); }}
           onRowClick={openDetail}
           toolbar={
             <SearchBox value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search MC#, name..." />
@@ -169,7 +224,7 @@ export default function TruckersPage() {
       {/* Trucker Detail Modal */}
       <Modal
         open={!!selectedTrucker}
-        onClose={() => { setSelectedTrucker(null); setNewStatus(""); }}
+        onClose={() => { setSelectedTrucker(null); setNewStatus(""); setNewAgentId(""); }}
         title={selectedTrucker?.legal_name || "Trucker Details"}
         width="600px"
       >
@@ -224,7 +279,7 @@ export default function TruckersPage() {
                       onChange={(e) => setNewAgentId(e.target.value)}
                       options={[
                         { value: "", label: "Unassigned" },
-                        ...(agentsData?.data ?? []).map((e) => ({ value: e.id, label: e.full_name })),
+                        ...allAssignees,
                       ]}
                     />
                   </div>
@@ -271,9 +326,7 @@ export default function TruckersPage() {
                   onClick={() => {
                     if (confirm(`Delete ${selectedTrucker.legal_name}? This cannot be undone.`)) {
                       deleteTrucker.mutate(selectedTrucker.id, {
-                        onSuccess: () => {
-                          setSelectedTrucker(null);
-                        },
+                        onSuccess: () => setSelectedTrucker(null),
                       });
                     }
                   }}
