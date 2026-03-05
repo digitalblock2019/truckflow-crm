@@ -23,6 +23,7 @@ const statusColors: Record<string, "green" | "blue" | "orange" | "red" | "gray" 
   onboarding_initiated: "blue",
   new_lead: "purple",
   new: "purple",
+  imported: "blue",
   called: "orange",
   sms_sent: "orange",
   contacted: "orange",
@@ -32,7 +33,7 @@ const statusColors: Record<string, "green" | "blue" | "orange" | "red" | "gray" 
 
 const tabs = [
   { key: "", label: "All" },
-  { key: "called", label: "Called" },
+  { key: "imported", label: "Imported" },
   { key: "active", label: "Active" },
   { key: "onboarding_initiated", label: "Onboarding" },
   { key: "new", label: "New Leads" },
