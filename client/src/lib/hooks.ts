@@ -84,7 +84,7 @@ export function useDeleteTrucker() {
   return useMutation({
     mutationFn: (id: string) =>
       apiFetch(`/api/truckers/${id}`, { method: "DELETE" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["truckers"] }),
+    onSuccess: () => { qc.refetchQueries({ queryKey: ["truckers"] }); },
   });
 }
 
@@ -93,7 +93,7 @@ export function useBulkDeleteTruckers() {
   return useMutation({
     mutationFn: (ids: string[]) =>
       apiFetch("/api/truckers/bulk-delete", { method: "POST", body: JSON.stringify({ ids }) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["truckers"] }),
+    onSuccess: () => { qc.refetchQueries({ queryKey: ["truckers"] }); },
   });
 }
 
