@@ -22,7 +22,7 @@ export default function ProfilePage() {
 
   const [showLeaveForm, setShowLeaveForm] = useState(false);
   const [leaveForm, setLeaveForm] = useState({
-    leave_type: "vacation",
+    leave_type: "annual",
     start_date: "",
     end_date: "",
     reason: "",
@@ -97,9 +97,9 @@ export default function ProfilePage() {
                       value={leaveForm.leave_type}
                       onChange={(e) => setLeaveForm({ ...leaveForm, leave_type: e.target.value })}
                       options={[
-                        { value: "vacation", label: "Vacation" },
+                        { value: "annual", label: "Annual Leave" },
                         { value: "sick", label: "Sick Leave" },
-                        { value: "personal", label: "Personal" },
+                        { value: "emergency", label: "Emergency" },
                       ]}
                     />
                     <div />
