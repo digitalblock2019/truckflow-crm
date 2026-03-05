@@ -126,12 +126,11 @@ export class TruckersService {
         if (dup.rows.length) { skipped++; continue; }
         await query(
           `INSERT INTO truckers (mc_number, dot_number, legal_name, dba_name, phone, email, state,
-           physical_address, power_units, drivers, status_system, upload_batch_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'imported',$11)`,
+           physical_address, power_units, status_system, upload_batch_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'imported',$10)`,
           [row.mc_number, row.dot_number, row.legal_name, row.dba_name, row.phone, row.email,
            row.state, row.physical_address,
            row.power_units ? parseInt(row.power_units) || null : null,
-           row.drivers ? parseInt(row.drivers) || null : null,
            batchId]
         );
         added++;
