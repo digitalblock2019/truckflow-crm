@@ -88,13 +88,21 @@ export class TruckersService {
     if (!existing.rows.length) throw new AppError('Trucker not found', 404, 'NOT_FOUND');
     const old = existing.rows[0];
 
-    // Track status changes
+    // Track status changes and auto-assign agent
     if (data.status_system && data.status_system !== old.status_system) {
       await query(
         `INSERT INTO trucker_status_history (trucker_id, old_status_system, old_status_custom_id, new_status_system, new_status_custom_id, changed_by)
          VALUES ($1,$2,$3,$4,$5,$6)`,
         [id, old.status_system, old.status_custom_id, data.status_system, data.status_custom_id || null, userId]
       );
+
+      // Auto-assign agent if not already assigned
+      if (!old.assigned_agent_id) {
+        const userEmployee = await query('SELECT id FROM employees WHERE user_id = $1', [userId]);
+        if (userEmployee.rows.length) {
+          data.assigned_agent_id = userEmployee.rows[0].id;
+        }
+      }
     }
 
     const fields: string[] = [];

@@ -11,7 +11,7 @@ import type { Trucker } from "@/types";
 
 export default function OnboardingPage() {
   const [selectedId, setSelectedId] = useState<string>("");
-  const { data: truckersData, isLoading } = useTruckers({ status: "onboarding_initiated", limit: 50 });
+  const { data: truckersData, isLoading } = useTruckers({ status: "onboarded", limit: 50 });
   const truckers = (truckersData?.data ?? []) as Trucker[];
   const { data: docs } = useTruckerDocuments(selectedId);
   const uploadDoc = useUploadDocument();
