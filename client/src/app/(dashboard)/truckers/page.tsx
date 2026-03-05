@@ -11,7 +11,7 @@ import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
-import { useTruckers, useCreateTrucker, useInitiateOnboarding } from "@/lib/hooks";
+import { useTruckers, useCreateTrucker, useUpdateTrucker, useInitiateOnboarding } from "@/lib/hooks";
 import { useAuthStore } from "@/lib/auth";
 import { totalPages } from "@/lib/utils";
 import type { Trucker } from "@/types";
@@ -21,23 +21,41 @@ const statusColors: Record<string, "green" | "blue" | "orange" | "red" | "gray" 
   fully_onboarded: "green",
   onboarding: "blue",
   onboarding_initiated: "blue",
+  onboarded: "blue",
   new_lead: "purple",
   new: "purple",
   imported: "blue",
   called: "orange",
   sms_sent: "orange",
   contacted: "orange",
+  response_picked_up: "green",
+  response_no_answer: "orange",
+  response_not_in_use: "red",
+  interested: "green",
+  not_interested: "red",
   inactive: "gray",
   blacklisted: "red",
 };
 
+const allStatuses = [
+  { value: "imported", label: "Imported" },
+  { value: "called", label: "Called" },
+  { value: "sms_sent", label: "SMS Sent" },
+  { value: "response_picked_up", label: "Response - Picked Up" },
+  { value: "response_no_answer", label: "Response - No Answer" },
+  { value: "response_not_in_use", label: "Response - Not In Use" },
+  { value: "interested", label: "Interested" },
+  { value: "not_interested", label: "Not Interested" },
+  { value: "onboarded", label: "Onboarded" },
+];
+
 const tabs = [
   { key: "", label: "All" },
   { key: "imported", label: "Imported" },
-  { key: "active", label: "Active" },
-  { key: "onboarding_initiated", label: "Onboarding" },
-  { key: "new", label: "New Leads" },
-  { key: "inactive", label: "Inactive" },
+  { key: "called", label: "Called" },
+  { key: "interested", label: "Interested" },
+  { key: "onboarded", label: "Onboarded" },
+  { key: "not_interested", label: "Not Interested" },
 ];
 
 export default function TruckersPage() {
@@ -47,12 +65,15 @@ export default function TruckersPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
+  const [selectedTrucker, setSelectedTrucker] = useState<Trucker | null>(null);
+  const [newStatus, setNewStatus] = useState("");
   const isSup = useAuthStore((s) => s.isSupervisorOrAdmin());
 
-  const params: Record<string, string | number> = { status: tab, search, page, limit: 20 };
-  if (batchId) params.batch = batchId;
-  const { data, isLoading } = useTruckers(params);
+  const queryParams: Record<string, string | number> = { status: tab, search, page, limit: 20 };
+  if (batchId) queryParams.batch = batchId;
+  const { data, isLoading } = useTruckers(queryParams);
   const createTrucker = useCreateTrucker();
+  const updateTrucker = useUpdateTrucker();
   const initiateOnboarding = useInitiateOnboarding();
 
   const [form, setForm] = useState({ mc_number: "", legal_name: "", phone: "", email: "", state: "" });
@@ -63,27 +84,8 @@ export default function TruckersPage() {
     { key: "dba_name", header: "DBA" },
     { key: "state", header: "State" },
     { key: "status_system", header: "Status", render: (r) => <Badge color={statusColors[r.status_system ?? ""] ?? "gray"}>{(r.status_system ?? "—").replace(/_/g, " ")}</Badge> },
-    { key: "truck_type", header: "Type" },
+    { key: "phone", header: "Phone" },
     { key: "agent_name", header: "Agent" },
-    ...(isSup
-      ? [{
-          key: "actions" as const,
-          header: "Actions",
-          render: (r: Trucker) =>
-            r.status_system === "new" || r.status_system === "sms_sent" ? (
-              <Button
-                size="sm"
-                variant="accent"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  initiateOnboarding.mutate(r.id);
-                }}
-              >
-                Onboard
-              </Button>
-            ) : null,
-        }]
-      : []),
   ];
 
   const handleCreate = () => {
@@ -93,6 +95,25 @@ export default function TruckersPage() {
         setForm({ mc_number: "", legal_name: "", phone: "", email: "", state: "" });
       },
     });
+  };
+
+  const handleStatusChange = () => {
+    if (!selectedTrucker || !newStatus) return;
+    updateTrucker.mutate(
+      { id: selectedTrucker.id, status_system: newStatus } as Partial<Trucker> & { id: string },
+      {
+        onSuccess: () => {
+          setSelectedTrucker(null);
+          setNewStatus("");
+        },
+      }
+    );
+  };
+
+  const openDetail = (row: Record<string, unknown>) => {
+    const trucker = row as unknown as Trucker;
+    setSelectedTrucker(trucker);
+    setNewStatus(trucker.status_system || "");
   };
 
   return (
@@ -121,12 +142,91 @@ export default function TruckersPage() {
           page={page}
           totalPages={totalPages(data)}
           onPageChange={setPage}
+          onRowClick={openDetail}
           toolbar={
             <SearchBox value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search MC#, name..." />
           }
         />
       </div>
 
+      {/* Trucker Detail Modal */}
+      <Modal
+        open={!!selectedTrucker}
+        onClose={() => { setSelectedTrucker(null); setNewStatus(""); }}
+        title={selectedTrucker?.legal_name || "Trucker Details"}
+        width="600px"
+      >
+        {selectedTrucker && (
+          <div>
+            <div className="grid grid-cols-2 gap-4 text-xs mb-5">
+              <div>
+                <div className="text-[10px] font-mono text-txt-light uppercase">MC Number</div>
+                <div className="mt-0.5 text-txt font-mono font-semibold">{selectedTrucker.mc_number || "—"}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-mono text-txt-light uppercase">DOT Number</div>
+                <div className="mt-0.5 text-txt font-mono">{selectedTrucker.dot_number || "—"}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-mono text-txt-light uppercase">DBA Name</div>
+                <div className="mt-0.5 text-txt">{selectedTrucker.dba_name || "—"}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-mono text-txt-light uppercase">State</div>
+                <div className="mt-0.5 text-txt">{selectedTrucker.state || "—"}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-mono text-txt-light uppercase">Phone</div>
+                <div className="mt-0.5 text-txt">{selectedTrucker.phone || "—"}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-mono text-txt-light uppercase">Email</div>
+                <div className="mt-0.5 text-txt">{selectedTrucker.email || "—"}</div>
+              </div>
+              <div className="col-span-2">
+                <div className="text-[10px] font-mono text-txt-light uppercase">Physical Address</div>
+                <div className="mt-0.5 text-txt">{selectedTrucker.physical_address || "—"}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-mono text-txt-light uppercase">Power Units</div>
+                <div className="mt-0.5 text-txt">{selectedTrucker.power_units ?? "—"}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-mono text-txt-light uppercase">Assigned Agent</div>
+                <div className="mt-0.5 text-txt">{selectedTrucker.agent_name || "—"}</div>
+              </div>
+            </div>
+
+            <div className="border-t border-border pt-4">
+              <div className="text-[10px] font-mono text-txt-light uppercase mb-2">Current Status</div>
+              <div className="mb-3">
+                <Badge color={statusColors[selectedTrucker.status_system ?? ""] ?? "gray"}>
+                  {(selectedTrucker.status_system ?? "—").replace(/_/g, " ")}
+                </Badge>
+              </div>
+
+              <div className="flex items-end gap-3">
+                <div className="flex-1">
+                  <Select
+                    label="Change Status"
+                    value={newStatus}
+                    onChange={(e) => setNewStatus(e.target.value)}
+                    options={allStatuses}
+                  />
+                </div>
+                <Button
+                  onClick={handleStatusChange}
+                  disabled={updateTrucker.isPending || newStatus === selectedTrucker.status_system}
+                >
+                  {updateTrucker.isPending ? "Updating..." : "Update Status"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Create Trucker Modal */}
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Add New Trucker">
         <div className="grid grid-cols-2 gap-4">
           <Input label="MC Number" value={form.mc_number} onChange={(e) => setForm({ ...form, mc_number: e.target.value })} required />
