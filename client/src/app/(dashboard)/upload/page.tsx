@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import * as XLSX from "xlsx";
 import Topbar from "@/components/layout/Topbar";
 import UploadZone from "@/components/ui/UploadZone";
 import Button from "@/components/ui/Button";
@@ -11,6 +12,33 @@ interface ParsedRow {
   [key: string]: string;
 }
 
+function parseCsv(text: string): { headers: string[]; rows: ParsedRow[] } {
+  const lines = text.split("\n").filter((l) => l.trim());
+  if (lines.length < 2) return { headers: [], rows: [] };
+  const headers = lines[0].split(",").map((h) => h.trim().replace(/"/g, ""));
+  const rows = lines.slice(1).map((line) => {
+    const vals = line.split(",").map((v) => v.trim().replace(/"/g, ""));
+    const row: ParsedRow = {};
+    headers.forEach((h, i) => { row[h] = vals[i] ?? ""; });
+    return row;
+  });
+  return { headers, rows };
+}
+
+function parseXlsx(buffer: ArrayBuffer): { headers: string[]; rows: ParsedRow[] } {
+  const wb = XLSX.read(buffer, { type: "array" });
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+  if (!json.length) return { headers: [], rows: [] };
+  const headers = Object.keys(json[0]);
+  const rows = json.map((r) => {
+    const row: ParsedRow = {};
+    headers.forEach((h) => { row[h] = String(r[h] ?? ""); });
+    return row;
+  });
+  return { headers, rows };
+}
+
 export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
   const [rows, setRows] = useState<ParsedRow[]>([]);
@@ -19,22 +47,17 @@ export default function UploadPage() {
 
   const handleFile = async (f: File) => {
     setFile(f);
-    const text = await f.text();
-    const lines = text.split("\n").filter((l) => l.trim());
-    if (lines.length < 2) return;
-
-    const hdrs = lines[0].split(",").map((h) => h.trim().replace(/"/g, ""));
-    setHeaders(hdrs);
-
-    const parsed = lines.slice(1).map((line) => {
-      const vals = line.split(",").map((v) => v.trim().replace(/"/g, ""));
-      const row: ParsedRow = {};
-      hdrs.forEach((h, i) => {
-        row[h] = vals[i] ?? "";
-      });
-      return row;
-    });
-    setRows(parsed);
+    const isExcel = f.name.endsWith(".xlsx") || f.name.endsWith(".xls");
+    let result: { headers: string[]; rows: ParsedRow[] };
+    if (isExcel) {
+      const buffer = await f.arrayBuffer();
+      result = parseXlsx(buffer);
+    } else {
+      const text = await f.text();
+      result = parseCsv(text);
+    }
+    setHeaders(result.headers);
+    setRows(result.rows);
   };
 
   const handleImport = () => {
@@ -49,12 +72,12 @@ export default function UploadPage() {
 
   return (
     <>
-      <Topbar title="Upload Truck Data" subtitle="Import trucker records from CSV" />
+      <Topbar title="Upload Truck Data" subtitle="Import trucker records from CSV or Excel" />
       <div className="flex-1 overflow-y-auto p-6 bg-surface">
         {!file ? (
           <Card>
             <CardHeader title="Upload File" subtitle="Drag and drop a CSV file or click to browse" />
-            <UploadZone onFile={handleFile} accept=".csv" />
+            <UploadZone onFile={handleFile} accept=".csv,.xlsx,.xls" />
           </Card>
         ) : (
           <>
