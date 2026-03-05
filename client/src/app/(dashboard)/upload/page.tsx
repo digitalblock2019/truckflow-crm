@@ -60,8 +60,47 @@ export default function UploadPage() {
     setRows(result.rows);
   };
 
+  // Map file columns to API field names
+  const columnMap: Record<string, string> = {
+    MC: "mc_number",
+    USDOT: "dot_number",
+    LegalName: "legal_name",
+    DBA: "dba_name",
+    Phone: "phone",
+    Email: "email",
+    PhysicalAddress: "physical_address",
+    PowerUnits: "power_units",
+    Drivers: "drivers",
+    EntityType: "entity_type",
+    OperationClass: "operation_class",
+    OperatingStatus: "operating_status",
+    // Direct matches (already correct field names pass through)
+    mc_number: "mc_number",
+    dot_number: "dot_number",
+    legal_name: "legal_name",
+    dba_name: "dba_name",
+    phone: "phone",
+    email: "email",
+    physical_address: "physical_address",
+  };
+
   const handleImport = () => {
-    importMut.mutate(rows, {
+    const mapped = rows.map((row) => {
+      const out: ParsedRow = {};
+      for (const [fileCol, val] of Object.entries(row)) {
+        const apiField = columnMap[fileCol] || columnMap[fileCol.trim()];
+        if (apiField) out[apiField] = val;
+      }
+      // Extract state from physical address if not present
+      if (!out.state && out.physical_address) {
+        const parts = out.physical_address.split(",").map((s) => s.trim());
+        const last = parts[parts.length - 1] || "";
+        const stateMatch = last.match(/^([A-Z]{2})/);
+        if (stateMatch) out.state = stateMatch[1];
+      }
+      return out;
+    });
+    importMut.mutate(mapped, {
       onSuccess: () => {
         setFile(null);
         setRows([]);
@@ -98,7 +137,7 @@ export default function UploadPage() {
               />
               {importMut.isSuccess && (
                 <div className="bg-green-bg border border-green/30 rounded-md px-3 py-2 mb-4 text-xs text-green">
-                  Import successful!
+                  Import complete! Added: {(importMut.data as any)?.rows_added ?? 0}, Skipped (duplicates): {(importMut.data as any)?.rows_skipped ?? 0}, Errors: {(importMut.data as any)?.rows_errored ?? 0}
                 </div>
               )}
               {importMut.isError && (
