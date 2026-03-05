@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Topbar from "@/components/layout/Topbar";
 import DataGrid, { Column } from "@/components/ui/DataGrid";
 import SearchBox from "@/components/ui/SearchBox";
@@ -22,6 +23,7 @@ const statusColors: Record<string, "green" | "blue" | "orange" | "red" | "gray" 
   onboarding_initiated: "blue",
   new_lead: "purple",
   new: "purple",
+  called: "orange",
   sms_sent: "orange",
   contacted: "orange",
   inactive: "gray",
@@ -30,6 +32,7 @@ const statusColors: Record<string, "green" | "blue" | "orange" | "red" | "gray" 
 
 const tabs = [
   { key: "", label: "All" },
+  { key: "called", label: "Called" },
   { key: "active", label: "Active" },
   { key: "onboarding_initiated", label: "Onboarding" },
   { key: "new", label: "New Leads" },
@@ -37,13 +40,17 @@ const tabs = [
 ];
 
 export default function TruckersPage() {
+  const searchParams = useSearchParams();
+  const batchId = searchParams.get("batch") || "";
   const [tab, setTab] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
   const isSup = useAuthStore((s) => s.isSupervisorOrAdmin());
 
-  const { data, isLoading } = useTruckers({ status: tab, search, page, limit: 20 });
+  const params: Record<string, string | number> = { status: tab, search, page, limit: 20 };
+  if (batchId) params.batch = batchId;
+  const { data, isLoading } = useTruckers(params);
   const createTrucker = useCreateTrucker();
   const initiateOnboarding = useInitiateOnboarding();
 
@@ -99,6 +106,12 @@ export default function TruckersPage() {
         }
       />
       <Tabs tabs={tabs} active={tab} onChange={(k) => { setTab(k); setPage(1); }} />
+      {batchId && (
+        <div className="mx-6 mt-4 px-3 py-2 bg-blue-light/10 border border-blue-light/30 rounded-md text-xs text-blue flex items-center justify-between">
+          <span>Showing imported batch only</span>
+          <a href="/truckers" className="underline font-semibold">View All Truckers</a>
+        </div>
+      )}
       <div className="flex-1 overflow-y-auto p-6 bg-surface">
         <DataGrid
           columns={columns}

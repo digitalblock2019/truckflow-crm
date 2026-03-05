@@ -11,6 +11,7 @@ export class TruckersService {
     if (filters.assigned_to) { conditions.push(`t.assigned_agent_id = $${idx++}`); params.push(filters.assigned_to); }
     if (filters.state) { conditions.push(`t.state ILIKE $${idx++}`); params.push(`%${filters.state}%`); }
     if (filters.fmcsa_status) { conditions.push(`t.fmcsa_operating_status = $${idx++}`); params.push(filters.fmcsa_status); }
+    if (filters.batch) { conditions.push(`t.upload_batch_id = $${idx++}`); params.push(filters.batch); }
     if (filters.search) {
       conditions.push(`(t.legal_name ILIKE $${idx} OR t.mc_number ILIKE $${idx} OR t.dba_name ILIKE $${idx} OR t.phone ILIKE $${idx})`);
       params.push(`%${filters.search}%`); idx++;

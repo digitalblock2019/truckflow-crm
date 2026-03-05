@@ -9,7 +9,8 @@ export class TruckersController {
     const result = await svc.list({
       status: req.query.status, assigned_to: req.query.assigned_to,
       state: req.query.state, fmcsa_status: req.query.fmcsa_status,
-      search: req.query.search, page: Number(req.query.page) || 1, limit: Number(req.query.limit) || 50,
+      search: req.query.search, batch: req.query.batch,
+      page: Number(req.query.page) || 1, limit: Number(req.query.limit) || 50,
     });
     res.json(result);
   }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
 import Topbar from "@/components/layout/Topbar";
 import UploadZone from "@/components/ui/UploadZone";
@@ -10,6 +11,13 @@ import { useImportTruckers } from "@/lib/hooks";
 
 interface ParsedRow {
   [key: string]: string;
+}
+
+interface ImportResult {
+  batch_id: string;
+  rows_added: number;
+  rows_skipped: number;
+  rows_errored: number;
 }
 
 function parseCsv(text: string): { headers: string[]; rows: ParsedRow[] } {
@@ -39,14 +47,41 @@ function parseXlsx(buffer: ArrayBuffer): { headers: string[]; rows: ParsedRow[] 
   return { headers, rows };
 }
 
+// Map file columns to API field names
+const columnMap: Record<string, string> = {
+  MC: "mc_number",
+  USDOT: "dot_number",
+  LegalName: "legal_name",
+  DBA: "dba_name",
+  Phone: "phone",
+  Email: "email",
+  PhysicalAddress: "physical_address",
+  PowerUnits: "power_units",
+  Drivers: "drivers",
+  EntityType: "entity_type",
+  OperationClass: "operation_class",
+  OperatingStatus: "operating_status",
+  mc_number: "mc_number",
+  dot_number: "dot_number",
+  legal_name: "legal_name",
+  dba_name: "dba_name",
+  phone: "phone",
+  email: "email",
+  physical_address: "physical_address",
+};
+
 export default function UploadPage() {
+  const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const importMut = useImportTruckers();
 
   const handleFile = async (f: File) => {
     setFile(f);
+    setImportResult(null);
+    importMut.reset();
     const isExcel = f.name.endsWith(".xlsx") || f.name.endsWith(".xls");
     let result: { headers: string[]; rows: ParsedRow[] };
     if (isExcel) {
@@ -60,30 +95,6 @@ export default function UploadPage() {
     setRows(result.rows);
   };
 
-  // Map file columns to API field names
-  const columnMap: Record<string, string> = {
-    MC: "mc_number",
-    USDOT: "dot_number",
-    LegalName: "legal_name",
-    DBA: "dba_name",
-    Phone: "phone",
-    Email: "email",
-    PhysicalAddress: "physical_address",
-    PowerUnits: "power_units",
-    Drivers: "drivers",
-    EntityType: "entity_type",
-    OperationClass: "operation_class",
-    OperatingStatus: "operating_status",
-    // Direct matches (already correct field names pass through)
-    mc_number: "mc_number",
-    dot_number: "dot_number",
-    legal_name: "legal_name",
-    dba_name: "dba_name",
-    phone: "phone",
-    email: "email",
-    physical_address: "physical_address",
-  };
-
   const handleImport = () => {
     const mapped = rows.map((row) => {
       const out: ParsedRow = {};
@@ -91,7 +102,6 @@ export default function UploadPage() {
         const apiField = columnMap[fileCol] || columnMap[fileCol.trim()];
         if (apiField) out[apiField] = val;
       }
-      // Extract state from physical address if not present
       if (!out.state && out.physical_address) {
         const parts = out.physical_address.split(",").map((s) => s.trim());
         const last = parts[parts.length - 1] || "";
@@ -101,13 +111,61 @@ export default function UploadPage() {
       return out;
     });
     importMut.mutate(mapped, {
-      onSuccess: () => {
-        setFile(null);
-        setRows([]);
-        setHeaders([]);
+      onSuccess: (data) => {
+        setImportResult(data as unknown as ImportResult);
       },
     });
   };
+
+  const handleReset = () => {
+    setFile(null);
+    setRows([]);
+    setHeaders([]);
+    setImportResult(null);
+    importMut.reset();
+  };
+
+  // Success screen
+  if (importResult) {
+    return (
+      <>
+        <Topbar title="Upload Truck Data" subtitle="Import trucker records from CSV or Excel" />
+        <div className="flex-1 overflow-y-auto p-6 bg-surface">
+          <Card>
+            <div className="text-center py-10">
+              <div className="text-5xl mb-4">&#x2705;</div>
+              <h2 className="text-xl font-semibold text-navy mb-2">Import Complete!</h2>
+              <p className="text-sm text-txt-mid mb-6">
+                File <span className="font-mono font-semibold">{file?.name}</span> has been processed.
+              </p>
+              <div className="flex justify-center gap-8 mb-8">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-green">{importResult.rows_added}</div>
+                  <div className="text-xs text-txt-light mt-1">Added</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-orange">{importResult.rows_skipped}</div>
+                  <div className="text-xs text-txt-light mt-1">Skipped (duplicates)</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-red">{importResult.rows_errored}</div>
+                  <div className="text-xs text-txt-light mt-1">Errors</div>
+                </div>
+              </div>
+              <div className="flex justify-center gap-3">
+                <Button variant="secondary" onClick={handleReset}>
+                  Upload Another File
+                </Button>
+                <Button onClick={() => router.push(`/truckers?batch=${importResult.batch_id}`)}>
+                  View Imported Truckers
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
@@ -115,7 +173,7 @@ export default function UploadPage() {
       <div className="flex-1 overflow-y-auto p-6 bg-surface">
         {!file ? (
           <Card>
-            <CardHeader title="Upload File" subtitle="Drag and drop a CSV file or click to browse" />
+            <CardHeader title="Upload File" subtitle="Drag and drop a CSV or Excel file, or click to browse" />
             <UploadZone onFile={handleFile} accept=".csv,.xlsx,.xls" />
           </Card>
         ) : (
@@ -126,7 +184,7 @@ export default function UploadPage() {
                 subtitle={`${rows.length} rows detected`}
                 action={
                   <div className="flex gap-2">
-                    <Button variant="secondary" onClick={() => { setFile(null); setRows([]); setHeaders([]); }}>
+                    <Button variant="secondary" onClick={handleReset}>
                       Cancel
                     </Button>
                     <Button onClick={handleImport} disabled={importMut.isPending}>
@@ -135,11 +193,6 @@ export default function UploadPage() {
                   </div>
                 }
               />
-              {importMut.isSuccess && (
-                <div className="bg-green-bg border border-green/30 rounded-md px-3 py-2 mb-4 text-xs text-green">
-                  Import complete! Added: {(importMut.data as any)?.rows_added ?? 0}, Skipped (duplicates): {(importMut.data as any)?.rows_skipped ?? 0}, Errors: {(importMut.data as any)?.rows_errored ?? 0}
-                </div>
-              )}
               {importMut.isError && (
                 <div className="bg-red-bg border border-red/30 rounded-md px-3 py-2 mb-4 text-xs text-red">
                   {importMut.error?.message || "Import failed"}
