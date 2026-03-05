@@ -10,11 +10,18 @@ export class TruckerDocumentsService {
     );
 
     const docMap = new Map(docs.rows.map((d: any) => [d.document_type_id, d]));
-    return types.rows.map((t: any) => ({
-      ...t,
-      status: docMap.has(t.id) ? 'uploaded' : 'not_uploaded',
-      document: docMap.get(t.id) || null,
-    }));
+    return types.rows.map((t: any) => {
+      const doc = docMap.get(t.id);
+      return {
+        type_slug: t.slug,
+        type_label: t.label,
+        required: t.is_required,
+        uploaded: !!doc,
+        file_name: doc?.file_name || null,
+        uploaded_at: doc?.uploaded_at || null,
+        uploaded_by: doc?.uploaded_by || null,
+      };
+    });
   }
 
   async upload(truckerId: string, typeSlug: string, fileData: any, userId: string) {

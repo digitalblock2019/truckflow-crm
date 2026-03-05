@@ -29,29 +29,49 @@ export default function OnboardingPage() {
       <div className="flex-1 overflow-y-auto p-6 bg-surface">
         <div className="grid grid-cols-[340px_1fr] gap-4">
           <Card className="!p-0 max-h-[calc(100vh-140px)] overflow-y-auto">
-            <div className="px-4 py-3 border-b border-border">
-              <h3 className="text-sm font-semibold text-navy">Onboarding Queue</h3>
-              <p className="text-[11px] text-txt-light">{truckers.length} truckers</p>
+            <div className="bg-navy px-4 py-4 rounded-t-xl">
+              <h3 className="text-sm font-bold text-white tracking-wide">Onboarding Queue</h3>
+              <p className="text-[11px] text-white/60 mt-0.5">{truckers.length} truckers</p>
             </div>
             {isLoading ? (
               <div className="p-4 text-xs text-txt-light">Loading...</div>
             ) : truckers.length === 0 ? (
               <div className="p-4 text-xs text-txt-light text-center">No truckers in onboarding</div>
             ) : (
-              truckers.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => setSelectedId(t.id)}
-                  className={`w-full text-left px-4 py-3 border-b border-[#f0f2f5] cursor-pointer transition-colors
-                    ${t.id === selectedId ? "bg-[#f0f6ff]" : "hover:bg-[#f8faff]"}`}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-semibold text-txt">{t.legal_name}</span>
-                    <Badge color="blue">{t.status_system?.replace(/_/g, " ") ?? "—"}</Badge>
-                  </div>
-                  <div className="text-[11px] text-txt-light font-mono">{t.mc_number}</div>
-                </button>
-              ))
+              truckers.map((t) => {
+                const tDocsUploaded = (t as any).docs_uploaded ?? null;
+                const tDocsRequired = (t as any).docs_required ?? null;
+                const hasDocInfo = tDocsRequired !== null && tDocsRequired > 0;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setSelectedId(t.id)}
+                    className={`w-full text-left px-4 py-3 border-b border-[#f0f2f5] cursor-pointer transition-colors
+                      ${t.id === selectedId ? "bg-[#f0f6ff]" : "hover:bg-[#f8faff]"}`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-semibold text-txt">{t.legal_name}</span>
+                      <Badge color="blue">{t.status_system?.replace(/_/g, " ") ?? "—"}</Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-txt-light font-mono">{t.mc_number}</span>
+                      {hasDocInfo && (
+                        <span className="text-[10px] text-txt-mid font-mono">
+                          {tDocsUploaded}/{tDocsRequired} docs
+                        </span>
+                      )}
+                    </div>
+                    {hasDocInfo && (
+                      <div className="mt-1.5 bg-surface-mid rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className="h-full bg-green rounded-full transition-[width] duration-300"
+                          style={{ width: `${Math.round((tDocsUploaded / tDocsRequired) * 100)}%` }}
+                        />
+                      </div>
+                    )}
+                  </button>
+                );
+              })
             )}
           </Card>
 

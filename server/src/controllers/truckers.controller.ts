@@ -48,7 +48,12 @@ export class TruckersController {
   }
 
   async bulkDelete(req: Request, res: Response) {
-    if (!req.body.ids || !Array.isArray(req.body.ids)) throw new AppError('ids array required', 400, 'VALIDATION_ERROR');
+    // Support batch_id to delete entire batch, or ids array for individual truckers
+    if (req.body.batch_id) {
+      const result = await svc.deleteBatch(req.body.batch_id, req.user!.id);
+      return res.json(result);
+    }
+    if (!req.body.ids || !Array.isArray(req.body.ids)) throw new AppError('ids array or batch_id required', 400, 'VALIDATION_ERROR');
     const result = await svc.bulkDelete(req.body.ids, req.user!.id);
     res.json(result);
   }

@@ -11,9 +11,11 @@ import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
-import { useTruckers, useCreateTrucker, useUpdateTrucker, useDeleteTrucker, useBulkDeleteTruckers, useInitiateOnboarding, useEmployees } from "@/lib/hooks";
+import { useTruckers, useCreateTrucker, useUpdateTrucker, useDeleteTrucker, useBulkDeleteTruckers, useInitiateOnboarding, useEmployees, useTruckerDocuments, useUploadDocument } from "@/lib/hooks";
 import { useAuthStore } from "@/lib/auth";
 import { totalPages, employeeTypeLabel } from "@/lib/utils";
+import ProgressBar from "@/components/ui/ProgressBar";
+import DocSlot from "@/components/features/DocSlot";
 import type { Trucker } from "@/types";
 
 const statusColors: Record<string, "green" | "blue" | "orange" | "red" | "gray" | "purple"> = {
@@ -69,6 +71,7 @@ export default function TruckersPage() {
   const [newStatus, setNewStatus] = useState("");
   const [newAgentId, setNewAgentId] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [modalTab, setModalTab] = useState<"details" | "documents">("details");
   const isSup = useAuthStore((s) => s.isSupervisorOrAdmin());
 
   const queryParams: Record<string, string | number> = { status: tab, search, page, limit: 20 };
@@ -87,6 +90,12 @@ export default function TruckersPage() {
   const deleteTrucker = useDeleteTrucker();
   const bulkDelete = useBulkDeleteTruckers();
   const initiateOnboarding = useInitiateOnboarding();
+  const { data: truckerDocs } = useTruckerDocuments(selectedTrucker?.id ?? "");
+  const uploadDoc = useUploadDocument();
+
+  const modalDocsArr = truckerDocs ?? [];
+  const modalDocsUploaded = modalDocsArr.filter((d) => d.uploaded).length;
+  const modalDocsProgress = modalDocsArr.length > 0 ? Math.round((modalDocsUploaded / modalDocsArr.length) * 100) : 0;
 
   const [form, setForm] = useState({ mc_number: "", legal_name: "", phone: "", email: "", state: "" });
 
@@ -176,6 +185,7 @@ export default function TruckersPage() {
     setSelectedTrucker(trucker);
     setNewStatus(trucker.status_system || "");
     setNewAgentId((trucker as any).assigned_agent_id || "");
+    setModalTab("details");
   };
 
   return (
@@ -224,12 +234,63 @@ export default function TruckersPage() {
       {/* Trucker Detail Modal */}
       <Modal
         open={!!selectedTrucker}
-        onClose={() => { setSelectedTrucker(null); setNewStatus(""); setNewAgentId(""); }}
+        onClose={() => { setSelectedTrucker(null); setNewStatus(""); setNewAgentId(""); setModalTab("details"); }}
         title={selectedTrucker?.legal_name || "Trucker Details"}
-        width="600px"
+        width="640px"
       >
         {selectedTrucker && (
           <div>
+            {/* Tab Switcher */}
+            <div className="flex gap-0 border-b border-border mb-5">
+              {(["details", "documents"] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setModalTab(t)}
+                  className={`px-4 py-2 text-xs font-semibold capitalize transition-colors cursor-pointer
+                    ${modalTab === t
+                      ? "text-blue border-b-2 border-blue"
+                      : "text-txt-light hover:text-txt"
+                    }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+
+            {modalTab === "documents" ? (
+              <div>
+                {modalDocsArr.length > 0 && (
+                  <>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xs text-txt-mid">{modalDocsProgress}% complete</span>
+                      <span className="text-[10px] text-txt-light">({modalDocsUploaded}/{modalDocsArr.length} docs)</span>
+                    </div>
+                    <ProgressBar value={modalDocsProgress} className="mb-5" />
+                  </>
+                )}
+                <div className="grid grid-cols-2 gap-2.5">
+                  {modalDocsArr.map((doc) => (
+                    <DocSlot
+                      key={doc.type_slug}
+                      doc={doc}
+                      onUpload={(slug) =>
+                        uploadDoc.mutate({
+                          truckerId: selectedTrucker.id,
+                          typeSlug: slug,
+                          fileName: `${slug}_${Date.now()}.pdf`,
+                        })
+                      }
+                    />
+                  ))}
+                </div>
+                {modalDocsArr.length === 0 && (
+                  <div className="text-xs text-txt-light py-8 text-center">
+                    No document types configured
+                  </div>
+                )}
+              </div>
+            ) : (
+            <div>
             <div className="grid grid-cols-2 gap-4 text-xs mb-5">
               <div>
                 <div className="text-[10px] font-mono text-txt-light uppercase">MC Number</div>
@@ -336,6 +397,8 @@ export default function TruckersPage() {
                   {deleteTrucker.isPending ? "Deleting..." : "Delete Trucker"}
                 </Button>
               </div>
+            )}
+          </div>
             )}
           </div>
         )}

@@ -97,6 +97,18 @@ export function useBulkDeleteTruckers() {
   });
 }
 
+export function useDeleteBatch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (batchId: string) =>
+      apiFetch(`/api/truckers/bulk-delete`, { method: "POST", body: JSON.stringify({ batch_id: batchId }) }),
+    onSuccess: () => {
+      qc.refetchQueries({ queryKey: ["truckers"] });
+      qc.refetchQueries({ queryKey: ["trucker-batches"] });
+    },
+  });
+}
+
 export function useTruckerBatches() {
   return useQuery({
     queryKey: ["trucker-batches"],

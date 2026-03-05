@@ -60,7 +60,7 @@ export default function SettingsPage() {
               {(settings as Setting[] ?? []).map((s) => (
                 <div key={s.key} className="grid grid-cols-[200px_1fr] gap-3 items-center">
                   <div>
-                    <div className="text-xs font-semibold text-txt font-mono">{s.key}</div>
+                    <div className="text-xs font-semibold text-txt">{s.key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</div>
                     {s.description && (
                       <div className="text-[10px] text-txt-light mt-0.5">{s.description}</div>
                     )}

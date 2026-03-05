@@ -208,6 +208,33 @@ export class TruckersService {
     return { deleted };
   }
 
+  async deleteBatch(batchId: string, userId: string) {
+    // Get all trucker IDs in this batch
+    const truckers = await query('SELECT id FROM truckers WHERE upload_batch_id = $1', [batchId]);
+    const ids = truckers.rows.map((r: any) => r.id);
+
+    let deleted = 0;
+    for (const id of ids) {
+      try {
+        await query('DELETE FROM trucker_status_history WHERE trucker_id = $1', [id]);
+        await query('DELETE FROM agent_commission_thresholds WHERE trucker_id = $1', [id]);
+        await query('DELETE FROM truckers WHERE id = $1', [id]);
+        deleted++;
+      } catch { /* skip errors */ }
+    }
+
+    // Delete the batch record itself
+    await query('DELETE FROM trucker_upload_batches WHERE id = $1', [batchId]);
+
+    await query(
+      `INSERT INTO audit_log (user_id, user_role, action, entity_type, entity_id, description)
+       VALUES ($1, (SELECT role FROM users WHERE id=$1), 'delete', 'trucker_batch', $2, $3)`,
+      [userId, batchId, `Deleted import batch and ${deleted} truckers`]
+    );
+
+    return { deleted, batch_id: batchId };
+  }
+
   async listBatches() {
     const result = await query(
       `SELECT b.*, e.full_name as uploaded_by_name

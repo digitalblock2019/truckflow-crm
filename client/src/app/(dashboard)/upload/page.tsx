@@ -7,7 +7,9 @@ import Topbar from "@/components/layout/Topbar";
 import UploadZone from "@/components/ui/UploadZone";
 import Button from "@/components/ui/Button";
 import Card, { CardHeader } from "@/components/ui/Card";
-import { useImportTruckers, useTruckerBatches } from "@/lib/hooks";
+import Modal from "@/components/ui/Modal";
+import { useImportTruckers, useTruckerBatches, useDeleteBatch } from "@/lib/hooks";
+import { useAuthStore } from "@/lib/auth";
 
 interface ParsedRow {
   [key: string]: string;
@@ -76,8 +78,13 @@ export default function UploadPage() {
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [deleteBatchId, setDeleteBatchId] = useState<string | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const importMut = useImportTruckers();
   const { data: batches } = useTruckerBatches();
+  const deleteBatchMut = useDeleteBatch();
+  const role = useAuthStore((s) => s.user?.role);
+  const canDelete = role === "admin" || role === "supervisor";
 
   const handleFile = async (f: File) => {
     setFile(f);
@@ -172,6 +179,52 @@ export default function UploadPage() {
     <>
       <Topbar title="Upload Truck Data" subtitle="Import trucker records from CSV or Excel" />
       <div className="flex-1 overflow-y-auto p-6 bg-surface">
+        {/* Delete Batch Confirmation Modal */}
+        <Modal
+          open={!!deleteBatchId}
+          onClose={() => { setDeleteBatchId(null); setDeleteConfirmText(""); }}
+          title="Delete Import Batch"
+          width="440px"
+        >
+          <div>
+            <p className="text-sm text-txt-mid mb-4">
+              This will permanently delete all trucker records from this import batch. This action cannot be undone.
+            </p>
+            <label className="text-xs font-mono text-txt-light uppercase block mb-1.5">
+              Type <span className="font-bold text-red">DELETE</span> to confirm
+            </label>
+            <input
+              type="text"
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue/30 focus:border-blue"
+              placeholder="Type DELETE here..."
+              autoFocus
+            />
+            <div className="flex justify-end gap-2 mt-4">
+              <Button variant="secondary" onClick={() => { setDeleteBatchId(null); setDeleteConfirmText(""); }}>
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                disabled={deleteConfirmText !== "DELETE" || deleteBatchMut.isPending}
+                onClick={() => {
+                  if (deleteBatchId && deleteConfirmText === "DELETE") {
+                    deleteBatchMut.mutate(deleteBatchId, {
+                      onSuccess: () => {
+                        setDeleteBatchId(null);
+                        setDeleteConfirmText("");
+                      },
+                    });
+                  }
+                }}
+              >
+                {deleteBatchMut.isPending ? "Deleting..." : "Delete Batch"}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+
         {!file ? (
           <>
             <Card>
@@ -209,12 +262,22 @@ export default function UploadPage() {
                         <td className="px-3 py-2.5 border-b border-[#f0f2f5] text-center font-mono text-orange">{b.rows_skipped ?? 0}</td>
                         <td className="px-3 py-2.5 border-b border-[#f0f2f5] text-center font-mono text-red">{b.rows_errored ?? 0}</td>
                         <td className="px-3 py-2.5 border-b border-[#f0f2f5]">
-                          <button
-                            onClick={() => router.push(`/truckers?batch=${b.id}`)}
-                            className="text-blue hover:underline text-xs font-medium"
-                          >
-                            View Records
-                          </button>
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={() => router.push(`/truckers?batch=${b.id}`)}
+                              className="text-blue hover:underline text-xs font-medium"
+                            >
+                              View Records
+                            </button>
+                            {canDelete && (
+                              <button
+                                onClick={() => { setDeleteBatchId(b.id); setDeleteConfirmText(""); }}
+                                className="text-red hover:underline text-xs font-medium"
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
