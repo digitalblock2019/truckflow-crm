@@ -22,13 +22,23 @@ const router = Router();
 
 // Health check (public)
 router.get('/health', async (_req: Request, res: Response) => {
-  const result = await query(
-    `SELECT count(*) AS count
-       FROM information_schema.tables
-      WHERE table_schema = 'public'
-        AND table_type = 'BASE TABLE'`
-  );
-  res.json({ status: 'ok', tables: Number(result.rows[0].count) });
+  try {
+    const result = await query(
+      `SELECT count(*) AS count
+         FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_type = 'BASE TABLE'`
+    );
+    res.json({ status: 'ok', tables: Number(result.rows[0].count) });
+  } catch (err: any) {
+    console.error('Health check DB error:', err.message);
+    res.status(500).json({
+      status: 'error',
+      message: err.message,
+      dbUrlSet: !!process.env.DATABASE_URL,
+      dbUrlPrefix: process.env.DATABASE_URL?.substring(0, 30) + '...',
+    });
+  }
 });
 
 // Module routes
