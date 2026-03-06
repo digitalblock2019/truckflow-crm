@@ -276,6 +276,7 @@ export default function TruckersPage() {
                     <DocSlot
                       key={doc.type_slug}
                       doc={doc}
+                      truckerId={selectedTrucker.id}
                       onUpload={(slug, file) =>
                         uploadDoc.mutate({
                           truckerId: selectedTrucker.id,

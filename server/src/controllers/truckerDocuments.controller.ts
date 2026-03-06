@@ -13,14 +13,18 @@ export class TruckerDocumentsController {
   async upload(req: Request, res: Response) {
     const file = req.file;
     if (!file) throw new AppError('file is required', 400, 'VALIDATION_ERROR');
-    const fileData = {
-      file_name: file.originalname,
-      file_path: file.path,
-      file_size_bytes: file.size,
-      mime_type: file.mimetype,
-    };
-    const result = await svc.upload(req.params.id as string, req.params.type_slug as string, fileData, req.user!.id);
+    const result = await svc.upload(
+      req.params.id as string,
+      req.params.type_slug as string,
+      { buffer: file.buffer, originalname: file.originalname, size: file.size, mimetype: file.mimetype },
+      req.user!.id
+    );
     res.status(201).json(result);
+  }
+
+  async getDownloadUrl(req: Request, res: Response) {
+    const url = await svc.getDownloadUrl(req.params.id as string, req.params.type_slug as string);
+    res.json({ url });
   }
 
   async download(req: Request, res: Response) {

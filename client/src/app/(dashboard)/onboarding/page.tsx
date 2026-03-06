@@ -24,6 +24,7 @@ export default function OnboardingPage() {
   const docsArr = docs ?? [];
   const uploadedCount = docsArr.filter((d) => d.uploaded).length;
   const progress = docsArr.length > 0 ? Math.round((uploadedCount / docsArr.length) * 100) : 0;
+  const allRequiredUploaded = docsArr.filter((d) => d.required).every((d) => d.uploaded);
 
   return (
     <>
@@ -101,6 +102,7 @@ export default function OnboardingPage() {
                     <DocSlot
                       key={doc.type_slug}
                       doc={doc}
+                      truckerId={selected.id}
                       onUpload={(slug, file) =>
                         uploadDoc.mutate({
                           truckerId: selected.id,
@@ -125,14 +127,19 @@ export default function OnboardingPage() {
                         onSuccess: () => setSelectedId(""),
                       });
                     }}
-                    disabled={markOnboarded.isPending}
-                    className={`w-full ${progress === 100 ? "!bg-green !border-green hover:!bg-green/90" : "!bg-green/50 !border-green/50"}`}
+                    disabled={markOnboarded.isPending || !allRequiredUploaded}
+                    className={`w-full ${allRequiredUploaded ? "!bg-green !border-green hover:!bg-green/90" : "!bg-green/50 !border-green/50 !cursor-not-allowed"}`}
                   >
                     {markOnboarded.isPending ? "Marking..." : "Mark as Fully Onboarded"}
                   </Button>
-                  {progress < 100 && docsArr.length > 0 && (
+                  {!allRequiredUploaded && docsArr.length > 0 && (
                     <p className="text-[10px] text-txt-light mt-1.5 text-center">
-                      {docsArr.length - uploadedCount} document(s) still missing — you can still mark as onboarded
+                      {docsArr.filter((d) => d.required && !d.uploaded).length} required document(s) still missing
+                    </p>
+                  )}
+                  {allRequiredUploaded && progress < 100 && docsArr.length > 0 && (
+                    <p className="text-[10px] text-txt-light mt-1.5 text-center">
+                      {docsArr.length - uploadedCount} optional document(s) remaining
                     </p>
                   )}
                 </div>

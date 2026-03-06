@@ -1,5 +1,7 @@
 import crypto from 'crypto';
+import path from 'path';
 import { query } from '../config/database';
+import { uploadFile, getSignedUrl } from '../config/storage';
 import { AppError } from '../utils/AppError';
 
 export class TruckerDocumentsService {
@@ -18,16 +20,29 @@ export class TruckerDocumentsService {
         required: t.is_required,
         uploaded: !!doc,
         file_name: doc?.file_name || null,
+        file_path: doc?.file_path || null,
         uploaded_at: doc?.uploaded_at || null,
         uploaded_by: doc?.uploaded_by || null,
       };
     });
   }
 
-  async upload(truckerId: string, typeSlug: string, fileData: any, userId: string) {
+  async upload(
+    truckerId: string,
+    typeSlug: string,
+    file: { buffer: Buffer; originalname: string; size: number; mimetype: string },
+    userId: string
+  ) {
     const typeResult = await query('SELECT id FROM trucker_document_types WHERE slug = $1', [typeSlug]);
     if (!typeResult.rows.length) throw new AppError('Unknown document type', 404, 'NOT_FOUND');
     const typeId = typeResult.rows[0].id;
+
+    // Build storage path: {truckerId}/{typeSlug}/{timestamp}{ext}
+    const ext = path.extname(file.originalname);
+    const storagePath = `${truckerId}/${typeSlug}/${Date.now()}${ext}`;
+
+    // Upload to Supabase Storage
+    await uploadFile(storagePath, file.buffer, file.mimetype);
 
     // Mark existing as replaced
     await query(
@@ -39,8 +54,7 @@ export class TruckerDocumentsService {
     const result = await query(
       `INSERT INTO trucker_documents (trucker_id, document_type_id, file_name, file_path, file_size_bytes, mime_type, uploaded_by)
        VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [truckerId, typeId, fileData.file_name, fileData.file_path || `uploads/${truckerId}/${typeSlug}/${fileData.file_name}`,
-       fileData.file_size_bytes, fileData.mime_type, userId]
+      [truckerId, typeId, file.originalname, storagePath, file.size, file.mimetype, userId]
     );
 
     await query(
@@ -50,6 +64,19 @@ export class TruckerDocumentsService {
     );
 
     return result.rows[0];
+  }
+
+  async getDownloadUrl(truckerId: string, typeSlug: string): Promise<string> {
+    const result = await query(
+      `SELECT td.file_path FROM trucker_documents td
+       JOIN trucker_document_types tdt ON tdt.id = td.document_type_id
+       WHERE td.trucker_id = $1 AND tdt.slug = $2 AND td.is_current = TRUE`,
+      [truckerId, typeSlug]
+    );
+    if (!result.rows.length || !result.rows[0].file_path) {
+      throw new AppError('Document not found', 404, 'NOT_FOUND');
+    }
+    return getSignedUrl(result.rows[0].file_path);
   }
 
   async download(truckerId: string, reason: string, userId: string, userRole: string, ip: string) {
