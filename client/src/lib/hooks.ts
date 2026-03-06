@@ -105,7 +105,7 @@ export function useDeleteTrucker() {
   return useMutation({
     mutationFn: (id: string) =>
       apiFetch(`/api/truckers/${id}`, { method: "DELETE" }),
-    onSuccess: () => { qc.refetchQueries({ queryKey: ["truckers"] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["truckers"] }); },
   });
 }
 
@@ -114,7 +114,7 @@ export function useBulkDeleteTruckers() {
   return useMutation({
     mutationFn: (ids: string[]) =>
       apiFetch("/api/truckers/bulk-delete", { method: "POST", body: JSON.stringify({ ids }) }),
-    onSuccess: () => { qc.refetchQueries({ queryKey: ["truckers"] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["truckers"] }); },
   });
 }
 
@@ -124,8 +124,8 @@ export function useDeleteBatch() {
     mutationFn: (batchId: string) =>
       apiFetch(`/api/truckers/bulk-delete`, { method: "POST", body: JSON.stringify({ batch_id: batchId }) }),
     onSuccess: () => {
-      qc.refetchQueries({ queryKey: ["truckers"] });
-      qc.refetchQueries({ queryKey: ["trucker-batches"] });
+      qc.invalidateQueries({ queryKey: ["truckers"] });
+      qc.invalidateQueries({ queryKey: ["trucker-batches"] });
     },
   });
 }
