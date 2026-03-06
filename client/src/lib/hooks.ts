@@ -48,6 +48,27 @@ export function useMe() {
   });
 }
 
+export function useChangePassword() {
+  return useMutation({
+    mutationFn: (data: { current_password: string; new_password: string }) =>
+      apiFetch("/api/auth/change-password", { method: "POST", body: JSON.stringify(data) }),
+  });
+}
+
+export function useForgotPassword() {
+  return useMutation({
+    mutationFn: (email: string) =>
+      apiFetch("/api/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }),
+  });
+}
+
+export function useResetPassword() {
+  return useMutation({
+    mutationFn: (data: { token: string; new_password: string }) =>
+      apiFetch("/api/auth/reset-password", { method: "POST", body: JSON.stringify(data) }),
+  });
+}
+
 // Truckers
 export function useTruckers(params: Record<string, string | number> = {}) {
   const qs = new URLSearchParams(
@@ -140,6 +161,17 @@ export function useInitiateOnboarding() {
   });
 }
 
+export function useMarkFullyOnboarded() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch(`/api/truckers/${id}/fully-onboarded`, { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["truckers"] });
+    },
+  });
+}
+
 // Trucker Documents
 export function useTruckerDocuments(truckerId: string) {
   return useQuery({
@@ -152,11 +184,21 @@ export function useTruckerDocuments(truckerId: string) {
 export function useUploadDocument() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ truckerId, typeSlug, fileName }: { truckerId: string; typeSlug: string; fileName: string }) =>
-      apiFetch(`/api/truckers/${truckerId}/documents/${typeSlug}`, {
+    mutationFn: async ({ truckerId, typeSlug, file }: { truckerId: string; typeSlug: string; file: File }) => {
+      const token = useAuthStore.getState().tokens?.access_token;
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`/api/truckers/${truckerId}/documents/${typeSlug}`, {
         method: "POST",
-        body: JSON.stringify({ file_name: fileName }),
-      }),
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ message: res.statusText }));
+        throw new Error(body.message || "Upload failed");
+      }
+      return res.json();
+    },
     onSuccess: (_, vars) => qc.invalidateQueries({ queryKey: ["trucker-documents", vars.truckerId] }),
   });
 }
@@ -174,6 +216,15 @@ export function useEmployees(params: Record<string, string | number> = {}) {
   });
 }
 
+export function useCreateEmployee() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Partial<Employee>) =>
+      apiFetch<Employee>("/api/employees", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["employees"] }),
+  });
+}
+
 export function useUpdateEmployee() {
   const qc = useQueryClient();
   return useMutation({
@@ -188,6 +239,15 @@ export function useTerminateEmployee() {
   return useMutation({
     mutationFn: (id: string) =>
       apiFetch(`/api/employees/${id}/terminate`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["employees"] }),
+  });
+}
+
+export function useReinstateEmployee() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch(`/api/employees/${id}/reinstate`, { method: "POST" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["employees"] }),
   });
 }

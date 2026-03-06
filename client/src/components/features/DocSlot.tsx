@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import type { TruckerDocument } from "@/types";
 
 export default function DocSlot({
@@ -7,8 +8,10 @@ export default function DocSlot({
   onUpload,
 }: {
   doc: TruckerDocument;
-  onUpload?: (typeSlug: string) => void;
+  onUpload?: (typeSlug: string, file: File) => void;
 }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
   return (
     <div
       className={`border rounded-md p-3 ${
@@ -31,12 +34,25 @@ export default function DocSlot({
           </span>
         </div>
       ) : (
-        <button
-          onClick={() => onUpload?.(doc.type_slug)}
-          className="text-[11px] text-blue hover:text-blue-light font-mono underline cursor-pointer"
-        >
-          Upload Document
-        </button>
+        <>
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) onUpload?.(doc.type_slug, file);
+              e.target.value = "";
+            }}
+          />
+          <button
+            onClick={() => inputRef.current?.click()}
+            className="text-[11px] text-blue hover:text-blue-light font-mono underline cursor-pointer"
+          >
+            Upload Document
+          </button>
+        </>
       )}
     </div>
   );

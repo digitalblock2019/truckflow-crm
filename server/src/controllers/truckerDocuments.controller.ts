@@ -11,9 +11,15 @@ export class TruckerDocumentsController {
   }
 
   async upload(req: Request, res: Response) {
-    const { file_name, file_path, file_size_bytes, mime_type } = req.body;
-    if (!file_name) throw new AppError('file_name required', 400, 'VALIDATION_ERROR');
-    const result = await svc.upload(req.params.id as string, req.params.type_slug as string, req.body, req.user!.id);
+    const file = req.file;
+    if (!file) throw new AppError('file is required', 400, 'VALIDATION_ERROR');
+    const fileData = {
+      file_name: file.originalname,
+      file_path: file.path,
+      file_size_bytes: file.size,
+      mime_type: file.mimetype,
+    };
+    const result = await svc.upload(req.params.id as string, req.params.type_slug as string, fileData, req.user!.id);
     res.status(201).json(result);
   }
 

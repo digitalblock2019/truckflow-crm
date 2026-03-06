@@ -58,6 +58,11 @@ export class TruckersController {
     res.json(result);
   }
 
+  async markFullyOnboarded(req: Request, res: Response) {
+    const result = await svc.markFullyOnboarded(req.params.id as string, req.user!.id);
+    res.json(result);
+  }
+
   async listBatches(_req: Request, res: Response) {
     const result = await svc.listBatches();
     res.json(result);

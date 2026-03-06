@@ -21,6 +21,12 @@ export class EmployeesController {
     res.json(result);
   }
 
+  async create(req: Request, res: Response) {
+    if (!req.body.full_name || !req.body.employee_type) throw new AppError('Full name and employee type required', 400, 'VALIDATION_ERROR');
+    const result = await svc.create(req.body, req.user!.id);
+    res.status(201).json(result);
+  }
+
   async update(req: Request, res: Response) {
     const result = await svc.update(req.params.id as string, req.body, req.user!.id);
     res.json(result);
@@ -63,6 +69,11 @@ export class EmployeesController {
 
   async terminate(req: Request, res: Response) {
     const result = await svc.terminate(req.params.id as string, req.body, req.user!.id);
+    res.json(result);
+  }
+
+  async reinstate(req: Request, res: Response) {
+    const result = await svc.reinstate(req.params.id as string, req.user!.id);
     res.json(result);
   }
 }

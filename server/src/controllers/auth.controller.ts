@@ -30,4 +30,27 @@ export class AuthController {
     const result = await authService.me(req.user!.id);
     res.json(result);
   }
+
+  async changePassword(req: Request, res: Response) {
+    const { current_password, new_password } = req.body;
+    if (!current_password || !new_password) throw new AppError('Current and new password required', 400, 'VALIDATION_ERROR');
+    if (new_password.length < 8) throw new AppError('New password must be at least 8 characters', 400, 'VALIDATION_ERROR');
+    const result = await authService.changePassword(req.user!.id, current_password, new_password);
+    res.json(result);
+  }
+
+  async requestPasswordReset(req: Request, res: Response) {
+    const { email } = req.body;
+    if (!email) throw new AppError('Email required', 400, 'VALIDATION_ERROR');
+    const result = await authService.requestPasswordReset(email);
+    res.json(result);
+  }
+
+  async resetPassword(req: Request, res: Response) {
+    const { token, new_password } = req.body;
+    if (!token || !new_password) throw new AppError('Token and new password required', 400, 'VALIDATION_ERROR');
+    if (new_password.length < 8) throw new AppError('Password must be at least 8 characters', 400, 'VALIDATION_ERROR');
+    const result = await authService.resetPassword(token, new_password);
+    res.json(result);
+  }
 }

@@ -235,6 +235,33 @@ export class TruckersService {
     return { deleted, batch_id: batchId };
   }
 
+  async markFullyOnboarded(id: string, userId: string) {
+    const trucker = await query('SELECT * FROM truckers WHERE id = $1', [id]);
+    if (!trucker.rows.length) throw new AppError('Trucker not found', 404, 'NOT_FOUND');
+
+    const old = trucker.rows[0];
+    if (old.status_system === 'fully_onboarded') throw new AppError('Trucker is already fully onboarded', 400, 'VALIDATION_ERROR');
+
+    await query(
+      `UPDATE truckers SET status_system='fully_onboarded', fully_onboarded_at=NOW(), updated_at=NOW() WHERE id=$1`,
+      [id]
+    );
+
+    await query(
+      `INSERT INTO trucker_status_history (trucker_id, old_status_system, old_status_custom_id, new_status_system, new_status_custom_id, changed_by)
+       VALUES ($1,$2,$3,'fully_onboarded',NULL,$4)`,
+      [id, old.status_system, old.status_custom_id, userId]
+    );
+
+    await query(
+      `INSERT INTO audit_log (user_id, user_role, action, entity_type, entity_id, description)
+       VALUES ($1, (SELECT role FROM users WHERE id=$1), 'fully_onboarded', 'trucker', $2, $3)`,
+      [userId, id, `Marked trucker as fully onboarded: ${old.legal_name} (MC# ${old.mc_number})`]
+    );
+
+    return { message: 'Trucker marked as fully onboarded' };
+  }
+
   async listBatches() {
     const result = await query(
       `SELECT b.*, e.full_name as uploaded_by_name

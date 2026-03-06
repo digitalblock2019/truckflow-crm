@@ -1,5 +1,8 @@
+import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { query } from '../config/database';
 import { AppError } from '../utils/AppError';
+import { EmailService } from './email.service';
 
 export class EmployeesService {
   async list(filters: { status?: string; type?: string; search?: string; page?: number; limit?: number }) {
@@ -43,6 +46,60 @@ export class EmployeesService {
       if (myEmpId !== employeeId) throw new AppError('Access denied', 403, 'FORBIDDEN');
     }
     return employee;
+  }
+
+  async create(data: Record<string, any>, userId: string) {
+    // Auto-generate employee number
+    const lastNum = await query("SELECT employee_number FROM employees ORDER BY created_at DESC LIMIT 1");
+    let nextNum = 'EMP-0001';
+    if (lastNum.rows.length) {
+      const match = lastNum.rows[0].employee_number.match(/EMP-(\d+)/);
+      if (match) nextNum = `EMP-${String(parseInt(match[1]) + 1).padStart(4, '0')}`;
+    }
+
+    const result = await query(
+      `INSERT INTO employees (employee_number, full_name, personal_email, phone, job_title, department,
+       employee_type, start_date, pay_type, base_salary_pkr_paisa, commission_type, commission_value, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+      [nextNum, data.full_name, data.personal_email, data.phone, data.job_title, data.department,
+       data.employee_type, data.start_date || null, data.pay_type || 'salary_only',
+       data.base_salary_pkr_paisa || null, data.commission_type || null, data.commission_value || null, userId]
+    );
+
+    const employeeId = result.rows[0].id;
+
+    // Create CRM user if email provided
+    if (data.crm_email) {
+      const password = data.crm_password || crypto.randomBytes(8).toString('base64url').slice(0, 12);
+      const passwordHash = await bcrypt.hash(password, 12);
+      const role = data.crm_role || 'viewer';
+
+      const userResult = await query(
+        `INSERT INTO users (email, full_name, role, employee_id, password_hash) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+        [data.crm_email, data.full_name, role, employeeId, passwordHash]
+      );
+
+      // Link user to employee
+      await query('UPDATE employees SET crm_user_id = $1 WHERE id = $2', [userResult.rows[0].id, employeeId]);
+      result.rows[0].crm_user_id = userResult.rows[0].id;
+
+      // Send welcome email
+      try {
+        const emailService = new EmailService();
+        const loginUrl = `${process.env.APP_URL || 'http://localhost:3001'}/login`;
+        await emailService.sendWelcomeEmail(data.crm_email, data.full_name, password, loginUrl);
+      } catch (err) {
+        console.error('[EmployeesService] Failed to send welcome email:', err);
+      }
+    }
+
+    await query(
+      `INSERT INTO audit_log (user_id, user_role, action, entity_type, entity_id, description)
+       VALUES ($1, (SELECT role FROM users WHERE id=$1), 'create', 'employee', $2, $3)`,
+      [userId, employeeId, `Created employee: ${data.full_name} (${nextNum})${data.crm_email ? ' + CRM user' : ''}`]
+    );
+
+    return result.rows[0];
   }
 
   async update(id: string, data: Record<string, any>, userId: string) {
@@ -151,6 +208,33 @@ export class EmployeesService {
     );
 
     return { message: 'Employee terminated successfully' };
+  }
+
+  async reinstate(id: string, userId: string) {
+    const emp = await query('SELECT * FROM employees WHERE id = $1', [id]);
+    if (!emp.rows.length) throw new AppError('Employee not found', 404, 'NOT_FOUND');
+    if (emp.rows[0].employment_status !== 'terminated') throw new AppError('Employee is not terminated', 422, 'NOT_TERMINATED');
+
+    // 1. Reactivate employee
+    await query(
+      `UPDATE employees SET employment_status = 'active', termination_date = NULL, termination_reason = NULL,
+       termination_notes = NULL, updated_at = NOW() WHERE id = $1`,
+      [id]
+    );
+
+    // 2. Re-activate CRM user if linked
+    if (emp.rows[0].crm_user_id) {
+      await query('UPDATE users SET is_active = TRUE, updated_at = NOW() WHERE id = $1', [emp.rows[0].crm_user_id]);
+    }
+
+    // 3. Audit log
+    await query(
+      `INSERT INTO audit_log (user_id, user_role, action, entity_type, entity_id, description)
+       VALUES ($1, (SELECT role FROM users WHERE id=$1), 'reinstate', 'employee', $2, $3)`,
+      [userId, id, `Reinstated employee: ${emp.rows[0].full_name}`]
+    );
+
+    return { message: 'Employee reinstated successfully' };
   }
 
   private async getEmployeeIdForUser(userId: string): Promise<string | null> {

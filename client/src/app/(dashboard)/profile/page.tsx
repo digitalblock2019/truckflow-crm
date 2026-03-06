@@ -8,7 +8,7 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import { useAuthStore } from "@/lib/auth";
-import { useMe, useLeaveRequests, useSubmitLeave, useCommissions } from "@/lib/hooks";
+import { useMe, useLeaveRequests, useSubmitLeave, useCommissions, useChangePassword } from "@/lib/hooks";
 import { initials, fmt } from "@/lib/utils";
 import type { Commission, LeaveRequest } from "@/types";
 
@@ -19,6 +19,10 @@ export default function ProfilePage() {
   const { data: leaveData } = useLeaveRequests({});
   const { data: commData } = useCommissions({ limit: 5 });
   const submitLeave = useSubmitLeave();
+
+  const changePassword = useChangePassword();
+  const [pwForm, setPwForm] = useState({ current_password: "", new_password: "", confirm_password: "" });
+  const [pwMsg, setPwMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const [showLeaveForm, setShowLeaveForm] = useState(false);
   const [leaveForm, setLeaveForm] = useState({
@@ -35,6 +39,22 @@ export default function ProfilePage() {
         setLeaveForm({ leave_type: "vacation", start_date: "", end_date: "", reason: "" });
       },
     });
+  };
+
+  const handleChangePassword = () => {
+    setPwMsg(null);
+    if (pwForm.new_password.length < 8) { setPwMsg({ type: "error", text: "New password must be at least 8 characters" }); return; }
+    if (pwForm.new_password !== pwForm.confirm_password) { setPwMsg({ type: "error", text: "Passwords do not match" }); return; }
+    changePassword.mutate(
+      { current_password: pwForm.current_password, new_password: pwForm.new_password },
+      {
+        onSuccess: () => {
+          setPwMsg({ type: "success", text: "Password changed successfully" });
+          setPwForm({ current_password: "", new_password: "", confirm_password: "" });
+        },
+        onError: (err: any) => setPwMsg({ type: "error", text: err.message || "Failed to change password" }),
+      }
+    );
   };
 
   const meAny = me as unknown as Record<string, unknown> | undefined;
@@ -169,6 +189,25 @@ export default function ProfilePage() {
                     </div>
                   </div>
                 ))}
+              </div>
+            </Card>
+
+            <Card>
+              <CardHeader title="Change Password" />
+              {pwMsg && (
+                <div className={`rounded-md px-3 py-2 mb-3 text-xs ${pwMsg.type === "success" ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-bg border border-red/30 text-red"}`}>
+                  {pwMsg.text}
+                </div>
+              )}
+              <div className="space-y-3">
+                <Input label="Current Password" type="password" value={pwForm.current_password} onChange={(e) => setPwForm({ ...pwForm, current_password: e.target.value })} />
+                <Input label="New Password" type="password" value={pwForm.new_password} onChange={(e) => setPwForm({ ...pwForm, new_password: e.target.value })} />
+                <Input label="Confirm New Password" type="password" value={pwForm.confirm_password} onChange={(e) => setPwForm({ ...pwForm, confirm_password: e.target.value })} />
+              </div>
+              <div className="mt-4 flex justify-end">
+                <Button onClick={handleChangePassword} disabled={changePassword.isPending || !pwForm.current_password || !pwForm.new_password}>
+                  {changePassword.isPending ? "Changing..." : "Change Password"}
+                </Button>
               </div>
             </Card>
           </div>

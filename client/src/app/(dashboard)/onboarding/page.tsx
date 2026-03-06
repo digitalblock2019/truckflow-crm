@@ -6,7 +6,8 @@ import Card, { CardHeader } from "@/components/ui/Card";
 import ProgressBar from "@/components/ui/ProgressBar";
 import Badge from "@/components/ui/Badge";
 import DocSlot from "@/components/features/DocSlot";
-import { useTruckers, useTruckerDocuments, useUploadDocument } from "@/lib/hooks";
+import Button from "@/components/ui/Button";
+import { useTruckers, useTruckerDocuments, useUploadDocument, useMarkFullyOnboarded } from "@/lib/hooks";
 import type { Trucker } from "@/types";
 
 export default function OnboardingPage() {
@@ -15,6 +16,7 @@ export default function OnboardingPage() {
   const truckers = (truckersData?.data ?? []) as Trucker[];
   const { data: docs } = useTruckerDocuments(selectedId);
   const uploadDoc = useUploadDocument();
+  const markOnboarded = useMarkFullyOnboarded();
 
   const selected = truckers.find((t) => t.id === selectedId);
 
@@ -99,11 +101,11 @@ export default function OnboardingPage() {
                     <DocSlot
                       key={doc.type_slug}
                       doc={doc}
-                      onUpload={(slug) =>
+                      onUpload={(slug, file) =>
                         uploadDoc.mutate({
                           truckerId: selected.id,
                           typeSlug: slug,
-                          fileName: `${slug}_${Date.now()}.pdf`,
+                          file,
                         })
                       }
                     />
@@ -114,6 +116,26 @@ export default function OnboardingPage() {
                     No document types configured for this trucker
                   </div>
                 )}
+
+                {/* Mark as Fully Onboarded */}
+                <div className="mt-5 pt-4 border-t border-border">
+                  <Button
+                    onClick={() => {
+                      markOnboarded.mutate(selected.id, {
+                        onSuccess: () => setSelectedId(""),
+                      });
+                    }}
+                    disabled={markOnboarded.isPending}
+                    className={`w-full ${progress === 100 ? "!bg-green !border-green hover:!bg-green/90" : "!bg-green/50 !border-green/50"}`}
+                  >
+                    {markOnboarded.isPending ? "Marking..." : "Mark as Fully Onboarded"}
+                  </Button>
+                  {progress < 100 && docsArr.length > 0 && (
+                    <p className="text-[10px] text-txt-light mt-1.5 text-center">
+                      {docsArr.length - uploadedCount} document(s) still missing — you can still mark as onboarded
+                    </p>
+                  )}
+                </div>
               </Card>
             ) : (
               <Card className="flex items-center justify-center h-64">

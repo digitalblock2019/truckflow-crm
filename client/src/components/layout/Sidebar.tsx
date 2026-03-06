@@ -20,6 +20,7 @@ const sections: { title: string; items: NavItem[] }[] = [
       { href: "/truckers", label: "Truckers", icon: "&#x1F69A;" },
       { href: "/upload", label: "Upload Data", icon: "&#x1F4C2;" },
       { href: "/onboarding", label: "Onboarding", icon: "&#x1F4CB;" },
+      { href: "/truckers?tab=fully_onboarded", label: "Onboarded Truckers", icon: "&#x2705;" },
       { href: "/loads", label: "Loads / Orders", icon: "&#x1F4E6;" },
     ],
   },
@@ -78,7 +79,9 @@ export default function Sidebar() {
                 {section.title}
               </div>
               {visibleItems.map((item) => {
-                const active = pathname === item.href || pathname.startsWith(item.href + "/");
+                const active = item.href.includes("?")
+                  ? pathname + (typeof window !== "undefined" ? window.location.search : "") === item.href
+                  : pathname === item.href || pathname.startsWith(item.href + "/");
                 return (
                   <Link
                     key={item.href}

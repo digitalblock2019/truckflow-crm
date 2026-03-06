@@ -54,6 +54,53 @@ export class AuthService {
     await query('DELETE FROM refresh_tokens WHERE token = $1', [refreshToken]);
   }
 
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    const result = await query('SELECT password_hash FROM users WHERE id = $1', [userId]);
+    if (!result.rows.length) throw new AppError('User not found', 404, 'NOT_FOUND');
+
+    const valid = await bcrypt.compare(currentPassword, result.rows[0].password_hash);
+    if (!valid) throw new AppError('Current password is incorrect', 401, 'INVALID_CREDENTIALS');
+
+    const hash = await bcrypt.hash(newPassword, 12);
+    await query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [hash, userId]);
+    return { message: 'Password changed successfully' };
+  }
+
+  async requestPasswordReset(email: string) {
+    const result = await query('SELECT id, full_name FROM users WHERE email = $1 AND is_active = TRUE', [email]);
+    if (result.rows.length) {
+      const user = result.rows[0];
+      const token = crypto.randomBytes(32).toString('hex');
+      const expires = new Date(Date.now() + 3600000); // 1 hour
+      await query('UPDATE users SET reset_token = $1, reset_token_expires = $2 WHERE id = $3', [token, expires, user.id]);
+
+      const { EmailService } = await import('./email.service');
+      const emailService = new EmailService();
+      const resetLink = `${process.env.APP_URL || 'http://localhost:3001'}/reset-password?token=${token}`;
+      await emailService.sendPasswordResetEmail(email, user.full_name, resetLink);
+    }
+    // Always return success to prevent email enumeration
+    return { message: 'If that email exists, a reset link has been sent' };
+  }
+
+  async resetPassword(token: string, newPassword: string) {
+    const result = await query(
+      'SELECT id FROM users WHERE reset_token = $1 AND reset_token_expires > NOW()',
+      [token]
+    );
+    if (!result.rows.length) throw new AppError('Invalid or expired reset token', 400, 'INVALID_TOKEN');
+
+    const userId = result.rows[0].id;
+    const hash = await bcrypt.hash(newPassword, 12);
+    await query(
+      'UPDATE users SET password_hash = $1, reset_token = NULL, reset_token_expires = NULL, updated_at = NOW() WHERE id = $2',
+      [hash, userId]
+    );
+    // Force re-login by clearing all refresh tokens
+    await query('DELETE FROM refresh_tokens WHERE user_id = $1', [userId]);
+    return { message: 'Password reset successfully' };
+  }
+
   async me(userId: string) {
     const result = await query(`
       SELECT u.id, u.email, u.full_name, u.role, u.employee_id, u.is_active, u.last_login_at, u.created_at,

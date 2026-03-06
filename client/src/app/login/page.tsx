@@ -2,6 +2,7 @@
 
 import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useLogin } from "@/lib/hooks";
 import Button from "@/components/ui/Button";
 
@@ -74,6 +75,12 @@ export default function LoginPage() {
           >
             {login.isPending ? "Signing in..." : "Sign In"}
           </Button>
+
+          <div className="mt-4 text-center">
+            <Link href="/forgot-password" className="text-xs text-blue-600 hover:underline">
+              Forgot password?
+            </Link>
+          </div>
         </form>
       </div>
     </div>

@@ -49,6 +49,7 @@ const allStatuses = [
   { value: "interested", label: "Interested" },
   { value: "not_interested", label: "Not Interested" },
   { value: "onboarded", label: "Onboarded" },
+  { value: "fully_onboarded", label: "Fully Onboarded" },
 ];
 
 const tabs = [
@@ -57,13 +58,15 @@ const tabs = [
   { key: "called", label: "Called" },
   { key: "interested", label: "Interested" },
   { key: "onboarded", label: "Onboarded" },
+  { key: "fully_onboarded", label: "Fully Onboarded" },
   { key: "not_interested", label: "Not Interested" },
 ];
 
 export default function TruckersPage() {
   const searchParams = useSearchParams();
   const batchId = searchParams.get("batch") || "";
-  const [tab, setTab] = useState("");
+  const initialTab = searchParams.get("tab") || "";
+  const [tab, setTab] = useState(initialTab);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
@@ -273,11 +276,11 @@ export default function TruckersPage() {
                     <DocSlot
                       key={doc.type_slug}
                       doc={doc}
-                      onUpload={(slug) =>
+                      onUpload={(slug, file) =>
                         uploadDoc.mutate({
                           truckerId: selectedTrucker.id,
                           typeSlug: slug,
-                          fileName: `${slug}_${Date.now()}.pdf`,
+                          file,
                         })
                       }
                     />
