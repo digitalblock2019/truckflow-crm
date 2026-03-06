@@ -2,6 +2,32 @@ import { query } from '../config/database';
 import { AppError } from '../utils/AppError';
 
 export class NotificationsService {
+
+  // ── Creation helpers ──────────────────────────────────────────────
+
+  async create(recipientId: string, title: string, body: string, entityType?: string, entityId?: string) {
+    await query(
+      `INSERT INTO notifications (recipient_id, title, body, entity_type, entity_id)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [recipientId, title, body, entityType || null, entityId || null]
+    );
+  }
+
+  async createForRole(role: string, title: string, body: string, entityType?: string, entityId?: string) {
+    const users = await query('SELECT id FROM users WHERE role = $1 AND is_active = TRUE', [role]);
+    for (const u of users.rows) {
+      await this.create(u.id, title, body, entityType, entityId);
+    }
+  }
+
+  async createForMultiple(recipientIds: string[], title: string, body: string, entityType?: string, entityId?: string) {
+    for (const id of recipientIds) {
+      await this.create(id, title, body, entityType, entityId);
+    }
+  }
+
+  // ── Queries ───────────────────────────────────────────────────────
+
   async list(userId: string, filters: any) {
     const limit = filters.limit || 50;
     const offset = ((filters.page || 1) - 1) * limit;

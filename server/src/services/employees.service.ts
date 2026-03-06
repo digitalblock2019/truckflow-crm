@@ -3,6 +3,9 @@ import crypto from 'crypto';
 import { query } from '../config/database';
 import { AppError } from '../utils/AppError';
 import { EmailService } from './email.service';
+import { NotificationsService } from './notifications.service';
+
+const notifications = new NotificationsService();
 
 export class EmployeesService {
   async list(filters: { status?: string; type?: string; search?: string; page?: number; limit?: number }) {
@@ -207,6 +210,11 @@ export class EmployeesService {
       [userId, id, `Terminated: ${data.termination_reason || 'N/A'}`]
     );
 
+    // 5. Notify admins
+    try {
+      await notifications.createForRole('admin', 'Employee terminated', `${emp.rows[0].full_name} has been terminated`, 'employee', id);
+    } catch (err) { console.error('[EmployeesService] Notification error:', err); }
+
     return { message: 'Employee terminated successfully' };
   }
 
@@ -233,6 +241,11 @@ export class EmployeesService {
        VALUES ($1, (SELECT role FROM users WHERE id=$1), 'reinstate', 'employee', $2, $3)`,
       [userId, id, `Reinstated employee: ${emp.rows[0].full_name}`]
     );
+
+    // 4. Notify admins
+    try {
+      await notifications.createForRole('admin', 'Employee reinstated', `${emp.rows[0].full_name} has been reinstated`, 'employee', id);
+    } catch (err) { console.error('[EmployeesService] Notification error:', err); }
 
     return { message: 'Employee reinstated successfully' };
   }

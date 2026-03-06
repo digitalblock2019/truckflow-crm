@@ -11,7 +11,7 @@ const ctrl = new TruckerDocumentsController();
 // Store uploads in server/uploads/<truckerId>/
 const storage = multer.diskStorage({
   destination: (req, _file, cb) => {
-    const dir = path.join(__dirname, '../../uploads', req.params.id, req.params.type_slug);
+    const dir = path.join(__dirname, '../../uploads', req.params.id as string, req.params.type_slug as string);
     fs.mkdirSync(dir, { recursive: true });
     cb(null, dir);
   },

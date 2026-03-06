@@ -55,7 +55,7 @@ const allStatuses = [
 const tabs = [
   { key: "", label: "All" },
   { key: "imported", label: "Imported" },
-  { key: "called", label: "Called" },
+  { key: "called,sms_sent", label: "Called / SMS Sent" },
   { key: "interested", label: "Interested" },
   { key: "onboarded", label: "Onboarded" },
   { key: "fully_onboarded", label: "Fully Onboarded" },

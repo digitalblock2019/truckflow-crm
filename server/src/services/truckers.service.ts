@@ -1,5 +1,8 @@
 import { query } from '../config/database';
 import { AppError } from '../utils/AppError';
+import { NotificationsService } from './notifications.service';
+
+const notifications = new NotificationsService();
 
 export class TruckersService {
   async list(filters: any) {
@@ -7,7 +10,15 @@ export class TruckersService {
     const params: any[] = [];
     let idx = 1;
 
-    if (filters.status) { conditions.push(`t.status_system = $${idx++}`); params.push(filters.status); }
+    if (filters.status) {
+      const statuses = (filters.status as string).split(',').map((s: string) => s.trim()).filter(Boolean);
+      if (statuses.length === 1) {
+        conditions.push(`t.status_system = $${idx++}`); params.push(statuses[0]);
+      } else {
+        const placeholders = statuses.map(() => `$${idx++}`).join(', ');
+        conditions.push(`t.status_system IN (${placeholders})`); params.push(...statuses);
+      }
+    }
     if (filters.assigned_to) { conditions.push(`t.assigned_agent_id = $${idx++}`); params.push(filters.assigned_to); }
     if (filters.state) { conditions.push(`t.state ILIKE $${idx++}`); params.push(`%${filters.state}%`); }
     if (filters.fmcsa_status) { conditions.push(`t.fmcsa_operating_status = $${idx++}`); params.push(filters.fmcsa_status); }
@@ -117,6 +128,17 @@ export class TruckersService {
     values.push(id);
 
     await query(`UPDATE truckers SET ${fields.join(', ')} WHERE id = $${idx}`, values);
+
+    // Notify agent if newly assigned
+    if (data.assigned_agent_id && data.assigned_agent_id !== old.assigned_agent_id) {
+      try {
+        const agentUser = await query('SELECT crm_user_id FROM employees WHERE id = $1', [data.assigned_agent_id]);
+        if (agentUser.rows[0]?.crm_user_id) {
+          await notifications.create(agentUser.rows[0].crm_user_id, 'Trucker assigned to you', `${old.legal_name} (MC# ${old.mc_number}) has been assigned to you`, 'trucker', id);
+        }
+      } catch (err) { console.error('[TruckersService] Notification error:', err); }
+    }
+
     return this.getById(id);
   }
 
@@ -147,6 +169,14 @@ export class TruckersService {
 
     await query('UPDATE trucker_upload_batches SET rows_added=$1, rows_skipped=$2, rows_errored=$3 WHERE id=$4',
       [added, skipped, errored, batchId]);
+
+    // Notify admins & supervisors
+    try {
+      const title = 'New batch uploaded';
+      const body = `${filename || 'import'} — ${added} truckers added`;
+      await notifications.createForRole('admin', title, body, 'trucker_batch', batchId);
+      await notifications.createForRole('supervisor', title, body, 'trucker_batch', batchId);
+    } catch (err) { console.error('[TruckersService] Notification error:', err); }
 
     return { batch_id: batchId, rows_added: added, rows_skipped: skipped, rows_errored: errored };
   }

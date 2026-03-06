@@ -1,7 +1,9 @@
 import { query } from '../config/database';
 import { AppError } from '../utils/AppError';
+import { NotificationsService } from './notifications.service';
 
 const STATUS_ORDER = ['pending', 'dispatched', 'in_transit', 'delivered', 'payment_received'];
+const notifications = new NotificationsService();
 
 export class LoadsService {
   async list(filters: any, userId: string, userRole: string) {
@@ -119,6 +121,23 @@ export class LoadsService {
       );
     }
 
+    // Notify assigned agent & dispatcher
+    const orderNum = result.rows[0].order_number || loadId;
+    try {
+      if (agentId) {
+        const agentUser = await query('SELECT crm_user_id FROM employees WHERE id = $1', [agentId]);
+        if (agentUser.rows[0]?.crm_user_id) {
+          await notifications.create(agentUser.rows[0].crm_user_id, 'New load assigned', `Load ${orderNum} has been assigned to you`, 'load_order', loadId);
+        }
+      }
+      if (data.dispatcher_id) {
+        const dispUser = await query('SELECT crm_user_id FROM employees WHERE id = $1', [data.dispatcher_id]);
+        if (dispUser.rows[0]?.crm_user_id) {
+          await notifications.create(dispUser.rows[0].crm_user_id, 'New load assigned', `Load ${orderNum} has been assigned to you`, 'load_order', loadId);
+        }
+      }
+    } catch (err) { console.error('[LoadsService] Notification error:', err); }
+
     return result.rows[0];
   }
 
@@ -161,6 +180,24 @@ export class LoadsService {
        VALUES ($1, (SELECT role FROM users WHERE id=$1), 'status_change', 'load_order', $2, $3)`,
       [userId, id, `Status: ${current} → ${newStatus}`]
     );
+
+    // Notify agent & dispatcher of status change
+    const loadRow = load.rows[0];
+    try {
+      const recipientIds: string[] = [];
+      if (loadRow.sales_agent_id) {
+        const au = await query('SELECT crm_user_id FROM employees WHERE id = $1', [loadRow.sales_agent_id]);
+        if (au.rows[0]?.crm_user_id) recipientIds.push(au.rows[0].crm_user_id);
+      }
+      if (loadRow.dispatcher_id) {
+        const du = await query('SELECT crm_user_id FROM employees WHERE id = $1', [loadRow.dispatcher_id]);
+        if (du.rows[0]?.crm_user_id) recipientIds.push(du.rows[0].crm_user_id);
+      }
+      if (recipientIds.length) {
+        const orderNum = loadRow.order_number || id;
+        await notifications.createForMultiple(recipientIds, 'Load status updated', `Load ${orderNum} status changed to ${newStatus.replace(/_/g, ' ')}`, 'load_order', id);
+      }
+    } catch (err) { console.error('[LoadsService] Notification error:', err); }
 
     const updated = await query('SELECT * FROM load_orders WHERE id = $1', [id]);
     return updated.rows[0];
