@@ -48,7 +48,7 @@ const allStatuses = [
   { value: "response_not_in_use", label: "Response - Not In Use" },
   { value: "interested", label: "Interested" },
   { value: "not_interested", label: "Not Interested" },
-  { value: "onboarded", label: "Onboarded" },
+  { value: "onboarded", label: "Start Onboarding" },
   { value: "fully_onboarded", label: "Fully Onboarded" },
 ];
 
@@ -57,7 +57,7 @@ const tabs = [
   { key: "imported", label: "Imported" },
   { key: "called,sms_sent", label: "Called / SMS Sent" },
   { key: "interested", label: "Interested" },
-  { key: "onboarded", label: "Onboarded" },
+  { key: "onboarded", label: "Ready For Onboarding" },
   { key: "fully_onboarded", label: "Fully Onboarded" },
   { key: "not_interested", label: "Not Interested" },
 ];
