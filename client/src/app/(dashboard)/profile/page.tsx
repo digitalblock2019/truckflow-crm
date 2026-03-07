@@ -8,7 +8,7 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import { useAuthStore } from "@/lib/auth";
-import { useMe, useLeaveRequests, useSubmitLeave, useCommissions, useChangePassword } from "@/lib/hooks";
+import { useMe, useLeaveRequests, useSubmitLeave, useCommissions, useChangePassword, useUpdateProfile, useSalarySlips } from "@/lib/hooks";
 import { initials, fmt } from "@/lib/utils";
 import type { Commission, LeaveRequest } from "@/types";
 
@@ -19,6 +19,12 @@ export default function ProfilePage() {
   const { data: leaveData } = useLeaveRequests({});
   const { data: commData } = useCommissions({ limit: 5 });
   const submitLeave = useSubmitLeave();
+  const [slipYear, setSlipYear] = useState(new Date().getFullYear());
+  const { data: salarySlips } = useSalarySlips(slipYear);
+
+  const updateProfile = useUpdateProfile();
+  const [editName, setEditName] = useState("");
+  const [nameEditing, setNameEditing] = useState(false);
 
   const changePassword = useChangePassword();
   const [pwForm, setPwForm] = useState({ current_password: "", new_password: "", confirm_password: "" });
@@ -79,7 +85,37 @@ export default function ProfilePage() {
             <div className="w-[72px] h-[72px] rounded-full bg-blue flex items-center justify-center text-2xl font-bold text-white mx-auto mb-3">
               {initials(displayName)}
             </div>
-            <div className="text-base font-bold text-navy">{displayName}</div>
+            {nameEditing ? (
+              <div className="flex items-center gap-2 justify-center">
+                <Input
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="text-center text-sm"
+                />
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    updateProfile.mutate({ full_name: editName }, {
+                      onSuccess: () => setNameEditing(false),
+                    });
+                  }}
+                  disabled={updateProfile.isPending || editName.trim() === displayName}
+                >
+                  {updateProfile.isPending ? "..." : "Save"}
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => setNameEditing(false)}>
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <div
+                className="text-base font-bold text-navy cursor-pointer hover:underline"
+                onClick={() => { setEditName(displayName); setNameEditing(true); }}
+                title="Click to edit name"
+              >
+                {displayName}
+              </div>
+            )}
             <div className="text-[11px] text-txt-light font-mono mt-1 capitalize">{displayRole}</div>
             <div className="text-xs text-txt-light mt-1">{displayEmail}</div>
 
@@ -168,6 +204,51 @@ export default function ProfilePage() {
                   </div>
                 ))}
               </div>
+            </Card>
+
+            <Card>
+              <CardHeader
+                title="Salary Slips"
+                action={
+                  <select
+                    className="border border-border rounded px-2 py-1 text-xs bg-white"
+                    value={slipYear}
+                    onChange={(e) => setSlipYear(parseInt(e.target.value))}
+                  >
+                    {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map((y) => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                }
+              />
+              {(!salarySlips || salarySlips.length === 0) ? (
+                <div className="text-xs text-txt-light py-4 text-center">No salary data for {slipYear}</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border text-left text-[10px] font-mono text-txt-light uppercase">
+                        <th className="py-2 pr-3">Month</th>
+                        <th className="py-2 pr-3">Base Salary</th>
+                        <th className="py-2 pr-3">Comm (USD)</th>
+                        <th className="py-2 pr-3">Comm (PKR)</th>
+                        <th className="py-2">Loads</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {salarySlips.map((slip) => (
+                        <tr key={slip.month} className="border-b border-[#f0f2f5] last:border-0">
+                          <td className="py-2 pr-3 font-medium">{new Date(slip.month).toLocaleDateString("en-US", { month: "short", year: "numeric" })}</td>
+                          <td className="py-2 pr-3 font-mono">Rs {(slip.base_salary_pkr_paisa / 100).toLocaleString()}</td>
+                          <td className="py-2 pr-3 font-mono">{fmt(slip.total_commission_cents)}</td>
+                          <td className="py-2 pr-3 font-mono">Rs {(slip.total_commission_pkr_paisa / 100).toLocaleString()}</td>
+                          <td className="py-2 font-mono">{slip.load_count}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </Card>
 
             <Card>

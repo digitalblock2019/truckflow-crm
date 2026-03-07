@@ -49,6 +49,21 @@ export function useMe() {
   });
 }
 
+export function useUpdateProfile() {
+  const qc = useQueryClient();
+  const setAuth = useAuthStore((s) => s.setAuth);
+  return useMutation({
+    mutationFn: (data: { full_name: string }) =>
+      apiFetch<User>("/api/auth/me", { method: "PATCH", body: JSON.stringify(data) }),
+    onSuccess: (updated) => {
+      qc.invalidateQueries({ queryKey: ["me"] });
+      // Update local auth store so header/sidebar reflect new name immediately
+      const tokens = useAuthStore.getState().tokens;
+      if (tokens) setAuth(updated, tokens);
+    },
+  });
+}
+
 export function useChangePassword() {
   return useMutation({
     mutationFn: (data: { current_password: string; new_password: string }) =>
@@ -227,6 +242,21 @@ export function useCreateEmployee() {
     mutationFn: (data: Partial<Employee>) =>
       apiFetch<Employee>("/api/employees", { method: "POST", body: JSON.stringify(data) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["employees"] }),
+  });
+}
+
+export function useSalarySlips(year?: number) {
+  const qs = year ? `?year=${year}` : "";
+  return useQuery({
+    queryKey: ["salary-slips", year],
+    queryFn: () =>
+      apiFetch<Array<{
+        month: string;
+        base_salary_pkr_paisa: number;
+        total_commission_cents: number;
+        total_commission_pkr_paisa: number;
+        load_count: number;
+      }>>(`/api/employees/me/salary-slips${qs}`),
   });
 }
 

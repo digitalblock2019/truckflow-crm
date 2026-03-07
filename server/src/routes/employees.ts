@@ -10,7 +10,9 @@ router.use(authenticate);
 
 router.get('/', (req, res) => ctrl.list(req, res));
 router.post('/', authorize('admin', 'supervisor'), (req, res) => ctrl.create(req, res));
+router.get('/me/salary-slips', (req, res) => ctrl.getSalarySlips({ ...req, params: { ...req.params, id: 'me' } } as any, res));
 router.get('/:id', (req, res) => ctrl.getById(req, res));
+router.get('/:id/salary-slips', authorize('admin', 'supervisor'), (req, res) => ctrl.getSalarySlips(req, res));
 router.patch('/:id', authorize('admin', 'supervisor'), (req, res) => ctrl.update(req, res));
 router.get('/:id/bank', authorize('admin', 'supervisor'), (req, res) => ctrl.getBankDetails(req, res));
 router.post('/:id/bank/confirm-reveal', authorize('admin', 'supervisor'), (req, res) => ctrl.confirmReveal(req, res));

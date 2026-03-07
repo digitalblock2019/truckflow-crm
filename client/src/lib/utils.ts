@@ -13,6 +13,7 @@ export function fmt(cents: number | null | undefined): string {
 const typeLabels: Record<string, string> = {
   sales_agent: "Sales Rep",
   dispatcher: "Dispatcher",
+  sales_and_dispatcher: "Sales & Dispatcher",
   fixed_salary: "Staff",
   contractor: "Contractor",
 };

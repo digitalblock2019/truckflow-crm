@@ -76,4 +76,20 @@ export class EmployeesController {
     const result = await svc.reinstate(req.params.id as string, req.user!.id);
     res.json(result);
   }
+
+  async getSalarySlips(req: Request, res: Response) {
+    // Resolve "me" to actual employee ID
+    const db = await import('../config/database');
+    let employeeId: string;
+    if (req.params.id === 'me') {
+      const userRow = await db.query('SELECT employee_id FROM users WHERE id = $1', [req.user!.id]);
+      if (!userRow.rows[0]?.employee_id) throw new AppError('No employee record linked', 404, 'NOT_FOUND');
+      employeeId = userRow.rows[0].employee_id;
+    } else {
+      employeeId = req.params.id as string;
+    }
+    const year = req.query.year ? parseInt(req.query.year as string) : undefined;
+    const result = await svc.getSalarySlips(employeeId, year);
+    res.json(result);
+  }
 }

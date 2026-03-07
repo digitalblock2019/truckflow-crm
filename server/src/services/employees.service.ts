@@ -14,7 +14,16 @@ export class EmployeesService {
     let idx = 1;
 
     if (filters.status) { conditions.push(`e.employment_status = $${idx++}`); params.push(filters.status); }
-    if (filters.type) { conditions.push(`e.employee_type = $${idx++}`); params.push(filters.type); }
+    if (filters.type) {
+      if (filters.type === 'sales_agent') {
+        conditions.push(`e.employee_type IN ('sales_agent', 'sales_and_dispatcher')`);
+      } else if (filters.type === 'dispatcher') {
+        conditions.push(`e.employee_type IN ('dispatcher', 'sales_and_dispatcher')`);
+      } else {
+        conditions.push(`e.employee_type = $${idx++}`);
+        params.push(filters.type);
+      }
+    }
     if (filters.search) { conditions.push(`(e.full_name ILIKE $${idx} OR e.employee_number ILIKE $${idx})`); params.push(`%${filters.search}%`); idx++; }
 
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
@@ -248,6 +257,36 @@ export class EmployeesService {
     } catch (err) { console.error('[EmployeesService] Notification error:', err); }
 
     return { message: 'Employee reinstated successfully' };
+  }
+
+  async getSalarySlips(employeeId: string, year?: number) {
+    const targetYear = year || new Date().getFullYear();
+
+    const employee = await query('SELECT base_salary_pkr_paisa FROM employees WHERE id = $1', [employeeId]);
+    if (!employee.rows.length) throw new AppError('Employee not found', 404, 'NOT_FOUND');
+    const baseSalary = employee.rows[0].base_salary_pkr_paisa || 0;
+
+    const result = await query(
+      `SELECT
+         DATE_TRUNC('month', c.created_at) AS month,
+         COALESCE(SUM(c.amount_cents), 0)::int AS total_commission_cents,
+         COALESCE(SUM(c.amount_pkr_paisa), 0)::bigint AS total_commission_pkr_paisa,
+         COUNT(c.id)::int AS load_count
+       FROM commissions c
+       WHERE c.employee_id = $1
+         AND EXTRACT(YEAR FROM c.created_at) = $2
+       GROUP BY DATE_TRUNC('month', c.created_at)
+       ORDER BY month ASC`,
+      [employeeId, targetYear]
+    );
+
+    return result.rows.map((r: any) => ({
+      month: r.month,
+      base_salary_pkr_paisa: baseSalary,
+      total_commission_cents: parseInt(r.total_commission_cents),
+      total_commission_pkr_paisa: parseInt(r.total_commission_pkr_paisa),
+      load_count: parseInt(r.load_count),
+    }));
   }
 
   private async getEmployeeIdForUser(userId: string): Promise<string | null> {

@@ -31,6 +31,13 @@ export class AuthController {
     res.json(result);
   }
 
+  async updateProfile(req: Request, res: Response) {
+    const { full_name } = req.body;
+    if (!full_name) throw new AppError('Full name is required', 400, 'VALIDATION_ERROR');
+    const result = await authService.updateProfile(req.user!.id, { full_name });
+    res.json(result);
+  }
+
   async changePassword(req: Request, res: Response) {
     const { current_password, new_password } = req.body;
     if (!current_password || !new_password) throw new AppError('Current and new password required', 400, 'VALIDATION_ERROR');

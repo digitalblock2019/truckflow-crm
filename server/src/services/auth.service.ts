@@ -101,6 +101,21 @@ export class AuthService {
     return { message: 'Password reset successfully' };
   }
 
+  async updateProfile(userId: string, data: { full_name: string }) {
+    if (!data.full_name || !data.full_name.trim()) throw new AppError('Full name is required', 400, 'VALIDATION_ERROR');
+    const trimmed = data.full_name.trim();
+
+    await query('UPDATE users SET full_name = $1, updated_at = NOW() WHERE id = $2', [trimmed, userId]);
+
+    // Also update employees table if user has an employee_id
+    const userRow = await query('SELECT employee_id FROM users WHERE id = $1', [userId]);
+    if (userRow.rows[0]?.employee_id) {
+      await query('UPDATE employees SET full_name = $1, updated_at = NOW() WHERE id = $2', [trimmed, userRow.rows[0].employee_id]);
+    }
+
+    return this.me(userId);
+  }
+
   async me(userId: string) {
     const result = await query(`
       SELECT u.id, u.email, u.full_name, u.role, u.employee_id, u.is_active, u.last_login_at, u.created_at,

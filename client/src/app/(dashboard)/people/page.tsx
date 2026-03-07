@@ -31,6 +31,7 @@ const tabs = [
 const employeeTypes = [
   { value: "sales_agent", label: "Sales Rep" },
   { value: "dispatcher", label: "Dispatcher" },
+  { value: "sales_and_dispatcher", label: "Sales & Dispatcher" },
   { value: "fixed_salary", label: "Fixed Salary" },
   { value: "contractor", label: "Contractor" },
 ];
