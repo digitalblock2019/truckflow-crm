@@ -97,7 +97,10 @@ export function useUpdateTrucker() {
   return useMutation({
     mutationFn: ({ id, ...data }: Partial<Trucker> & { id: string }) =>
       apiFetch<Trucker>(`/api/truckers/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["truckers"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["truckers"] });
+      qc.invalidateQueries({ queryKey: ["trucker-documents"] });
+    },
   });
 }
 
