@@ -58,6 +58,9 @@ export interface Trucker {
   company_commission_pct: string | null;
   onboarding_initiated_at: string | null;
   fully_onboarded_at: string | null;
+  uses_factoring: boolean;
+  is_new_authority: boolean;
+  uses_quick_pay: boolean;
   created_at: string;
   [key: string]: unknown;
 }
@@ -209,6 +212,17 @@ export interface LeaveRequest {
   decision_by: string | null;
   decision_notes: string | null;
   created_at: string;
+}
+
+export interface LoadDocument {
+  doc_type: string;
+  label: string;
+  uploaded: boolean;
+  file_name: string | null;
+  file_size_bytes: number | null;
+  mime_type: string | null;
+  uploaded_by: string | null;
+  uploaded_at: string | null;
 }
 
 export interface TruckerDocument {

@@ -262,6 +262,39 @@ export default function TruckersPage() {
 
             {modalTab === "documents" ? (
               <div>
+                {/* Conditional flags */}
+                <div className="flex flex-wrap gap-4 mb-4 p-3 bg-surface-mid rounded-lg">
+                  {([
+                    { key: "uses_factoring", label: "Uses Factoring" },
+                    { key: "is_new_authority", label: "New Authority" },
+                    { key: "uses_quick_pay", label: "Uses Quick Pay" },
+                  ] as const).map(({ key, label }) => (
+                    <label key={key} className="flex items-center gap-2 text-xs cursor-pointer">
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={!!(selectedTrucker as any)[key]}
+                        onClick={() => {
+                          updateTrucker.mutate({
+                            id: selectedTrucker.id,
+                            [key]: !(selectedTrucker as any)[key],
+                          } as any);
+                        }}
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                          (selectedTrucker as any)[key] ? "bg-blue" : "bg-gray-300"
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${
+                            (selectedTrucker as any)[key] ? "translate-x-[18px]" : "translate-x-[3px]"
+                          }`}
+                        />
+                      </button>
+                      <span className="text-txt-mid">{label}</span>
+                    </label>
+                  ))}
+                </div>
+
                 {modalDocsArr.length > 0 && (
                   <>
                     <div className="flex items-center gap-2 mb-2">

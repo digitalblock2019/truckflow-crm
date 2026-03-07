@@ -10,10 +10,11 @@ import Modal from "@/components/ui/Modal";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import LoadPipeline from "@/components/features/LoadPipeline";
-import { useLoads, useCreateLoad, useUpdateLoadStatus, useTruckers, useEmployees } from "@/lib/hooks";
+import { useLoads, useCreateLoad, useUpdateLoadStatus, useLoadDocuments, useUploadLoadDocument, useTruckers, useEmployees } from "@/lib/hooks";
+import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth";
 import { totalPages, fmt } from "@/lib/utils";
-import type { Load } from "@/types";
+import type { Load, LoadDocument } from "@/types";
 
 const statusColors: Record<string, "green" | "blue" | "orange" | "red" | "gray" | "purple"> = {
   pending: "orange",
@@ -65,6 +66,8 @@ export default function LoadsPage() {
   const { data, isLoading } = useLoads({ status: tab, page, limit: 20 });
   const createLoad = useCreateLoad();
   const updateStatus = useUpdateLoadStatus();
+  const { data: loadDocs } = useLoadDocuments(selectedLoad?.id ?? "");
+  const uploadLoadDoc = useUploadLoadDocument();
   const { data: truckersData } = useTruckers({ limit: 100 });
   const { data: employeesData } = useEmployees({ type: "dispatcher", status: "active", limit: 100 });
 
@@ -162,41 +165,111 @@ export default function LoadsPage() {
                 <div className="mt-0.5 text-txt font-mono">{fmt(selectedLoad.company_net_cents)}</div>
               </div>
             </div>
-            {isSup && (nextStatus[selectedLoad.load_status] || prevStatus[selectedLoad.load_status]) && (
-              <div className="flex justify-between pt-3 border-t border-border">
-                <div>
-                  {prevStatus[selectedLoad.load_status] && (
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        updateStatus.mutate(
-                          { id: selectedLoad.id, status: prevStatus[selectedLoad.load_status] },
-                          { onSuccess: () => setSelectedLoad(null) }
-                        );
-                      }}
-                      disabled={updateStatus.isPending}
-                    >
-                      Revert to {statusLabel[prevStatus[selectedLoad.load_status]]}
-                    </Button>
-                  )}
-                </div>
-                <div>
-                  {nextStatus[selectedLoad.load_status] && (
-                    <Button
-                      onClick={() => {
-                        updateStatus.mutate(
-                          { id: selectedLoad.id, status: nextStatus[selectedLoad.load_status] },
-                          { onSuccess: () => setSelectedLoad(null) }
-                        );
-                      }}
-                      disabled={updateStatus.isPending}
-                    >
-                      Advance to {statusLabel[nextStatus[selectedLoad.load_status]]}
-                    </Button>
-                  )}
-                </div>
+            {/* Load Documents */}
+            <div className="pt-3 border-t border-border mb-4">
+              <h4 className="text-[11px] font-semibold text-txt-mid font-mono uppercase tracking-wide mb-3">Documents</h4>
+              <div className="grid grid-cols-3 gap-3">
+                {(loadDocs ?? []).map((doc: LoadDocument) => {
+                  const fileInputId = `load-doc-${doc.doc_type}`;
+                  return (
+                    <div key={doc.doc_type} className={`border rounded-lg p-3 text-center ${doc.uploaded ? "border-green/40 bg-green/5" : "border-border"}`}>
+                      <div className="text-[10px] font-semibold text-txt-mid uppercase mb-2">{doc.label}</div>
+                      {doc.uploaded ? (
+                        <div>
+                          <div className="text-[10px] text-txt-light truncate mb-1" title={doc.file_name ?? ""}>{doc.file_name}</div>
+                          <div className="text-[9px] text-txt-light mb-2">{doc.uploaded_at ? new Date(doc.uploaded_at).toLocaleDateString() : ""}</div>
+                          <div className="flex gap-1 justify-center">
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const { url } = await apiFetch<{ url: string }>(`/api/loads/${selectedLoad.id}/documents/${doc.doc_type}/url`);
+                                  window.open(url, "_blank");
+                                } catch {}
+                              }}
+                              className="text-[10px] text-blue hover:underline cursor-pointer"
+                            >
+                              Download
+                            </button>
+                            <span className="text-txt-light">|</span>
+                            <label htmlFor={fileInputId} className="text-[10px] text-blue hover:underline cursor-pointer">Replace</label>
+                          </div>
+                          <input id={fileInputId} type="file" className="hidden" onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) uploadLoadDoc.mutate({ loadId: selectedLoad.id, docType: doc.doc_type, file: f });
+                            e.target.value = "";
+                          }} />
+                        </div>
+                      ) : (
+                        <div>
+                          <label htmlFor={fileInputId} className="inline-block px-3 py-1.5 text-[10px] font-semibold text-blue border border-blue/30 rounded-md hover:bg-blue/5 cursor-pointer transition-colors">
+                            Upload
+                          </label>
+                          <input id={fileInputId} type="file" className="hidden" onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) uploadLoadDoc.mutate({ loadId: selectedLoad.id, docType: doc.doc_type, file: f });
+                            e.target.value = "";
+                          }} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            )}
+            </div>
+
+            {(() => {
+              const requiredDocForNext: Record<string, string> = {
+                dispatched: "rate_con",
+                in_transit: "bol",
+                delivered: "pod",
+              };
+              const next = nextStatus[selectedLoad.load_status];
+              const requiredType = next ? requiredDocForNext[next] : undefined;
+              const missingDoc = requiredType && !(loadDocs ?? []).find((d: LoadDocument) => d.doc_type === requiredType && d.uploaded);
+              const docLabel: Record<string, string> = { rate_con: "Rate Confirmation", bol: "Bill of Lading", pod: "Proof of Delivery" };
+
+              return isSup && (next || prevStatus[selectedLoad.load_status]) ? (
+                <div className="flex justify-between pt-3 border-t border-border">
+                  <div>
+                    {prevStatus[selectedLoad.load_status] && (
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          updateStatus.mutate(
+                            { id: selectedLoad.id, status: prevStatus[selectedLoad.load_status] },
+                            { onSuccess: () => setSelectedLoad(null) }
+                          );
+                        }}
+                        disabled={updateStatus.isPending}
+                      >
+                        Revert to {statusLabel[prevStatus[selectedLoad.load_status]]}
+                      </Button>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    {next && (
+                      <>
+                        <Button
+                          onClick={() => {
+                            updateStatus.mutate(
+                              { id: selectedLoad.id, status: next },
+                              { onSuccess: () => setSelectedLoad(null) }
+                            );
+                          }}
+                          disabled={updateStatus.isPending || !!missingDoc}
+                          className={missingDoc ? "!opacity-50 !cursor-not-allowed" : ""}
+                        >
+                          Advance to {statusLabel[next]}
+                        </Button>
+                        {missingDoc && requiredType && (
+                          <p className="text-[10px] text-red mt-1">{docLabel[requiredType]} must be uploaded first</p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              ) : null;
+            })()}
           </div>
         )}
       </Modal>

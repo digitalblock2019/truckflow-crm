@@ -12,14 +12,15 @@ if (!supabaseUrl || !supabaseServiceKey) {
 
 const supabase = createClient(supabaseUrl || '', supabaseServiceKey || '');
 
-const BUCKET = 'trucker-documents';
+const DEFAULT_BUCKET = 'trucker-documents';
 
 export async function uploadFile(
   path: string,
   buffer: Buffer,
-  contentType: string
+  contentType: string,
+  bucket: string = DEFAULT_BUCKET
 ): Promise<string> {
-  const { error } = await supabase.storage.from(BUCKET).upload(path, buffer, {
+  const { error } = await supabase.storage.from(bucket).upload(path, buffer, {
     contentType,
     upsert: true,
   });
@@ -29,16 +30,17 @@ export async function uploadFile(
 
 export async function getSignedUrl(
   path: string,
-  expiresIn = 3600
+  expiresIn = 3600,
+  bucket: string = DEFAULT_BUCKET
 ): Promise<string> {
   const { data, error } = await supabase.storage
-    .from(BUCKET)
+    .from(bucket)
     .createSignedUrl(path, expiresIn);
   if (error || !data?.signedUrl) throw new Error(`Signed URL failed: ${error?.message}`);
   return data.signedUrl;
 }
 
-export async function deleteFile(path: string): Promise<void> {
-  const { error } = await supabase.storage.from(BUCKET).remove([path]);
+export async function deleteFile(path: string, bucket: string = DEFAULT_BUCKET): Promise<void> {
+  const { error } = await supabase.storage.from(bucket).remove([path]);
   if (error) throw new Error(`Storage delete failed: ${error.message}`);
 }

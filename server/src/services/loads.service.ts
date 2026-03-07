@@ -153,6 +153,29 @@ export class LoadsService {
     if (newIdx !== currentIdx + 1 && newIdx !== currentIdx - 1)
       throw new AppError(`Cannot transition from ${current} to ${newStatus}`, 422, 'INVALID_TRANSITION');
 
+    // Document gates for forward transitions
+    if (newIdx > currentIdx) {
+      const docGates: Record<string, { doc_type: string; label: string }> = {
+        dispatched: { doc_type: 'rate_con', label: 'Rate Confirmation' },
+        in_transit: { doc_type: 'bol', label: 'Bill of Lading' },
+        delivered: { doc_type: 'pod', label: 'Proof of Delivery' },
+      };
+      const gate = docGates[newStatus];
+      if (gate) {
+        const docCheck = await query(
+          'SELECT id FROM load_documents WHERE load_order_id = $1 AND doc_type = $2',
+          [id, gate.doc_type]
+        );
+        if (!docCheck.rows.length) {
+          throw new AppError(
+            `${gate.label} must be uploaded before advancing to ${newStatus.replace(/_/g, ' ')}`,
+            422,
+            'DOCUMENT_REQUIRED'
+          );
+        }
+      }
+    }
+
     const updates: string[] = ['load_status = $1', 'updated_at = NOW()'];
     const params: any[] = [newStatus];
     let idx = 2;

@@ -6,25 +6,38 @@ import { AppError } from '../utils/AppError';
 
 export class TruckerDocumentsService {
   async getChecklist(truckerId: string) {
+    // Fetch trucker flags for conditional documents
+    const truckerResult = await query(
+      'SELECT uses_factoring, is_new_authority, uses_quick_pay FROM truckers WHERE id = $1',
+      [truckerId]
+    );
+    const flags = truckerResult.rows[0] || { uses_factoring: false, is_new_authority: false, uses_quick_pay: false };
+
     const types = await query('SELECT * FROM trucker_document_types ORDER BY sort_order');
     const docs = await query(
       'SELECT * FROM trucker_documents WHERE trucker_id = $1 AND is_current = TRUE', [truckerId]
     );
 
     const docMap = new Map(docs.rows.map((d: any) => [d.document_type_id, d]));
-    return types.rows.map((t: any) => {
-      const doc = docMap.get(t.id);
-      return {
-        type_slug: t.slug,
-        type_label: t.label,
-        required: t.is_required,
-        uploaded: !!doc,
-        file_name: doc?.file_name || null,
-        file_path: doc?.file_path || null,
-        uploaded_at: doc?.uploaded_at || null,
-        uploaded_by: doc?.uploaded_by || null,
-      };
-    });
+    return types.rows
+      .map((t: any) => {
+        const doc = docMap.get(t.id);
+        const isConditional = !!t.condition_flag;
+        const flagValue = isConditional ? !!(flags as any)[t.condition_flag] : true;
+        // Hide conditional docs whose flag is OFF
+        if (isConditional && !flagValue) return null;
+        return {
+          type_slug: t.slug,
+          type_label: t.label,
+          required: isConditional ? flagValue : t.is_required,
+          uploaded: !!doc,
+          file_name: doc?.file_name || null,
+          file_path: doc?.file_path || null,
+          uploaded_at: doc?.uploaded_at || null,
+          uploaded_by: doc?.uploaded_by || null,
+        };
+      })
+      .filter(Boolean);
   }
 
   async upload(

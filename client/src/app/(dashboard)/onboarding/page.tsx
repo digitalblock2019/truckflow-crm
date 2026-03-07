@@ -7,7 +7,7 @@ import ProgressBar from "@/components/ui/ProgressBar";
 import Badge from "@/components/ui/Badge";
 import DocSlot from "@/components/features/DocSlot";
 import Button from "@/components/ui/Button";
-import { useTruckers, useTruckerDocuments, useUploadDocument, useMarkFullyOnboarded } from "@/lib/hooks";
+import { useTruckers, useTruckerDocuments, useUploadDocument, useMarkFullyOnboarded, useUpdateTrucker } from "@/lib/hooks";
 import type { Trucker } from "@/types";
 
 export default function OnboardingPage() {
@@ -17,6 +17,7 @@ export default function OnboardingPage() {
   const { data: docs } = useTruckerDocuments(selectedId);
   const uploadDoc = useUploadDocument();
   const markOnboarded = useMarkFullyOnboarded();
+  const updateTrucker = useUpdateTrucker();
 
   const selected = truckers.find((t) => t.id === selectedId);
 
@@ -94,6 +95,39 @@ export default function OnboardingPage() {
                     <ProgressBar value={progress} className="mb-5" />
                   </>
                 )}
+                {/* Conditional flags */}
+                <div className="flex flex-wrap gap-4 mb-4 p-3 bg-surface-mid rounded-lg">
+                  {([
+                    { key: "uses_factoring", label: "Uses Factoring" },
+                    { key: "is_new_authority", label: "New Authority" },
+                    { key: "uses_quick_pay", label: "Uses Quick Pay" },
+                  ] as const).map(({ key, label }) => (
+                    <label key={key} className="flex items-center gap-2 text-xs cursor-pointer">
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={!!(selected as any)[key]}
+                        onClick={() => {
+                          updateTrucker.mutate({
+                            id: selected.id,
+                            [key]: !(selected as any)[key],
+                          } as any);
+                        }}
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                          (selected as any)[key] ? "bg-blue" : "bg-gray-300"
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${
+                            (selected as any)[key] ? "translate-x-[18px]" : "translate-x-[3px]"
+                          }`}
+                        />
+                      </button>
+                      <span className="text-txt-mid">{label}</span>
+                    </label>
+                  ))}
+                </div>
+
                 <h4 className="text-[11px] font-semibold text-txt-mid font-mono uppercase tracking-wide mb-3">
                   Document Checklist
                 </h4>

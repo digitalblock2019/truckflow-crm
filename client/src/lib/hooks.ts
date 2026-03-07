@@ -7,6 +7,7 @@ import type {
   User,
   Trucker,
   Load,
+  LoadDocument,
   Commission,
   CommissionSummary,
   Employee,
@@ -280,6 +281,39 @@ export function useUpdateLoadStatus() {
     mutationFn: ({ id, status }: { id: string; status: string }) =>
       apiFetch(`/api/loads/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["loads"] }),
+  });
+}
+
+// Load Documents
+export function useLoadDocuments(loadId: string) {
+  return useQuery({
+    queryKey: ["load-documents", loadId],
+    queryFn: () => apiFetch<LoadDocument[]>(`/api/loads/${loadId}/documents`),
+    enabled: !!loadId,
+  });
+}
+
+export function useUploadLoadDocument() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ loadId, docType, file }: { loadId: string; docType: string; file: File }) => {
+      const token = useAuthStore.getState().tokens?.access_token;
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`/api/loads/${loadId}/documents/${docType}`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ message: res.statusText }));
+        throw new Error(body.message || "Upload failed");
+      }
+      return res.json();
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["load-documents", vars.loadId] });
+    },
   });
 }
 
