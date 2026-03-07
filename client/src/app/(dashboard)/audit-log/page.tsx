@@ -50,15 +50,14 @@ export default function AuditLogPage() {
     { key: "entity_type", header: "Entity Type", render: (r) => <span className="font-mono">{r.entity_type}</span> },
     { key: "entity_id", header: "Entity ID", render: (r) => <span className="font-mono text-[11px]">{r.entity_id ?? "—"}</span> },
     {
-      key: "details",
-      header: "Details",
+      key: "description",
+      header: "Description",
       render: (r) => (
-        <span className="text-[11px] text-txt-mid truncate max-w-[200px] block">
-          {r.details ? JSON.stringify(r.details).slice(0, 80) : "—"}
+        <span className="text-[11px] text-txt-mid truncate max-w-[300px] block" title={(r as any).description ?? ""}>
+          {(r as any).description ?? "—"}
         </span>
       ),
     },
-    { key: "ip_address", header: "IP", render: (r) => <span className="font-mono text-[11px]">{r.ip_address ?? "—"}</span> },
   ];
 
   return (
