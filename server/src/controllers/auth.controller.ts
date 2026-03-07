@@ -60,4 +60,10 @@ export class AuthController {
     const result = await authService.resetPassword(token, new_password);
     res.json(result);
   }
+
+  async uploadAvatar(req: Request, res: Response) {
+    if (!req.file) throw new AppError('Avatar file required', 400, 'VALIDATION_ERROR');
+    const result = await authService.uploadAvatar(req.user!.id, req.file.buffer, req.file.originalname, req.file.mimetype);
+    res.json(result);
+  }
 }

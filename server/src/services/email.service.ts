@@ -1,7 +1,7 @@
 import { Resend } from 'resend';
 
 const resend = new Resend(process.env.RESEND_API_KEY || '');
-const FROM_EMAIL = 'TruckFlow CRM <onboarding@resend.dev>';
+const FROM_EMAIL = 'TruckFlow CRM <noreply@truckflowcrm.com>';
 
 export class EmailService {
   async sendEmail(to: string, subject: string, html: string) {

@@ -583,3 +583,65 @@ export function useMarkAllNotificationsRead() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
   });
 }
+
+// Invoice Branding
+export function useInvoiceBranding() {
+  return useQuery({
+    queryKey: ["invoice-branding"],
+    queryFn: () => apiFetch<Record<string, unknown>>("/api/invoice/branding"),
+  });
+}
+
+export function useUpdateBranding() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Record<string, string>) =>
+      apiFetch("/api/invoice/branding", { method: "PUT", body: JSON.stringify(data) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["invoice-branding"] }),
+  });
+}
+
+export function useUploadLogo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const token = useAuthStore.getState().tokens?.access_token;
+      const formData = new FormData();
+      formData.append("logo", file);
+      const res = await fetch("/api/invoice/branding/logo", {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ message: res.statusText }));
+        throw new Error(body.message || "Upload failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["invoice-branding"] }),
+  });
+}
+
+// Profile Avatar
+export function useUploadAvatar() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const token = useAuthStore.getState().tokens?.access_token;
+      const formData = new FormData();
+      formData.append("avatar", file);
+      const res = await fetch("/api/auth/me/avatar", {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ message: res.statusText }));
+        throw new Error(body.message || "Upload failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["me"] }),
+  });
+}

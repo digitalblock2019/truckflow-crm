@@ -50,7 +50,7 @@ export class InvoicesController {
   async getBranding(_req: Request, res: Response) { res.json(await svc.getBranding()); }
   async updateBranding(req: Request, res: Response) { res.json(await svc.updateBranding(req.body, req.user!.id)); }
   async uploadLogo(req: Request, res: Response) {
-    if (!req.body.file_path) throw new AppError('file_path required', 400, 'VALIDATION_ERROR');
-    res.json(await svc.uploadLogo(req.body.file_path, req.user!.id));
+    if (!req.file) throw new AppError('Logo file required', 400, 'VALIDATION_ERROR');
+    res.json(await svc.uploadLogo(req.file.buffer, req.file.originalname, req.file.mimetype, req.user!.id));
   }
 }

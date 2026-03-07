@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuthStore } from "@/lib/auth";
+import { useMe } from "@/lib/hooks";
 
 interface NavItem {
   href: string;
@@ -51,7 +52,9 @@ const sections: { title: string; items: NavItem[] }[] = [
 export default function Sidebar() {
   const pathname = usePathname();
   const user = useAuthStore((s) => s.user);
+  const { data: me } = useMe();
   const role = user?.role ?? "viewer";
+  const profileImageUrl = (me as Record<string, unknown> | undefined)?.profile_image_url as string | undefined;
 
   return (
     <aside className="w-[220px] bg-navy flex flex-col shrink-0 h-screen sticky top-0">
@@ -113,9 +116,13 @@ export default function Sidebar() {
       {/* User footer */}
       {user && (
         <div className="px-5 py-3 border-t border-white/10 flex items-center gap-2.5">
-          <div className="w-[30px] h-[30px] rounded-full bg-blue flex items-center justify-center text-[11px] font-bold text-white shrink-0">
-            {user.full_name?.split(" ").map((n) => n[0]).join("").slice(0, 2)}
-          </div>
+          {profileImageUrl ? (
+            <img src={profileImageUrl} alt={user.full_name} className="w-[30px] h-[30px] rounded-full object-cover shrink-0" />
+          ) : (
+            <div className="w-[30px] h-[30px] rounded-full bg-blue flex items-center justify-center text-[11px] font-bold text-white shrink-0">
+              {user.full_name?.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+            </div>
+          )}
           <div className="min-w-0">
             <div className="text-xs text-white truncate">
               {user.full_name}

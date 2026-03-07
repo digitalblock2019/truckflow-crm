@@ -1,9 +1,11 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import path from 'path';
 import { query } from '../config/database';
 import { AppError } from '../utils/AppError';
 import { JWT_SECRET } from '../middleware/auth';
+import { uploadFile, getSignedUrl } from '../config/storage';
 
 const ACCESS_TOKEN_EXPIRY = '1h';
 const REFRESH_TOKEN_EXPIRY_DAYS = 7;
@@ -119,12 +121,30 @@ export class AuthService {
   async me(userId: string) {
     const result = await query(`
       SELECT u.id, u.email, u.full_name, u.role, u.employee_id, u.is_active, u.last_login_at, u.created_at,
+             u.profile_image_path,
              e.employee_number, e.job_title, e.department, e.employee_type, e.employment_status
       FROM users u
       LEFT JOIN employees e ON e.id = u.employee_id
       WHERE u.id = $1
     `, [userId]);
     if (!result.rows.length) throw new AppError('User not found', 404, 'NOT_FOUND');
-    return result.rows[0];
+    const user = result.rows[0];
+    if (user.profile_image_path) {
+      try {
+        user.profile_image_url = await getSignedUrl(user.profile_image_path);
+      } catch {
+        user.profile_image_url = null;
+      }
+    }
+    return user;
+  }
+
+  async uploadAvatar(userId: string, buffer: Buffer, originalName: string, contentType: string) {
+    const ext = path.extname(originalName).toLowerCase();
+    const storagePath = `users/${userId}/avatar${ext}`;
+    await uploadFile(storagePath, buffer, contentType);
+    await query('UPDATE users SET profile_image_path = $1, updated_at = NOW() WHERE id = $2', [storagePath, userId]);
+    const signedUrl = await getSignedUrl(storagePath);
+    return { profile_image_url: signedUrl };
   }
 }

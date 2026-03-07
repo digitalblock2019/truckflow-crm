@@ -1,6 +1,8 @@
 import crypto from 'crypto';
+import path from 'path';
 import { query } from '../config/database';
 import { AppError } from '../utils/AppError';
+import { uploadFile, getSignedUrl } from '../config/storage';
 
 export class InvoicesService {
   // ── Clients ──
@@ -258,7 +260,15 @@ export class InvoicesService {
   // ── Branding ──
   async getBranding() {
     const data = await query('SELECT * FROM invoice_branding LIMIT 1');
-    return data.rows[0] || null;
+    const branding = data.rows[0] || null;
+    if (branding?.logo_file_path) {
+      try {
+        branding.logo_url = await getSignedUrl(branding.logo_file_path);
+      } catch {
+        branding.logo_url = null;
+      }
+    }
+    return branding;
   }
 
   async updateBranding(data: any, userId: string) {
@@ -285,15 +295,21 @@ export class InvoicesService {
     return this.getBranding();
   }
 
-  async uploadLogo(filePath: string, userId: string) {
+  async uploadLogo(buffer: Buffer, originalName: string, contentType: string, userId: string) {
+    const ext = path.extname(originalName).toLowerCase();
+    const storagePath = `branding/logo${ext}`;
+    await uploadFile(storagePath, buffer, contentType);
+
     const existing = await query('SELECT id FROM invoice_branding LIMIT 1');
     if (existing.rows.length) {
       await query('UPDATE invoice_branding SET logo_file_path = $1, updated_by = $2, updated_at = NOW() WHERE id = $3',
-        [filePath, userId, existing.rows[0].id]);
+        [storagePath, userId, existing.rows[0].id]);
     } else {
       await query('INSERT INTO invoice_branding (company_name, logo_file_path, updated_by) VALUES ($1, $2, $3)',
-        ['TruckFlow', filePath, userId]);
+        ['TruckFlow', storagePath, userId]);
     }
-    return { logo_file_path: filePath };
+
+    const signedUrl = await getSignedUrl(storagePath);
+    return { logo_file_path: storagePath, logo_url: signedUrl };
   }
 }

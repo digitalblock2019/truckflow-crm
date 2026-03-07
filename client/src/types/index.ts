@@ -6,6 +6,7 @@ export interface User {
   employee_id?: string;
   is_active?: boolean;
   created_at?: string;
+  profile_image_url?: string;
   // From /me endpoint (extended)
   employee_number?: string;
   job_title?: string;

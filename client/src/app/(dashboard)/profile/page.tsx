@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Topbar from "@/components/layout/Topbar";
 import Card, { CardHeader } from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
@@ -8,7 +8,7 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import { useAuthStore } from "@/lib/auth";
-import { useMe, useLeaveRequests, useSubmitLeave, useCommissions, useChangePassword, useUpdateProfile, useSalarySlips } from "@/lib/hooks";
+import { useMe, useLeaveRequests, useSubmitLeave, useCommissions, useChangePassword, useUpdateProfile, useSalarySlips, useUploadAvatar } from "@/lib/hooks";
 import { initials, fmt } from "@/lib/utils";
 import type { Commission, LeaveRequest } from "@/types";
 
@@ -23,6 +23,8 @@ export default function ProfilePage() {
   const { data: salarySlips } = useSalarySlips(slipYear);
 
   const updateProfile = useUpdateProfile();
+  const uploadAvatar = useUploadAvatar();
+  const avatarInputRef = useRef<HTMLInputElement>(null);
   const [editName, setEditName] = useState("");
   const [nameEditing, setNameEditing] = useState(false);
 
@@ -63,10 +65,18 @@ export default function ProfilePage() {
     );
   };
 
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    uploadAvatar.mutate(file);
+    e.target.value = "";
+  };
+
   const meAny = me as unknown as Record<string, unknown> | undefined;
   const displayName = (meAny?.full_name as string) ?? user?.full_name ?? "User";
   const displayRole = (meAny?.crm_role as string) ?? (meAny?.role as string) ?? user?.role ?? "";
   const displayEmail = (meAny?.email as string) ?? user?.email ?? "";
+  const profileImageUrl = (meAny?.profile_image_url as string) ?? null;
 
   return (
     <>
@@ -82,9 +92,43 @@ export default function ProfilePage() {
       <div className="flex-1 overflow-y-auto p-6 bg-surface">
         <div className="grid grid-cols-[280px_1fr] gap-4">
           <Card className="text-center">
-            <div className="w-[72px] h-[72px] rounded-full bg-blue flex items-center justify-center text-2xl font-bold text-white mx-auto mb-3">
-              {initials(displayName)}
+            {/* Avatar with upload */}
+            <div
+              className="relative w-[72px] h-[72px] rounded-full mx-auto mb-3 group cursor-pointer"
+              onClick={() => avatarInputRef.current?.click()}
+              title="Click to upload photo"
+            >
+              {profileImageUrl ? (
+                <img
+                  src={profileImageUrl}
+                  alt={displayName}
+                  className="w-full h-full rounded-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full rounded-full bg-blue flex items-center justify-center text-2xl font-bold text-white">
+                  {initials(displayName)}
+                </div>
+              )}
+              {/* Hover overlay */}
+              <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                {uploadAvatar.isPending ? (
+                  <span className="text-white text-[10px]">...</span>
+                ) : (
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                )}
+              </div>
+              <input
+                ref={avatarInputRef}
+                type="file"
+                className="hidden"
+                accept=".png,.jpg,.jpeg,.webp"
+                onChange={handleAvatarUpload}
+              />
             </div>
+
             {nameEditing ? (
               <div className="flex items-center gap-2 justify-center">
                 <Input
