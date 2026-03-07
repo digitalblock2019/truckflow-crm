@@ -11,7 +11,14 @@ const app = express();
 app.use(helmet());
 app.use(cors());
 app.use(morgan('dev'));
-app.use(express.json());
+// Skip JSON parsing for Stripe webhook (needs raw body for signature verification)
+app.use((req, res, next) => {
+  if (req.originalUrl === '/api/invoice/webhook/stripe') {
+    next();
+  } else {
+    express.json()(req, res, next);
+  }
+});
 
 app.use('/api', apiRouter);
 

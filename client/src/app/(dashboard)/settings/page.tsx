@@ -23,6 +23,7 @@ function InvoiceBrandingCard() {
     company_website: "",
     invoice_footer_text: "",
     invoice_notes_default: "",
+    wise_email: "",
   });
   const [dirty, setDirty] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -40,6 +41,7 @@ function InvoiceBrandingCard() {
         company_website: b.company_website || "",
         invoice_footer_text: b.invoice_footer_text || "",
         invoice_notes_default: b.invoice_notes_default || "",
+        wise_email: b.wise_email || "",
       });
     }
   }, [branding]);
@@ -150,6 +152,15 @@ function InvoiceBrandingCard() {
             label="Default Invoice Notes"
             value={form.invoice_notes_default}
             onChange={(e) => { setForm({ ...form, invoice_notes_default: e.target.value }); setDirty(true); }}
+          />
+        </div>
+        <div className="col-span-2">
+          <Input
+            label="Wise Email (shown as payment option on invoices)"
+            type="email"
+            value={form.wise_email}
+            onChange={(e) => { setForm({ ...form, wise_email: e.target.value }); setDirty(true); }}
+            placeholder="payments@yourcompany.com"
           />
         </div>
       </div>

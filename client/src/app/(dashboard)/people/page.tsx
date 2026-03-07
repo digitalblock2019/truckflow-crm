@@ -55,6 +55,7 @@ const crmRoles = [
   { value: "supervisor", label: "Supervisor" },
   { value: "sales_agent", label: "Sales Agent" },
   { value: "dispatcher", label: "Dispatcher" },
+  { value: "sales_and_dispatcher", label: "Sales & Dispatcher" },
   { value: "viewer", label: "Viewer" },
 ];
 

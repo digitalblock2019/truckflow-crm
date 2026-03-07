@@ -17,6 +17,7 @@ CREATE TYPE user_role AS ENUM (
   'supervisor',
   'sales_agent',
   'dispatcher',
+  'sales_and_dispatcher',
   'viewer'
 );
 
@@ -458,23 +459,19 @@ CREATE TABLE trucker_document_types (
   label           TEXT NOT NULL,          -- e.g. 'MC Authority Letter'
   is_required     BOOLEAN NOT NULL DEFAULT TRUE,
   is_conditional  BOOLEAN NOT NULL DEFAULT FALSE,   -- e.g. NOA — only if factoring
+  condition_flag  TEXT,                              -- maps to trucker flag: uses_factoring, is_new_authority, uses_quick_pay
   is_optional     BOOLEAN NOT NULL DEFAULT FALSE,   -- e.g. Fuel Card Agreement
   sort_order      INTEGER NOT NULL DEFAULT 0
 );
 
 INSERT INTO trucker_document_types (slug, label, is_required, is_conditional, is_optional, sort_order) VALUES
-  ('mc_authority_letter',      'MC Authority Letter',              TRUE,  FALSE, FALSE,  1),
-  ('w9_form',                  'W-9 Form',                         TRUE,  FALSE, FALSE,  2),
-  ('cdl_copy',                 'CDL Copy (Front & Back)',          TRUE,  FALSE, FALSE,  3),
-  ('truck_registration',       'Truck Registration',               TRUE,  FALSE, FALSE,  4),
-  ('certificate_of_insurance', 'Certificate of Insurance (COI)',   TRUE,  FALSE, FALSE,  5),
-  ('void_cheque',              'Void Cheque / Direct Deposit Form',TRUE,  FALSE, FALSE,  6),
-  ('carrier_agreement',        'Carrier Agreement / Contract',     TRUE,  FALSE, FALSE,  7),
-  ('rate_confirmation',        'Rate Confirmation Template',       TRUE,  FALSE, FALSE,  8),
-  ('eld_compliance',           'ELD Compliance Proof',             TRUE,  FALSE, FALSE,  9),
-  ('ifta_license',             'IFTA License',                     TRUE,  FALSE, FALSE, 10),
-  ('noa',                      'NOA - Notice of Assignment',       FALSE, TRUE,  FALSE, 11),
-  ('fuel_card_agreement',      'Fuel Card Agreement',              FALSE, FALSE, TRUE,  12);
+  ('mc_authority_letter',      'MC Authority Letter',              TRUE,  FALSE, FALSE, 1),
+  ('w9_form',                  'W-9 Form',                         TRUE,  FALSE, FALSE, 2),
+  ('certificate_of_insurance', 'Certificate of Insurance (COI)',   TRUE,  FALSE, FALSE, 3),
+  ('noa',                      'Notice of Assignment (NOA)',        FALSE, TRUE,  FALSE, 4),  -- conditional: uses_factoring
+  ('cdl_copy',                 'Copy of CDL',                       FALSE, TRUE,  FALSE, 5),  -- conditional: is_new_authority
+  ('carrier_agreement',        'Dispatcher-Carrier Agreement',      TRUE,  FALSE, FALSE, 6),
+  ('void_cheque',              'Voided Check',                      FALSE, TRUE,  FALSE, 7);  -- conditional: uses_quick_pay
 
 CREATE TABLE trucker_documents (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -494,6 +491,27 @@ CREATE TABLE trucker_documents (
 
 CREATE INDEX idx_trucker_docs_trucker ON trucker_documents(trucker_id);
 CREATE INDEX idx_trucker_docs_current ON trucker_documents(trucker_id, is_current) WHERE is_current = TRUE;
+
+-- ============================================================
+--  11b. LOAD DOCUMENTS (Rate Con, BOL, POD)
+-- ============================================================
+
+CREATE TABLE load_documents (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  load_order_id     UUID NOT NULL REFERENCES load_orders(id) ON DELETE CASCADE,
+  doc_type          TEXT NOT NULL,        -- 'rate_con', 'bol', 'pod'
+  file_name         TEXT NOT NULL,
+  file_path         TEXT NOT NULL,
+  file_size_bytes   INTEGER,
+  mime_type         TEXT,
+  uploaded_by       UUID REFERENCES users(id),
+  uploaded_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(load_order_id, doc_type)
+);
+
+CREATE INDEX idx_load_documents_load_order ON load_documents(load_order_id);
 
 -- ============================================================
 --  12. DOCUMENT DOWNLOADS & EMAIL FORWARDS

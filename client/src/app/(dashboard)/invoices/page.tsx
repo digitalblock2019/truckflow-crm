@@ -9,7 +9,7 @@ import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import Input from "@/components/ui/Input";
 import StatCard from "@/components/ui/StatCard";
-import { useInvoices, useCreateInvoice, useInvoiceAction } from "@/lib/hooks";
+import { useInvoices, useCreateInvoice, useInvoiceAction, useInvoice, useUpdateInvoice } from "@/lib/hooks";
 import { useAuthStore } from "@/lib/auth";
 import { totalPages, fmt } from "@/lib/utils";
 import type { Invoice } from "@/types";
@@ -31,15 +31,26 @@ const tabs = [
   { key: "paid", label: "Paid" },
 ];
 
+function fmtCurrency(cents: number, currency: string = "USD") {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(cents / 100);
+}
+
+function fmtDate(dateStr: string) {
+  return new Date(dateStr).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+}
+
 export default function InvoicesPage() {
   const [tab, setTab] = useState("");
   const [page, setPage] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const isSup = useAuthStore((s) => s.isSupervisorOrAdmin());
 
   const { data, isLoading } = useInvoices({ status: tab, page, limit: 20 });
   const createInvoice = useCreateInvoice();
   const invoiceAction = useInvoiceAction();
+  const { data: invoiceDetail, isLoading: detailLoading } = useInvoice(selectedId);
+  const updateInvoice = useUpdateInvoice();
 
   const [form, setForm] = useState({
     recipient_email: "",
@@ -130,9 +141,145 @@ export default function InvoicesPage() {
             page={page}
             totalPages={totalPages(data)}
             onPageChange={setPage}
+            onRowClick={(row) => setSelectedId(row.id)}
           />
         </div>
       </div>
+
+      {/* Invoice Detail Modal */}
+      <Modal open={!!selectedId} onClose={() => setSelectedId(null)} title={invoiceDetail ? `Invoice ${(invoiceDetail as any).invoice_number}` : "Invoice Detail"} width="720px">
+        {detailLoading ? (
+          <div className="text-xs text-txt-light py-12 text-center">Loading invoice...</div>
+        ) : invoiceDetail ? (() => {
+          const inv = invoiceDetail as any;
+          const lineItems = inv.line_items || [];
+          const activity = inv.activity || [];
+          const isDraft = inv.status === "draft";
+          return (
+            <div>
+              {/* Action Buttons */}
+              {isSup && (
+                <div className="flex gap-2 mb-4">
+                  {isDraft && (
+                    <Button size="sm" onClick={() => { invoiceAction.mutate({ id: inv.id, action: "send" }); setSelectedId(null); }}>
+                      Send Invoice
+                    </Button>
+                  )}
+                  {(inv.status === "sent" || inv.status === "overdue" || inv.status === "viewed") && (
+                    <Button size="sm" variant="accent" onClick={() => { invoiceAction.mutate({ id: inv.id, action: "mark-paid" }); setSelectedId(null); }}>
+                      Mark Paid
+                    </Button>
+                  )}
+                  {inv.status !== "paid" && inv.status !== "cancelled" && (
+                    <Button size="sm" variant="secondary" onClick={() => { invoiceAction.mutate({ id: inv.id, action: "cancel", body: { reason: "Cancelled from dashboard" } }); setSelectedId(null); }}>
+                      Cancel
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {/* Status + Meta */}
+              <div className="flex items-center gap-3 mb-4">
+                <Badge color={statusColors[inv.status] ?? "gray"}>{inv.status}</Badge>
+                <span className="text-xs text-txt-light">Created {new Date(inv.created_at).toLocaleDateString()}</span>
+                {inv.sent_at && <span className="text-xs text-txt-light">Sent {new Date(inv.sent_at).toLocaleDateString()}</span>}
+              </div>
+
+              {/* Recipient */}
+              <div className="bg-surface rounded-lg p-4 mb-4">
+                <h4 className="text-[10px] font-semibold text-txt-mid font-mono uppercase tracking-wide mb-2">Bill To</h4>
+                {inv.recipient_name && <p className="text-sm font-semibold text-txt">{inv.recipient_name}</p>}
+                {inv.recipient_email && <p className="text-xs text-txt-light">{inv.recipient_email}</p>}
+                {inv.recipient_address && <p className="text-xs text-txt-light mt-1">{inv.recipient_address}</p>}
+              </div>
+
+              {/* Line Items Table */}
+              <h4 className="text-[10px] font-semibold text-txt-mid font-mono uppercase tracking-wide mb-2">Line Items</h4>
+              <table className="w-full text-xs mb-4">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left py-2 text-[10px] font-semibold text-txt-mid font-mono uppercase">Description</th>
+                    <th className="text-right py-2 text-[10px] font-semibold text-txt-mid font-mono uppercase w-16">Qty</th>
+                    <th className="text-right py-2 text-[10px] font-semibold text-txt-mid font-mono uppercase w-24">Unit Price</th>
+                    <th className="text-right py-2 text-[10px] font-semibold text-txt-mid font-mono uppercase w-24">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lineItems.map((li: any) => (
+                    <tr key={li.id} className="border-b border-[#f0f2f5]">
+                      <td className="py-2 text-txt">{li.description}</td>
+                      <td className="py-2 text-right text-txt-light">{li.quantity}</td>
+                      <td className="py-2 text-right font-mono text-txt-light">{fmt(li.unit_price)}</td>
+                      <td className="py-2 text-right font-mono font-semibold text-txt">{fmt(li.unit_price * li.quantity)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {/* Summary */}
+              <div className="flex justify-end mb-4">
+                <div className="w-56 space-y-1.5">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-txt-light">Subtotal</span>
+                    <span className="font-mono">{fmtCurrency(inv.subtotal_amount, inv.currency)}</span>
+                  </div>
+                  {inv.tax_total_amount > 0 && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-txt-light">Tax</span>
+                      <span className="font-mono">{fmtCurrency(inv.tax_total_amount, inv.currency)}</span>
+                    </div>
+                  )}
+                  {inv.discount_amount > 0 && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-txt-light">Discount</span>
+                      <span className="font-mono text-green">-{fmtCurrency(inv.discount_amount, inv.currency)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-sm font-bold border-t border-border pt-1.5">
+                    <span>Total</span>
+                    <span className="font-mono">{fmtCurrency(inv.total_amount, inv.currency)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Notes */}
+              {inv.notes && (
+                <div className="mb-3">
+                  <h4 className="text-[10px] font-semibold text-txt-mid font-mono uppercase tracking-wide mb-1">Notes</h4>
+                  <p className="text-xs text-txt-light whitespace-pre-line">{inv.notes}</p>
+                </div>
+              )}
+
+              {/* Stripe Payment Link */}
+              {inv.stripe_payment_link_url && (
+                <div className="mb-4 p-3 bg-surface rounded-lg">
+                  <h4 className="text-[10px] font-semibold text-txt-mid font-mono uppercase tracking-wide mb-1">Payment Link</h4>
+                  <a href={inv.stripe_payment_link_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline break-all">
+                    {inv.stripe_payment_link_url}
+                  </a>
+                </div>
+              )}
+
+              {/* Activity Log */}
+              {activity.length > 0 && (
+                <div>
+                  <h4 className="text-[10px] font-semibold text-txt-mid font-mono uppercase tracking-wide mb-2">Activity</h4>
+                  <div className="space-y-1.5">
+                    {activity.map((a: any) => (
+                      <div key={a.id} className="flex justify-between text-[11px]">
+                        <span className="text-txt-light">{a.description}</span>
+                        <span className="text-txt-light">{new Date(a.created_at).toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })() : (
+          <div className="text-xs text-txt-light py-12 text-center">Invoice not found</div>
+        )}
+      </Modal>
 
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Invoice" width="600px">
         <div className="grid grid-cols-2 gap-4 mb-4">

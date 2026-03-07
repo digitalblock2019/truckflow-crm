@@ -86,6 +86,76 @@ export class EmailService {
     await this.sendEmail(email, 'Welcome to TruckFlow CRM — Your Account Details', html);
   }
 
+  async sendInvoiceEmail(
+    email: string,
+    recipientName: string,
+    invoiceNumber: string,
+    totalAmountCents: number,
+    currency: string,
+    dueDate: string,
+    viewLink: string,
+    payLink?: string
+  ) {
+    const formattedTotal = new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currency || 'USD',
+    }).format(totalAmountCents / 100);
+
+    const formattedDue = new Date(dueDate).toLocaleDateString('en-US', {
+      year: 'numeric', month: 'long', day: 'numeric',
+    });
+
+    const payButton = payLink
+      ? `<div style="text-align: center; margin: 16px 0;">
+           <a href="${payLink}" style="background: #16a34a; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px;">
+             Pay Now
+           </a>
+         </div>`
+      : '';
+
+    const html = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px;">
+        <div style="text-align: center; margin-bottom: 32px;">
+          <h1 style="font-family: monospace; font-size: 24px; color: #0f172a; letter-spacing: 2px;">TRUCKFLOW</h1>
+        </div>
+        <h2 style="color: #0f172a; font-size: 18px;">Invoice ${invoiceNumber}</h2>
+        <p style="color: #475569; font-size: 14px; line-height: 1.6;">
+          Hi ${recipientName},
+        </p>
+        <p style="color: #475569; font-size: 14px; line-height: 1.6;">
+          You have received a new invoice. Here are the details:
+        </p>
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 24px 0;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+            <div>
+              <div style="color: #94a3b8; font-size: 11px; text-transform: uppercase; font-family: monospace;">Invoice Number</div>
+              <div style="color: #0f172a; font-size: 14px; font-weight: 600; margin-top: 4px;">${invoiceNumber}</div>
+            </div>
+            <div style="text-align: right;">
+              <div style="color: #94a3b8; font-size: 11px; text-transform: uppercase; font-family: monospace;">Due Date</div>
+              <div style="color: #0f172a; font-size: 14px; font-weight: 600; margin-top: 4px;">${formattedDue}</div>
+            </div>
+          </div>
+          <div>
+            <div style="color: #94a3b8; font-size: 11px; text-transform: uppercase; font-family: monospace;">Total Amount</div>
+            <div style="color: #0f172a; font-size: 22px; font-weight: 700; margin-top: 4px;">${formattedTotal}</div>
+          </div>
+        </div>
+        <div style="text-align: center; margin: 32px 0;">
+          <a href="${viewLink}" style="background: #2563eb; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px;">
+            View Invoice
+          </a>
+        </div>
+        ${payButton}
+        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+        <p style="color: #94a3b8; font-size: 11px; text-align: center;">
+          TruckFlow CRM &mdash; Operations Management Platform
+        </p>
+      </div>
+    `;
+    await this.sendEmail(email, `Invoice ${invoiceNumber} — ${formattedTotal} due ${formattedDue}`, html);
+  }
+
   async sendPasswordResetByAdmin(email: string, fullName: string, newPassword: string, loginUrl: string) {
     const html = `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px;">

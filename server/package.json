@@ -11,6 +11,7 @@
     "db:migrate:auth": "ts-node scripts/addAuthTables.ts",
     "db:seed": "ts-node scripts/seed.ts",
     "db:migrate:reset-token": "ts-node scripts/addResetTokenColumns.ts",
+    "db:migrate:stripe": "ts-node scripts/migrateStripe.ts",
     "test": "jest",
     "test:unit": "jest --testPathPatterns=unit",
     "test:integration": "jest --testPathPatterns=integration"
@@ -40,6 +41,7 @@
     "multer": "^2.1.1",
     "pg": "^8.19.0",
     "resend": "^6.9.3",
+    "stripe": "^20.4.1",
     "typescript": "^5.9.3"
   },
   "devDependencies": {

@@ -3,6 +3,8 @@ import path from 'path';
 import { query } from '../config/database';
 import { AppError } from '../utils/AppError';
 import { uploadFile, getSignedUrl } from '../config/storage';
+import { createPaymentLink } from '../config/stripe';
+import { EmailService } from './email.service';
 
 export class InvoicesService {
   // ── Clients ──
@@ -91,6 +93,19 @@ export class InvoicesService {
   async createInvoice(data: any, userId: string) {
     const viewToken = crypto.randomBytes(32).toString('hex');
 
+    // Auto-compute totals from line items if not provided
+    let subtotalAmount = data.subtotal_amount || 0;
+    let totalAmount = data.total_amount || 0;
+    if (data.line_items && Array.isArray(data.line_items) && data.line_items.length > 0) {
+      const computedSubtotal = data.line_items.reduce((sum: number, li: any) => {
+        const unitPrice = li.unit_price ?? li.unit_price_cents ?? 0;
+        const qty = li.quantity || 1;
+        return sum + (unitPrice * qty);
+      }, 0);
+      if (!subtotalAmount) subtotalAmount = computedSubtotal;
+      if (!totalAmount) totalAmount = computedSubtotal + (data.tax_total_amount || 0) - (data.discount_amount || 0);
+    }
+
     const result = await query(
       `INSERT INTO invoices (trigger, load_order_id, client_id, recipient_email, recipient_name,
        recipient_address, recipient_tax_id, currency, subtotal_amount, tax_total_amount,
@@ -99,8 +114,8 @@ export class InvoicesService {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING *`,
       [data.trigger || 'manual', data.load_order_id, data.client_id, data.recipient_email,
        data.recipient_name, data.recipient_address, data.recipient_tax_id,
-       data.currency || 'USD', data.subtotal_amount || 0, data.tax_total_amount || 0,
-       data.discount_amount || 0, data.total_amount || 0, data.invoice_date || new Date(),
+       data.currency || 'USD', subtotalAmount, data.tax_total_amount || 0,
+       data.discount_amount || 0, totalAmount, data.invoice_date || new Date(),
        data.payment_terms || 'net_30', data.custom_due_days, data.due_date,
        data.notes, data.terms, data.internal_notes, viewToken, userId]
     );
@@ -111,10 +126,11 @@ export class InvoicesService {
     if (data.line_items && Array.isArray(data.line_items)) {
       for (let i = 0; i < data.line_items.length; i++) {
         const li = data.line_items[i];
+        const unitPrice = li.unit_price ?? li.unit_price_cents;
         await query(
           `INSERT INTO invoice_line_items (invoice_id, sort_order, description, quantity, unit_price, tax_rate_id, tax_rate_value, tax_amount)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-          [invoiceId, i, li.description, li.quantity || 1, li.unit_price, li.tax_rate_id, li.tax_rate_value, li.tax_amount]
+          [invoiceId, i, li.description, li.quantity || 1, unitPrice, li.tax_rate_id, li.tax_rate_value, li.tax_amount]
         );
       }
     }
@@ -181,8 +197,53 @@ export class InvoicesService {
     if (!inv.rows.length) throw new AppError('Invoice not found', 404, 'NOT_FOUND');
     if (!['draft', 'sent'].includes(inv.rows[0].status)) throw new AppError('Cannot send this invoice', 422, 'INVALID_STATE');
 
+    const invoice = inv.rows[0];
+
+    // Generate Stripe Payment Link if not already created
+    let stripeUrl = invoice.stripe_payment_link_url;
+    if (!stripeUrl && invoice.total_amount > 0) {
+      try {
+        const link = await createPaymentLink(
+          invoice.invoice_number,
+          invoice.total_amount,
+          invoice.currency
+        );
+        if (link) {
+          stripeUrl = link.url;
+          await query(
+            'UPDATE invoices SET stripe_payment_link_id=$1, stripe_payment_link_url=$2 WHERE id=$3',
+            [link.id, link.url, id]
+          );
+        }
+      } catch (err) {
+        console.error('[SendInvoice] Stripe payment link creation failed:', err);
+      }
+    }
+
     await query(`UPDATE invoices SET status='sent', sent_at=NOW(), updated_at=NOW() WHERE id=$1`, [id]);
     await query(`INSERT INTO invoice_activity (invoice_id, event_type, description, actor_id) VALUES ($1, 'sent', 'Invoice sent', $2)`, [id, userId]);
+
+    // Send email to recipient
+    if (invoice.recipient_email) {
+      try {
+        const appUrl = process.env.APP_URL || 'https://www.truckflowcrm.com';
+        const viewLink = `${appUrl}/invoice-view/${invoice.view_token}`;
+        const emailService = new EmailService();
+        await emailService.sendInvoiceEmail(
+          invoice.recipient_email,
+          invoice.recipient_name || 'Customer',
+          invoice.invoice_number,
+          invoice.total_amount,
+          invoice.currency || 'USD',
+          invoice.due_date,
+          viewLink,
+          stripeUrl || undefined
+        );
+      } catch (err) {
+        console.error('[SendInvoice] Email send failed:', err);
+      }
+    }
+
     return { message: 'Invoice sent' };
   }
 

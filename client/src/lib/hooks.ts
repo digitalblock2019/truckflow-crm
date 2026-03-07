@@ -443,6 +443,26 @@ export function useInvoiceClients(params: Record<string, string | number> = {}) 
   });
 }
 
+export function useInvoice(id: string | null) {
+  return useQuery({
+    queryKey: ["invoice", id],
+    queryFn: () => apiFetch<Record<string, unknown>>(`/api/invoice/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useUpdateInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string; [key: string]: unknown }) =>
+      apiFetch(`/api/invoice/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["invoice", vars.id] });
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+    },
+  });
+}
+
 // Shippers
 export function useShippers(params: Record<string, string | number> = {}) {
   const qs = new URLSearchParams(
