@@ -129,7 +129,7 @@ export default function PeoplePage() {
       employee_type: form.employee_type,
       start_date: form.start_date || undefined,
       pay_type: form.pay_type,
-      base_salary_pkr_paisa: form.base_salary_pkr_paisa ? parseInt(form.base_salary_pkr_paisa) : undefined,
+      base_salary_pkr_paisa: form.base_salary_pkr_paisa ? Math.round(parseFloat(form.base_salary_pkr_paisa) * 100) : undefined,
       commission_type: form.commission_type || undefined,
       commission_value: form.commission_value ? parseFloat(form.commission_value) : undefined,
     };
@@ -160,7 +160,7 @@ export default function PeoplePage() {
       employee_type: selectedEmployee.employee_type || "sales_agent",
       start_date: selectedEmployee.start_date ? selectedEmployee.start_date.split("T")[0] : "",
       pay_type: (selectedEmployee as any).pay_type || "salary_only",
-      base_salary_pkr_paisa: (selectedEmployee as any).base_salary_pkr_paisa?.toString() || "",
+      base_salary_pkr_paisa: (selectedEmployee as any).base_salary_pkr_paisa ? ((selectedEmployee as any).base_salary_pkr_paisa / 100).toString() : "",
       commission_type: selectedEmployee.commission_type || "",
       commission_value: selectedEmployee.commission_value?.toString() || "",
       crm_email: "",
@@ -181,8 +181,8 @@ export default function PeoplePage() {
     if (form.employee_type !== selectedEmployee.employee_type) updates.employee_type = form.employee_type;
     if (form.start_date !== (selectedEmployee.start_date ? selectedEmployee.start_date.split("T")[0] : "")) updates.start_date = form.start_date || null;
     if (form.pay_type !== ((selectedEmployee as any).pay_type || "salary_only")) updates.pay_type = form.pay_type;
-    const newSalary = form.base_salary_pkr_paisa ? parseInt(form.base_salary_pkr_paisa) : null;
-    if (newSalary !== ((selectedEmployee as any).base_salary_pkr_paisa || null)) updates.base_salary_pkr_paisa = newSalary;
+    const newSalaryPaisa = form.base_salary_pkr_paisa ? Math.round(parseFloat(form.base_salary_pkr_paisa) * 100) : null;
+    if (newSalaryPaisa !== ((selectedEmployee as any).base_salary_pkr_paisa || null)) updates.base_salary_pkr_paisa = newSalaryPaisa;
     const newCommType = form.commission_type || null;
     if (newCommType !== (selectedEmployee.commission_type || null)) updates.commission_type = newCommType;
     const newCommVal = form.commission_value ? parseFloat(form.commission_value) : null;
@@ -337,7 +337,7 @@ export default function PeoplePage() {
               <Select label="Employee Type" value={form.employee_type} onChange={(e) => setForm({ ...form, employee_type: e.target.value })} options={employeeTypes} />
               <Input label="Start Date" type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} />
               <Select label="Pay Type" value={form.pay_type} onChange={(e) => setForm({ ...form, pay_type: e.target.value })} options={payTypes} />
-              <Input label="Base Salary (paisa)" type="number" value={form.base_salary_pkr_paisa} onChange={(e) => setForm({ ...form, base_salary_pkr_paisa: e.target.value })} />
+              <Input label="Base Salary (PKR)" type="number" value={form.base_salary_pkr_paisa} onChange={(e) => setForm({ ...form, base_salary_pkr_paisa: e.target.value })} />
               <Select label="Commission Type" value={form.commission_type} onChange={(e) => setForm({ ...form, commission_type: e.target.value })} options={commissionTypes} />
               {form.commission_type && (
                 <Input label={form.commission_type === "percentage" ? "Commission %" : "Commission Amount"} type="number" step="0.01" value={form.commission_value} onChange={(e) => setForm({ ...form, commission_value: e.target.value })} />
@@ -364,7 +364,7 @@ export default function PeoplePage() {
           <Select label="Employee Type" value={form.employee_type} onChange={(e) => setForm({ ...form, employee_type: e.target.value })} options={employeeTypes} />
           <Input label="Start Date" type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} />
           <Select label="Pay Type" value={form.pay_type} onChange={(e) => setForm({ ...form, pay_type: e.target.value })} options={payTypes} />
-          <Input label="Base Salary (paisa)" type="number" value={form.base_salary_pkr_paisa} onChange={(e) => setForm({ ...form, base_salary_pkr_paisa: e.target.value })} />
+          <Input label="Base Salary (PKR)" type="number" value={form.base_salary_pkr_paisa} onChange={(e) => setForm({ ...form, base_salary_pkr_paisa: e.target.value })} />
           <Select label="Commission Type" value={form.commission_type} onChange={(e) => setForm({ ...form, commission_type: e.target.value })} options={commissionTypes} />
           {form.commission_type && (
             <Input label={form.commission_type === "percentage" ? "Commission %" : "Commission Amount"} type="number" step="0.01" value={form.commission_value} onChange={(e) => setForm({ ...form, commission_value: e.target.value })} />
