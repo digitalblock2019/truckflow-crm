@@ -19,7 +19,9 @@ export default function OnboardingPage() {
   const markOnboarded = useMarkFullyOnboarded();
   const updateTrucker = useUpdateTrucker();
 
-  const selected = truckers.find((t) => t.id === selectedId);
+  const [flagOverrides, setFlagOverrides] = useState<Record<string, boolean>>({});
+  const baseTrucker = truckers.find((t) => t.id === selectedId);
+  const selected = baseTrucker ? { ...baseTrucker, ...flagOverrides } as Trucker : undefined;
 
   // Calculate onboarding progress from docs
   const docsArr = docs ?? [];
@@ -49,7 +51,7 @@ export default function OnboardingPage() {
                 return (
                   <button
                     key={t.id}
-                    onClick={() => setSelectedId(t.id)}
+                    onClick={() => { setSelectedId(t.id); setFlagOverrides({}); }}
                     className={`w-full text-left px-4 py-3 border-b border-[#f0f2f5] cursor-pointer transition-colors
                       ${t.id === selectedId ? "bg-[#f0f6ff]" : "hover:bg-[#f8faff]"}`}
                   >
@@ -108,9 +110,11 @@ export default function OnboardingPage() {
                         role="switch"
                         aria-checked={!!(selected as any)[key]}
                         onClick={() => {
+                          const newVal = !(selected as any)[key];
+                          setFlagOverrides((prev) => ({ ...prev, [key]: newVal }));
                           updateTrucker.mutate({
                             id: selected.id,
-                            [key]: !(selected as any)[key],
+                            [key]: newVal,
                           } as any);
                         }}
                         className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
