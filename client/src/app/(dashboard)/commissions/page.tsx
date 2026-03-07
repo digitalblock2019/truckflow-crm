@@ -65,13 +65,15 @@ export default function CommissionsPage() {
     <>
       <Topbar title="Commissions" subtitle="Commission management dashboard" />
       <div className="flex-1 overflow-y-auto p-6 bg-surface">
-        <CommissionFormula
-          grossLoad="$12,500"
-          carrierPay="$10,000"
-          netRevenue="$2,500"
-          rate="15%"
-          commission="$375"
-        />
+        {(data?.total ?? 0) > 0 && (
+          <CommissionFormula
+            grossLoad={fmt(summaryData?.total_gross_cents ?? 0)}
+            carrierPay={fmt(summaryData?.total_carrier_cents ?? 0)}
+            netRevenue={fmt(summaryData?.total_net_cents ?? 0)}
+            rate={summaryData?.avg_rate ? `${summaryData.avg_rate}%` : "—"}
+            commission={fmt(summaryData?.total_commission_cents ?? 0)}
+          />
+        )}
 
         <div className="grid grid-cols-4 gap-3 mb-5">
           <StatCard label="Pending" value={fmt(summaryData?.total_pending_cents ?? 0)} />
