@@ -167,8 +167,9 @@ export function useMarkFullyOnboarded() {
   return useMutation({
     mutationFn: (id: string) =>
       apiFetch(`/api/truckers/${id}/fully-onboarded`, { method: "POST" }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["truckers"] });
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["truckers"] });
+      qc.invalidateQueries({ queryKey: ["trucker-documents"] });
     },
   });
 }

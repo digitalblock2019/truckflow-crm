@@ -158,7 +158,7 @@ export default function OnboardingPage() {
                   <Button
                     onClick={() => {
                       markOnboarded.mutate(selected.id, {
-                        onSuccess: () => setSelectedId(""),
+                        onSettled: () => setSelectedId(""),
                       });
                     }}
                     disabled={markOnboarded.isPending || !allRequiredUploaded}
