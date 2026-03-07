@@ -85,4 +85,44 @@ export class EmailService {
     `;
     await this.sendEmail(email, 'Welcome to TruckFlow CRM — Your Account Details', html);
   }
+
+  async sendPasswordResetByAdmin(email: string, fullName: string, newPassword: string, loginUrl: string) {
+    const html = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px;">
+        <div style="text-align: center; margin-bottom: 32px;">
+          <h1 style="font-family: monospace; font-size: 24px; color: #0f172a; letter-spacing: 2px;">TRUCKFLOW</h1>
+        </div>
+        <h2 style="color: #0f172a; font-size: 18px;">Your Password Has Been Reset</h2>
+        <p style="color: #475569; font-size: 14px; line-height: 1.6;">
+          Hi ${fullName},
+        </p>
+        <p style="color: #475569; font-size: 14px; line-height: 1.6;">
+          An administrator has reset your password. Here are your new login credentials:
+        </p>
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 24px 0;">
+          <div style="margin-bottom: 12px;">
+            <div style="color: #94a3b8; font-size: 11px; text-transform: uppercase; font-family: monospace;">Email</div>
+            <div style="color: #0f172a; font-size: 14px; font-weight: 600; margin-top: 4px;">${email}</div>
+          </div>
+          <div>
+            <div style="color: #94a3b8; font-size: 11px; text-transform: uppercase; font-family: monospace;">New Password</div>
+            <div style="color: #0f172a; font-size: 14px; font-weight: 600; margin-top: 4px; font-family: monospace;">${newPassword}</div>
+          </div>
+        </div>
+        <div style="text-align: center; margin: 32px 0;">
+          <a href="${loginUrl}" style="background: #2563eb; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px;">
+            Sign In to TruckFlow
+          </a>
+        </div>
+        <p style="color: #ef4444; font-size: 13px; font-weight: 600;">
+          Please change your password after logging in.
+        </p>
+        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+        <p style="color: #94a3b8; font-size: 11px; text-align: center;">
+          TruckFlow CRM &mdash; Operations Management Platform
+        </p>
+      </div>
+    `;
+    await this.sendEmail(email, 'TruckFlow CRM — Your Password Has Been Reset', html);
+  }
 }

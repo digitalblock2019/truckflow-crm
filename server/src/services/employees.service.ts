@@ -259,6 +259,79 @@ export class EmployeesService {
     return { message: 'Employee reinstated successfully' };
   }
 
+  async updateCrmAccount(employeeId: string, data: { crm_email?: string; crm_role?: string }, adminUserId: string) {
+    const emp = await query('SELECT * FROM employees WHERE id = $1', [employeeId]);
+    if (!emp.rows.length) throw new AppError('Employee not found', 404, 'NOT_FOUND');
+
+    if (emp.rows[0].crm_user_id) {
+      // Update existing CRM user
+      const updates: string[] = [];
+      const params: any[] = [];
+      let idx = 1;
+      if (data.crm_email) { updates.push(`email = $${idx++}`); params.push(data.crm_email); }
+      if (data.crm_role) { updates.push(`role = $${idx++}`); params.push(data.crm_role); }
+      if (updates.length) {
+        updates.push('updated_at = NOW()');
+        params.push(emp.rows[0].crm_user_id);
+        await query(`UPDATE users SET ${updates.join(', ')} WHERE id = $${idx}`, params);
+      }
+    } else if (data.crm_email && data.crm_role) {
+      // Create new CRM user for this employee
+      const password = crypto.randomBytes(8).toString('base64url').slice(0, 12);
+      const passwordHash = await bcrypt.hash(password, 12);
+      const userResult = await query(
+        'INSERT INTO users (email, full_name, role, employee_id, password_hash) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+        [data.crm_email, emp.rows[0].full_name, data.crm_role, employeeId, passwordHash]
+      );
+      await query('UPDATE employees SET crm_user_id = $1 WHERE id = $2', [userResult.rows[0].id, employeeId]);
+
+      // Send welcome email
+      try {
+        const emailService = new EmailService();
+        const loginUrl = `${process.env.APP_URL || 'http://localhost:3001'}/login`;
+        await emailService.sendWelcomeEmail(data.crm_email, emp.rows[0].full_name, password, loginUrl);
+      } catch (err) {
+        console.error('[EmployeesService] Failed to send welcome email:', err);
+      }
+    }
+
+    return this.getById(employeeId, adminUserId, 'admin');
+  }
+
+  async adminResetPassword(employeeId: string, adminUserId: string) {
+    const emp = await query('SELECT crm_user_id, full_name FROM employees WHERE id = $1', [employeeId]);
+    if (!emp.rows.length) throw new AppError('Employee not found', 404, 'NOT_FOUND');
+    if (!emp.rows[0].crm_user_id) throw new AppError('Employee has no CRM account', 400, 'NO_CRM_ACCOUNT');
+
+    const user = await query('SELECT email FROM users WHERE id = $1', [emp.rows[0].crm_user_id]);
+    if (!user.rows.length) throw new AppError('CRM user not found', 404, 'NOT_FOUND');
+
+    const newPassword = crypto.randomBytes(8).toString('base64url').slice(0, 12);
+    const hash = await bcrypt.hash(newPassword, 12);
+    await query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [hash, emp.rows[0].crm_user_id]);
+
+    // Revoke all refresh tokens
+    await query('DELETE FROM refresh_tokens WHERE user_id = $1', [emp.rows[0].crm_user_id]);
+
+    // Send password reset email
+    try {
+      const emailService = new EmailService();
+      const loginUrl = `${process.env.APP_URL || 'http://localhost:3001'}/login`;
+      await emailService.sendPasswordResetByAdmin(user.rows[0].email, emp.rows[0].full_name, newPassword, loginUrl);
+    } catch (err) {
+      console.error('[EmployeesService] Failed to send reset email:', err);
+    }
+
+    // Audit
+    await query(
+      `INSERT INTO audit_log (user_id, user_role, action, entity_type, entity_id, description)
+       VALUES ($1, (SELECT role FROM users WHERE id=$1), 'password_reset', 'employee', $2, $3)`,
+      [adminUserId, employeeId, `Admin reset password for ${emp.rows[0].full_name}`]
+    );
+
+    return { message: 'Password reset successfully. New credentials emailed to user.' };
+  }
+
   async getSalarySlips(employeeId: string, year?: number) {
     const targetYear = year || new Date().getFullYear();
 

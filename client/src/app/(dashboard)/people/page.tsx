@@ -10,7 +10,7 @@ import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
-import { useEmployees, useCreateEmployee, useUpdateEmployee, useTerminateEmployee, useReinstateEmployee } from "@/lib/hooks";
+import { useEmployees, useCreateEmployee, useUpdateEmployee, useUpdateCrmAccount, useAdminResetPassword, useTerminateEmployee, useReinstateEmployee } from "@/lib/hooks";
 import { useAuthStore } from "@/lib/auth";
 import { totalPages, initials, employeeTypeLabel } from "@/lib/utils";
 import type { Employee } from "@/types";
@@ -89,6 +89,9 @@ export default function PeoplePage() {
   const { data, isLoading } = useEmployees({ status: tab, search, page, limit: 20 });
   const createEmp = useCreateEmployee();
   const updateEmp = useUpdateEmployee();
+  const updateCrm = useUpdateCrmAccount();
+  const resetPw = useAdminResetPassword();
+  const [resetMsg, setResetMsg] = useState<string | null>(null);
   const terminateEmp = useTerminateEmployee();
   const reinstateEmp = useReinstateEmployee();
 
@@ -105,7 +108,7 @@ export default function PeoplePage() {
         </div>
       ),
     },
-    { key: "crm_email", header: "Email" },
+    { key: "crm_email", header: "Email", render: (r) => <span>{r.crm_email ?? (r as any).personal_email ?? "—"}</span> },
     { key: "employee_type", header: "Type", render: (r) => <Badge color="blue">{employeeTypeLabel(r.employee_type)}</Badge> },
     { key: "employment_status", header: "Status", render: (r) => <Badge color={statusColors[r.employment_status ?? ""] ?? "gray"}>{r.employment_status ?? "—"}</Badge> },
     { key: "start_date", header: "Start Date", render: (r) => r.start_date ? new Date(r.start_date).toLocaleDateString() : "—" },
@@ -163,8 +166,8 @@ export default function PeoplePage() {
       base_salary_pkr_paisa: (selectedEmployee as any).base_salary_pkr_paisa ? ((selectedEmployee as any).base_salary_pkr_paisa / 100).toString() : "",
       commission_type: selectedEmployee.commission_type || "",
       commission_value: selectedEmployee.commission_value?.toString() || "",
-      crm_email: "",
-      crm_role: "",
+      crm_email: selectedEmployee.crm_email ?? "",
+      crm_role: (selectedEmployee as any).crm_role ?? "",
       crm_password: "",
     });
     setEditing(true);
@@ -188,17 +191,37 @@ export default function PeoplePage() {
     const newCommVal = form.commission_value ? parseFloat(form.commission_value) : null;
     if (newCommVal !== (selectedEmployee.commission_value || null)) updates.commission_value = newCommVal;
 
-    if (Object.keys(updates).length === 0) { setEditing(false); return; }
+    // CRM account changes (handled separately)
+    const crmUpdates: Record<string, string> = {};
+    if (form.crm_email !== (selectedEmployee.crm_email ?? "")) crmUpdates.crm_email = form.crm_email;
+    if (form.crm_role !== ((selectedEmployee as any).crm_role ?? "")) crmUpdates.crm_role = form.crm_role;
 
-    updateEmp.mutate(
-      { id: selectedEmployee.id, ...updates } as Partial<Employee> & { id: string },
-      {
-        onSuccess: (updatedEmp) => {
-          setEditing(false);
-          setSelectedEmployee(updatedEmp);
-        },
-      }
-    );
+    const hasCrmChanges = Object.keys(crmUpdates).length > 0;
+    const hasEmpChanges = Object.keys(updates).length > 0;
+
+    if (!hasEmpChanges && !hasCrmChanges) { setEditing(false); return; }
+
+    const onDone = (updatedEmp?: any) => {
+      setEditing(false);
+      if (updatedEmp) setSelectedEmployee(updatedEmp);
+    };
+
+    if (hasEmpChanges) {
+      updateEmp.mutate(
+        { id: selectedEmployee.id, ...updates } as Partial<Employee> & { id: string },
+        {
+          onSuccess: (updatedEmp) => {
+            if (hasCrmChanges) {
+              updateCrm.mutate({ id: selectedEmployee.id, ...crmUpdates }, { onSuccess: onDone });
+            } else {
+              onDone(updatedEmp);
+            }
+          },
+        }
+      );
+    } else if (hasCrmChanges) {
+      updateCrm.mutate({ id: selectedEmployee.id, ...crmUpdates }, { onSuccess: onDone });
+    }
   };
 
   const closeDetail = () => {
@@ -224,7 +247,7 @@ export default function PeoplePage() {
           page={page}
           totalPages={totalPages(data)}
           onPageChange={setPage}
-          onRowClick={(row) => { setSelectedEmployee(row as unknown as Employee); setEditing(false); }}
+          onRowClick={(row) => { setSelectedEmployee(row as unknown as Employee); setEditing(false); setResetMsg(null); }}
           toolbar={
             <SearchBox value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search employees..." />
           }
@@ -291,9 +314,42 @@ export default function PeoplePage() {
               </div>
             </div>
 
+            {/* CRM Account Info */}
+            {selectedEmployee.crm_email && (
+              <div className="mt-4 pt-4 border-t border-border">
+                <div className="text-[10px] font-mono text-txt-light uppercase mb-2">CRM Account</div>
+                <div className="grid grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <div className="text-[10px] font-mono text-txt-light uppercase">CRM Email</div>
+                    <div className="mt-0.5 text-txt">{selectedEmployee.crm_email}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-mono text-txt-light uppercase">CRM Role</div>
+                    <div className="mt-0.5 text-txt capitalize">{((selectedEmployee as any).crm_role ?? "—").replace(/_/g, " ")}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {isSup && (
-              <div className="mt-5 pt-4 border-t border-border flex gap-2">
+              <div className="mt-5 pt-4 border-t border-border flex gap-2 flex-wrap">
                 <Button onClick={startEdit}>Edit Employee</Button>
+                {isAdmin && (selectedEmployee as any).crm_user_id && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      if (!confirm(`Reset password for ${selectedEmployee.full_name}? A new password will be emailed to them.`)) return;
+                      setResetMsg(null);
+                      resetPw.mutate(selectedEmployee.id, {
+                        onSuccess: (data) => setResetMsg(data.message),
+                        onError: (err: any) => setResetMsg(`Error: ${err.message}`),
+                      });
+                    }}
+                    disabled={resetPw.isPending}
+                  >
+                    {resetPw.isPending ? "Resetting..." : "Reset Password"}
+                  </Button>
+                )}
                 {isAdmin && selectedEmployee.employment_status === "active" && (
                   <Button
                     variant="danger"
@@ -323,6 +379,11 @@ export default function PeoplePage() {
                 )}
               </div>
             )}
+            {resetMsg && (
+              <div className={`mt-3 rounded-md px-3 py-2 text-xs ${resetMsg.startsWith("Error") ? "bg-red-50 text-red-700 border border-red-200" : "bg-green-50 text-green-700 border border-green-200"}`}>
+                {resetMsg}
+              </div>
+            )}
           </div>
         )}
 
@@ -343,10 +404,24 @@ export default function PeoplePage() {
                 <Input label={form.commission_type === "percentage" ? "Commission %" : "Commission Amount"} type="number" step="0.01" value={form.commission_value} onChange={(e) => setForm({ ...form, commission_value: e.target.value })} />
               )}
             </div>
+
+            {/* CRM Account Section in Edit */}
+            {isAdmin && (
+              <div className="mt-5 pt-4 border-t border-border">
+                <div className="text-xs font-semibold text-navy mb-3">
+                  CRM Account {selectedEmployee.crm_email ? "" : "(Not set up)"}
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <Input label="CRM Email" type="email" value={form.crm_email} onChange={(e) => setForm({ ...form, crm_email: e.target.value })} placeholder="user@company.com" />
+                  <Select label="CRM Role" value={form.crm_role} onChange={(e) => setForm({ ...form, crm_role: e.target.value })} options={crmRoles} />
+                </div>
+              </div>
+            )}
+
             <div className="flex justify-end gap-2 mt-5">
               <Button variant="secondary" onClick={() => setEditing(false)}>Cancel</Button>
-              <Button onClick={handleUpdate} disabled={updateEmp.isPending}>
-                {updateEmp.isPending ? "Saving..." : "Save Changes"}
+              <Button onClick={handleUpdate} disabled={updateEmp.isPending || updateCrm.isPending}>
+                {updateEmp.isPending || updateCrm.isPending ? "Saving..." : "Save Changes"}
               </Button>
             </div>
           </div>

@@ -77,6 +77,16 @@ export class EmployeesController {
     res.json(result);
   }
 
+  async updateCrmAccount(req: Request, res: Response) {
+    const result = await svc.updateCrmAccount(req.params.id as string, req.body, req.user!.id);
+    res.json(result);
+  }
+
+  async adminResetPassword(req: Request, res: Response) {
+    const result = await svc.adminResetPassword(req.params.id as string, req.user!.id);
+    res.json(result);
+  }
+
   async getSalarySlips(req: Request, res: Response) {
     // Resolve "me" to actual employee ID
     const db = await import('../config/database');

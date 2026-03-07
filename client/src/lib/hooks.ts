@@ -269,6 +269,22 @@ export function useUpdateEmployee() {
   });
 }
 
+export function useUpdateCrmAccount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string; crm_email?: string; crm_role?: string }) =>
+      apiFetch<Employee>(`/api/employees/${id}/crm`, { method: "PATCH", body: JSON.stringify(data) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["employees"] }),
+  });
+}
+
+export function useAdminResetPassword() {
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<{ message: string }>(`/api/employees/${id}/reset-password`, { method: "POST" }),
+  });
+}
+
 export function useTerminateEmployee() {
   const qc = useQueryClient();
   return useMutation({
