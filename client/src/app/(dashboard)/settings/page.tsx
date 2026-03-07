@@ -26,9 +26,11 @@ function InvoiceBrandingCard() {
   });
   const [dirty, setDirty] = useState(false);
   const [saved, setSaved] = useState(false);
+  const initialized = useRef(false);
 
   useEffect(() => {
-    if (branding) {
+    if (branding && !initialized.current) {
+      initialized.current = true;
       const b = branding as Record<string, string>;
       setForm({
         company_name: b.company_name || "",
