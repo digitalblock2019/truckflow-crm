@@ -101,6 +101,7 @@ export default function TruckersPage() {
   const modalDocsProgress = modalDocsArr.length > 0 ? Math.round((modalDocsUploaded / modalDocsArr.length) * 100) : 0;
 
   const [form, setForm] = useState({ mc_number: "", legal_name: "", phone: "", email: "", state: "" });
+  const [editForm, setEditForm] = useState({ phone: "", email: "", dba_name: "", physical_address: "", dot_number: "" });
 
   const rows = data?.data ?? [];
 
@@ -146,6 +147,7 @@ export default function TruckersPage() {
     { key: "dba_name", header: "DBA" },
     { key: "state", header: "State" },
     { key: "status_system", header: "Status", render: (r) => <Badge color={statusColors[r.status_system ?? ""] ?? "gray"}>{(r.status_system ?? "—").replace(/_/g, " ")}</Badge> },
+    { key: "email", header: "Email" },
     { key: "phone", header: "Phone" },
     { key: "agent_name", header: "Agent" },
   ];
@@ -188,7 +190,22 @@ export default function TruckersPage() {
     setSelectedTrucker(trucker);
     setNewStatus(trucker.status_system || "");
     setNewAgentId((trucker as any).assigned_agent_id || "");
+    setEditForm({
+      phone: trucker.phone || "",
+      email: trucker.email || "",
+      dba_name: trucker.dba_name || "",
+      physical_address: trucker.physical_address || "",
+      dot_number: trucker.dot_number || "",
+    });
     setModalTab("details");
+  };
+
+  const handleSaveDetails = () => {
+    if (!selectedTrucker) return;
+    updateTrucker.mutate(
+      { id: selectedTrucker.id, ...editForm } as Partial<Trucker> & { id: string },
+      { onSuccess: () => setSelectedTrucker(null) }
+    );
   };
 
   return (
@@ -333,29 +350,37 @@ export default function TruckersPage() {
                 <div className="text-[10px] font-mono text-txt-light uppercase">MC Number</div>
                 <div className="mt-0.5 text-txt font-mono font-semibold">{selectedTrucker.mc_number || "—"}</div>
               </div>
-              <div>
-                <div className="text-[10px] font-mono text-txt-light uppercase">DOT Number</div>
-                <div className="mt-0.5 text-txt font-mono">{selectedTrucker.dot_number || "—"}</div>
-              </div>
-              <div>
-                <div className="text-[10px] font-mono text-txt-light uppercase">DBA Name</div>
-                <div className="mt-0.5 text-txt">{selectedTrucker.dba_name || "—"}</div>
-              </div>
+              <Input
+                label="DOT Number"
+                value={editForm.dot_number}
+                onChange={(e) => setEditForm({ ...editForm, dot_number: e.target.value })}
+              />
+              <Input
+                label="DBA Name"
+                value={editForm.dba_name}
+                onChange={(e) => setEditForm({ ...editForm, dba_name: e.target.value })}
+              />
               <div>
                 <div className="text-[10px] font-mono text-txt-light uppercase">State</div>
                 <div className="mt-0.5 text-txt">{selectedTrucker.state || "—"}</div>
               </div>
-              <div>
-                <div className="text-[10px] font-mono text-txt-light uppercase">Phone</div>
-                <div className="mt-0.5 text-txt">{selectedTrucker.phone || "—"}</div>
-              </div>
-              <div>
-                <div className="text-[10px] font-mono text-txt-light uppercase">Email</div>
-                <div className="mt-0.5 text-txt">{selectedTrucker.email || "—"}</div>
-              </div>
+              <Input
+                label="Phone"
+                value={editForm.phone}
+                onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+              />
+              <Input
+                label="Email"
+                type="email"
+                value={editForm.email}
+                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+              />
               <div className="col-span-2">
-                <div className="text-[10px] font-mono text-txt-light uppercase">Physical Address</div>
-                <div className="mt-0.5 text-txt">{selectedTrucker.physical_address || "—"}</div>
+                <Input
+                  label="Physical Address"
+                  value={editForm.physical_address}
+                  onChange={(e) => setEditForm({ ...editForm, physical_address: e.target.value })}
+                />
               </div>
               <div>
                 <div className="text-[10px] font-mono text-txt-light uppercase">Power Units</div>
@@ -366,6 +391,23 @@ export default function TruckersPage() {
                 <div className="mt-0.5 text-txt">{selectedTrucker.agent_name || "—"}</div>
               </div>
             </div>
+
+            {/* Save edits button */}
+            {(editForm.phone !== (selectedTrucker.phone || "") ||
+              editForm.email !== (selectedTrucker.email || "") ||
+              editForm.dba_name !== (selectedTrucker.dba_name || "") ||
+              editForm.physical_address !== (selectedTrucker.physical_address || "") ||
+              editForm.dot_number !== (selectedTrucker.dot_number || "")) && (
+              <div className="mb-4">
+                <Button
+                  onClick={handleSaveDetails}
+                  disabled={updateTrucker.isPending}
+                  className="w-full"
+                >
+                  {updateTrucker.isPending ? "Saving..." : "Save Changes"}
+                </Button>
+              </div>
+            )}
 
             {isSup && (
               <div className="border-t border-border pt-4 mb-4">
