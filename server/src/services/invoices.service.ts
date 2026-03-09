@@ -266,7 +266,7 @@ export class InvoicesService {
     );
     await query(`INSERT INTO invoice_activity (invoice_id, event_type, description, actor_id) VALUES ($1, 'marked_paid', 'Marked as paid', $2)`, [id, userId]);
 
-    // Send paid confirmation emails
+    // Generate PDF and send paid confirmation emails
     try {
       const appUrl = process.env.APP_URL || 'https://www.truckflowcrm.com';
       const viewLink = `${appUrl}/invoice-view/${invoice.view_token}`;
@@ -279,6 +279,16 @@ export class InvoicesService {
         style: 'currency', currency: invoice.currency || 'USD',
       }).format(invoice.total_amount / 100);
 
+      // Generate invoice PDF
+      let pdfBuffer: Buffer | undefined;
+      try {
+        const { InvoicePdfService } = await import('./invoice-pdf.service');
+        const pdfService = new InvoicePdfService();
+        pdfBuffer = await pdfService.generatePdf(invoice.id);
+      } catch (pdfErr) {
+        console.error('[MarkPaid] PDF generation failed, sending without attachment:', pdfErr);
+      }
+
       // 1. Email to recipient (trucker/client)
       if (invoice.recipient_email) {
         await emailService.sendInvoicePaidEmail(
@@ -289,7 +299,8 @@ export class InvoicesService {
           viewLink,
           logoUrl,
           companyName,
-          'recipient'
+          'recipient',
+          pdfBuffer
         );
       }
 
@@ -308,7 +319,8 @@ export class InvoicesService {
           viewLink,
           logoUrl,
           companyName,
-          'team'
+          'team',
+          pdfBuffer
         );
       }
     } catch (err) {

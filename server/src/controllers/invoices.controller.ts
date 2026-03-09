@@ -39,7 +39,18 @@ export class InvoicesController {
     res.json(await svc.cancelInvoice(req.params.id as string, req.body.reason || '', req.user!.id));
   }
   async suppressReminders(req: Request, res: Response) { res.json(await svc.suppressReminders(req.params.id as string, req.user!.id)); }
-  async getPdf(req: Request, res: Response) { res.json(await svc.getInvoicePdf(req.params.id as string)); }
+  async getPdf(req: Request, res: Response) {
+    try {
+      const { InvoicePdfService } = await import('../services/invoice-pdf.service');
+      const pdfService = new InvoicePdfService();
+      const pdfBuffer = await pdfService.generatePdf(req.params.id as string);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="invoice.pdf"`);
+      res.send(pdfBuffer);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || 'PDF generation failed' });
+    }
+  }
   async viewByToken(req: Request, res: Response) { res.json(await svc.viewByToken(req.params.view_token as string)); }
 
   // Reminder Rules

@@ -109,7 +109,8 @@ export default function PeoplePage() {
         </div>
       ),
     },
-    { key: "crm_email", header: "Email", render: (r) => <span>{r.crm_email ?? (r as any).personal_email ?? "—"}</span> },
+    { key: "personal_email", header: "Email", render: (r) => <span>{(r as any).personal_email ?? "—"}</span> },
+    { key: "crm_email", header: "CRM Email", render: (r) => <span>{r.crm_email ?? "—"}</span> },
     { key: "employee_type", header: "Type", render: (r) => <Badge color="blue">{employeeTypeLabel(r.employee_type)}</Badge> },
     { key: "employment_status", header: "Status", render: (r) => <Badge color={statusColors[r.employment_status ?? ""] ?? "gray"}>{r.employment_status ?? "—"}</Badge> },
     { key: "start_date", header: "Start Date", render: (r) => r.start_date ? new Date(r.start_date).toLocaleDateString() : "—" },

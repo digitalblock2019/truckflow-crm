@@ -4,12 +4,19 @@ const resend = new Resend(process.env.RESEND_API_KEY || '');
 const FROM_EMAIL = 'TruckFlow CRM <noreply@truckflowcrm.com>';
 
 export class EmailService {
-  async sendEmail(to: string, subject: string, html: string) {
+  async sendEmail(to: string, subject: string, html: string, attachments?: { filename: string; content: Buffer }[]) {
     if (!process.env.RESEND_API_KEY) {
       console.warn('[EmailService] RESEND_API_KEY not set — skipping email to', to);
       return;
     }
-    const { error } = await resend.emails.send({ from: FROM_EMAIL, to, subject, html });
+    const payload: any = { from: FROM_EMAIL, to, subject, html };
+    if (attachments?.length) {
+      payload.attachments = attachments.map((a) => ({
+        filename: a.filename,
+        content: a.content,
+      }));
+    }
+    const { error } = await resend.emails.send(payload);
     if (error) {
       console.error('[EmailService] Failed to send email:', error);
       throw new Error(`Email send failed: ${error.message}`);
@@ -168,7 +175,8 @@ export class EmailService {
     viewLink: string,
     logoUrl?: string,
     companyName?: string,
-    audience: 'recipient' | 'team' = 'recipient'
+    audience: 'recipient' | 'team' = 'recipient',
+    pdfBuffer?: Buffer
   ) {
     const greeting = recipientName ? `Hi ${recipientName},` : 'Hi,';
 
@@ -218,7 +226,11 @@ export class EmailService {
       ? `Payment Confirmed — Invoice ${invoiceNumber}`
       : `Invoice ${invoiceNumber} Paid — ${formattedTotal}`;
 
-    await this.sendEmail(email, subject, html);
+    const attachments = pdfBuffer
+      ? [{ filename: `${invoiceNumber}.pdf`, content: pdfBuffer }]
+      : undefined;
+
+    await this.sendEmail(email, subject, html, attachments);
   }
 
   async sendPasswordResetByAdmin(email: string, fullName: string, newPassword: string, loginUrl: string) {
