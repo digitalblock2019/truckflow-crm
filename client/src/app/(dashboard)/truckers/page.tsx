@@ -293,10 +293,10 @@ export default function TruckersPage() {
                 <div className="flex flex-wrap gap-4 mb-4 p-3 bg-surface-mid rounded-lg">
                   {([
                     { key: "uses_factoring", label: "Uses Factoring" },
-                    { key: "is_new_authority", label: "New Authority" },
+                    { key: "is_new_authority", label: "New Authority", tooltip: "Required for New Authority / Less than 90 days" },
                     { key: "uses_quick_pay", label: "Uses Quick Pay" },
-                  ] as const).map(({ key, label }) => (
-                    <label key={key} className="flex items-center gap-2 text-xs cursor-pointer">
+                  ] as { key: string; label: string; tooltip?: string }[]).map(({ key, label, tooltip }) => (
+                    <label key={key} className="flex items-center gap-2 text-xs cursor-pointer" title={tooltip}>
                       <button
                         type="button"
                         role="switch"
