@@ -11,7 +11,6 @@ import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import LoadPipeline from "@/components/features/LoadPipeline";
 import { useLoads, useCreateLoad, useUpdateLoadStatus, useLoadDocuments, useUploadLoadDocument, useTruckers, useEmployees } from "@/lib/hooks";
-import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth";
 import { totalPages, fmt } from "@/lib/utils";
 import type { Load, LoadDocument } from "@/types";
@@ -139,26 +138,22 @@ export default function LoadsPage() {
       >
         {selectedLoad && (
           <div>
-            <LoadPipeline status={selectedLoad.load_status} />
-            <div className="grid grid-cols-2 gap-4 text-xs mb-4">
+            {/* Compact order details */}
+            <div className="grid grid-cols-3 gap-3 text-xs mb-4 pb-4 border-b border-border">
               <div>
                 <div className="text-[10px] font-mono text-txt-light uppercase">Trucker</div>
-                <div className="mt-0.5 text-txt">{selectedLoad.trucker_name ?? "—"}</div>
+                <div className="mt-0.5 text-txt font-medium">{selectedLoad.trucker_name ?? "—"}</div>
               </div>
               <div>
                 <div className="text-[10px] font-mono text-txt-light uppercase">Dispatcher</div>
-                <div className="mt-0.5 text-txt">{selectedLoad.dispatcher_name ?? "—"}</div>
+                <div className="mt-0.5 text-txt font-medium">{selectedLoad.dispatcher_name ?? "—"}</div>
               </div>
               <div>
-                <div className="text-[10px] font-mono text-txt-light uppercase">Origin</div>
-                <div className="mt-0.5 text-txt">{selectedLoad.load_origin ?? "—"}</div>
+                <div className="text-[10px] font-mono text-txt-light uppercase">Route</div>
+                <div className="mt-0.5 text-txt font-medium">{selectedLoad.load_origin ?? "—"} → {selectedLoad.load_destination ?? "—"}</div>
               </div>
               <div>
-                <div className="text-[10px] font-mono text-txt-light uppercase">Destination</div>
-                <div className="mt-0.5 text-txt">{selectedLoad.load_destination ?? "—"}</div>
-              </div>
-              <div>
-                <div className="text-[10px] font-mono text-txt-light uppercase">Gross Amount</div>
+                <div className="text-[10px] font-mono text-txt-light uppercase">Gross</div>
                 <div className="mt-0.5 text-txt font-mono font-semibold">{fmt(selectedLoad.gross_load_amount_cents)}</div>
               </div>
               <div>
@@ -166,58 +161,19 @@ export default function LoadsPage() {
                 <div className="mt-0.5 text-txt font-mono">{fmt(selectedLoad.company_net_cents)}</div>
               </div>
             </div>
-            {/* Load Documents */}
-            <div className="pt-3 border-t border-border mb-4">
-              <h4 className="text-[11px] font-semibold text-txt-mid font-mono uppercase tracking-wide mb-3">Documents</h4>
-              <div className="grid grid-cols-3 gap-3">
-                {(loadDocs ?? []).map((doc: LoadDocument) => {
-                  const fileInputId = `load-doc-${doc.doc_type}`;
-                  return (
-                    <div key={doc.doc_type} className={`border rounded-lg p-3 text-center ${doc.uploaded ? "border-green/40 bg-green/5" : "border-border"}`}>
-                      <div className="text-[10px] font-semibold text-txt-mid uppercase mb-2">{doc.label}</div>
-                      {doc.uploaded ? (
-                        <div>
-                          <div className="text-[10px] text-txt-light truncate mb-1" title={doc.file_name ?? ""}>{doc.file_name}</div>
-                          <div className="text-[9px] text-txt-light mb-2">{doc.uploaded_at ? new Date(doc.uploaded_at).toLocaleDateString() : ""}</div>
-                          <div className="flex gap-1 justify-center">
-                            <button
-                              onClick={async () => {
-                                try {
-                                  const { url } = await apiFetch<{ url: string }>(`/api/loads/${selectedLoad.id}/documents/${doc.doc_type}/url`);
-                                  window.open(url, "_blank");
-                                } catch {}
-                              }}
-                              className="text-[10px] text-blue hover:underline cursor-pointer"
-                            >
-                              Download
-                            </button>
-                            <span className="text-txt-light">|</span>
-                            <label htmlFor={fileInputId} className="text-[10px] text-blue hover:underline cursor-pointer">Replace</label>
-                          </div>
-                          <input id={fileInputId} type="file" className="hidden" onChange={(e) => {
-                            const f = e.target.files?.[0];
-                            if (f) uploadLoadDoc.mutate({ loadId: selectedLoad.id, docType: doc.doc_type, file: f });
-                            e.target.value = "";
-                          }} />
-                        </div>
-                      ) : (
-                        <div>
-                          <label htmlFor={fileInputId} className="inline-block px-3 py-1.5 text-[10px] font-semibold text-blue border border-blue/30 rounded-md hover:bg-blue/5 cursor-pointer transition-colors">
-                            Upload
-                          </label>
-                          <input id={fileInputId} type="file" className="hidden" onChange={(e) => {
-                            const f = e.target.files?.[0];
-                            if (f) uploadLoadDoc.mutate({ loadId: selectedLoad.id, docType: doc.doc_type, file: f });
-                            e.target.value = "";
-                          }} />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
 
+            {/* Vertical timeline with inline documents */}
+            <h4 className="text-[11px] font-semibold text-txt-mid font-mono uppercase tracking-wide mb-3">Delivery Stages</h4>
+            <LoadPipeline
+              status={selectedLoad.load_status}
+              docs={loadDocs ?? []}
+              loadId={selectedLoad.id}
+              onUpload={(docType, file) =>
+                uploadLoadDoc.mutate({ loadId: selectedLoad.id, docType, file })
+              }
+            />
+
+            {/* Action buttons */}
             {(() => {
               const requiredDocForNext: Record<string, string> = {
                 dispatched: "rate_con",

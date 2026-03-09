@@ -188,8 +188,8 @@ export class LoadsService {
       const rateSetting = await query("SELECT value FROM system_settings WHERE key = 'exchange_rate_manual_fallback'");
       const rate = parseFloat(rateSetting.rows[0]?.value || '280');
       await query(
-        `UPDATE commissions SET usd_pkr_rate_at_payment = $1,
-         amount_pkr_paisa = ROUND(amount_cents * $1 * 100), updated_at = NOW()
+        `UPDATE commissions SET usd_pkr_rate_at_payment = $1::numeric,
+         amount_pkr_paisa = ROUND(amount_cents * $1::numeric * 100), updated_at = NOW()
          WHERE load_order_id = $2`,
         [rate, id]
       );
