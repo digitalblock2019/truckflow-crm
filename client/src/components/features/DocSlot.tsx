@@ -4,6 +4,10 @@ import { useRef, useState } from "react";
 import type { TruckerDocument } from "@/types";
 import { apiFetch } from "@/lib/api";
 
+const docTooltips: Record<string, string> = {
+  void_cheque: "Required if using Quick Pay",
+};
+
 export default function DocSlot({
   doc,
   truckerId,
@@ -38,6 +42,7 @@ export default function DocSlot({
           ? "border-green/40 bg-green-bg/40"
           : "border-border bg-white"
       }`}
+      title={docTooltips[doc.type_slug]}
     >
       <div className="flex items-center justify-between mb-1">
         <span className="text-xs font-semibold text-txt truncate">{doc.type_label}</span>
