@@ -160,6 +160,67 @@ export class EmailService {
     await this.sendEmail(email, `Invoice ${invoiceNumber} — ${formattedTotal} due ${formattedDue}`, html);
   }
 
+  async sendInvoicePaidEmail(
+    email: string,
+    recipientName: string,
+    invoiceNumber: string,
+    formattedTotal: string,
+    viewLink: string,
+    logoUrl?: string,
+    companyName?: string,
+    audience: 'recipient' | 'team' = 'recipient'
+  ) {
+    const greeting = recipientName ? `Hi ${recipientName},` : 'Hi,';
+
+    const headerHtml = logoUrl
+      ? `<div style="text-align: center; margin-bottom: 32px;">
+           <img src="${logoUrl}" alt="${companyName || 'Logo'}" style="max-height: 60px; max-width: 200px; object-fit: contain;" />
+         </div>`
+      : `<div style="text-align: center; margin-bottom: 32px;">
+           <h1 style="font-family: monospace; font-size: 24px; color: #0f172a; letter-spacing: 2px;">${companyName || 'TRUCKFLOW'}</h1>
+         </div>`;
+
+    const message = audience === 'recipient'
+      ? `Your payment for invoice <strong>${invoiceNumber}</strong> of <strong>${formattedTotal}</strong> has been received. Thank you!`
+      : `Invoice <strong>${invoiceNumber}</strong> for <strong>${formattedTotal}</strong> has been marked as paid.`;
+
+    const html = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px;">
+        ${headerHtml}
+        <div style="text-align: center; margin-bottom: 24px;">
+          <div style="display: inline-block; background: #dcfce7; border-radius: 50%; width: 56px; height: 56px; line-height: 56px; font-size: 28px;">&#x2713;</div>
+        </div>
+        <h2 style="color: #0f172a; font-size: 18px; text-align: center;">Payment Received</h2>
+        <p style="color: #475569; font-size: 14px; line-height: 1.6;">
+          ${greeting}
+        </p>
+        <p style="color: #475569; font-size: 14px; line-height: 1.6;">
+          ${message}
+        </p>
+        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 20px; margin: 24px 0; text-align: center;">
+          <div style="color: #15803d; font-size: 11px; text-transform: uppercase; font-family: monospace; letter-spacing: 1px;">Amount Paid</div>
+          <div style="color: #166534; font-size: 28px; font-weight: 700; margin-top: 8px;">${formattedTotal}</div>
+          <div style="color: #16a34a; font-size: 12px; margin-top: 4px;">Invoice ${invoiceNumber}</div>
+        </div>
+        <div style="text-align: center; margin: 32px 0;">
+          <a href="${viewLink}" style="background: #2563eb; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px;">
+            View Invoice
+          </a>
+        </div>
+        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+        <p style="color: #94a3b8; font-size: 11px; text-align: center;">
+          TruckFlow CRM &mdash; Operations Management Platform
+        </p>
+      </div>
+    `;
+
+    const subject = audience === 'recipient'
+      ? `Payment Confirmed — Invoice ${invoiceNumber}`
+      : `Invoice ${invoiceNumber} Paid — ${formattedTotal}`;
+
+    await this.sendEmail(email, subject, html);
+  }
+
   async sendPasswordResetByAdmin(email: string, fullName: string, newPassword: string, loginUrl: string) {
     const html = `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px;">

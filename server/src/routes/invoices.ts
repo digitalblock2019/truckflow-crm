@@ -41,18 +41,54 @@ router.post('/webhook/stripe', express.raw({ type: 'application/json' }), async 
       const session = event.data.object as any;
       const invoiceNumber = session.metadata?.invoice_number;
       if (invoiceNumber) {
-        await query(
-          `UPDATE invoices SET status='paid', paid_at=NOW(), payment_reference=$1, updated_at=NOW()
-           WHERE invoice_number=$2 AND status != 'paid'`,
-          [`stripe:${session.id}`, invoiceNumber]
-        );
-        const inv = await query('SELECT id FROM invoices WHERE invoice_number=$1', [invoiceNumber]);
-        if (inv.rows.length) {
+        const existing = await query('SELECT * FROM invoices WHERE invoice_number=$1 AND status != \'paid\'', [invoiceNumber]);
+        if (existing.rows.length) {
+          const invoice = existing.rows[0];
+          await query(
+            `UPDATE invoices SET status='paid', paid_at=NOW(), payment_reference=$1, updated_at=NOW()
+             WHERE id=$2`,
+            [`stripe:${session.id}`, invoice.id]
+          );
           await query(
             `INSERT INTO invoice_activity (invoice_id, event_type, description)
              VALUES ($1, 'paid_stripe', 'Payment received via Stripe')`,
-            [inv.rows[0].id]
+            [invoice.id]
           );
+
+          // Send paid notification emails
+          try {
+            const { InvoicesService } = await import('../services/invoices.service');
+            const { EmailService } = await import('../services/email.service');
+            const invoiceSvc = new InvoicesService();
+            const emailService = new EmailService();
+            const branding = await invoiceSvc.getBranding();
+            const appUrl = process.env.APP_URL || 'https://www.truckflowcrm.com';
+            const viewLink = `${appUrl}/invoice-view/${invoice.view_token}`;
+            const formattedTotal = new Intl.NumberFormat('en-US', {
+              style: 'currency', currency: invoice.currency || 'USD',
+            }).format(invoice.total_amount / 100);
+
+            if (invoice.recipient_email) {
+              await emailService.sendInvoicePaidEmail(
+                invoice.recipient_email, invoice.recipient_name || '',
+                invoice.invoice_number, formattedTotal, viewLink,
+                branding?.logo_url, branding?.company_name, 'recipient'
+              );
+            }
+            const team = await query(
+              `SELECT DISTINCT u.email, u.full_name FROM users u
+               WHERE u.is_active = TRUE AND (u.role IN ('admin', 'supervisor') OR u.id = $1)`,
+              [invoice.created_by]
+            );
+            for (const m of team.rows) {
+              await emailService.sendInvoicePaidEmail(
+                m.email, m.full_name, invoice.invoice_number, formattedTotal,
+                viewLink, branding?.logo_url, branding?.company_name, 'team'
+              );
+            }
+          } catch (emailErr) {
+            console.error('[Stripe Webhook] Paid notification emails failed:', emailErr);
+          }
         }
       }
     }

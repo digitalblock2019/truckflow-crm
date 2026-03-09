@@ -258,12 +258,63 @@ export class InvoicesService {
   async markPaid(id: string, data: any, userId: string) {
     const inv = await query('SELECT * FROM invoices WHERE id = $1', [id]);
     if (!inv.rows.length) throw new AppError('Invoice not found', 404, 'NOT_FOUND');
+    const invoice = inv.rows[0];
 
     await query(
       `UPDATE invoices SET status='paid', paid_at=NOW(), paid_by=$1, payment_reference=$2, updated_at=NOW() WHERE id=$3`,
       [userId, data.payment_reference, id]
     );
     await query(`INSERT INTO invoice_activity (invoice_id, event_type, description, actor_id) VALUES ($1, 'marked_paid', 'Marked as paid', $2)`, [id, userId]);
+
+    // Send paid confirmation emails
+    try {
+      const appUrl = process.env.APP_URL || 'https://www.truckflowcrm.com';
+      const viewLink = `${appUrl}/invoice-view/${invoice.view_token}`;
+      const branding = await this.getBranding();
+      const logoUrl = branding?.logo_url || undefined;
+      const companyName = branding?.company_name || undefined;
+      const emailService = new EmailService();
+
+      const formattedTotal = new Intl.NumberFormat('en-US', {
+        style: 'currency', currency: invoice.currency || 'USD',
+      }).format(invoice.total_amount / 100);
+
+      // 1. Email to recipient (trucker/client)
+      if (invoice.recipient_email) {
+        await emailService.sendInvoicePaidEmail(
+          invoice.recipient_email,
+          invoice.recipient_name || '',
+          invoice.invoice_number,
+          formattedTotal,
+          viewLink,
+          logoUrl,
+          companyName,
+          'recipient'
+        );
+      }
+
+      // 2. Email to admins, supervisors, and invoice creator
+      const teamResult = await query(
+        `SELECT DISTINCT u.email, u.full_name FROM users u
+         WHERE u.is_active = TRUE AND (u.role IN ('admin', 'supervisor') OR u.id = $1)`,
+        [invoice.created_by]
+      );
+      for (const member of teamResult.rows) {
+        await emailService.sendInvoicePaidEmail(
+          member.email,
+          member.full_name,
+          invoice.invoice_number,
+          formattedTotal,
+          viewLink,
+          logoUrl,
+          companyName,
+          'team'
+        );
+      }
+    } catch (err) {
+      console.error('[MarkPaid] Paid notification emails failed:', err);
+    }
+
     return { message: 'Invoice marked as paid' };
   }
 
