@@ -93,6 +93,16 @@ export class InvoicesService {
   async createInvoice(data: any, userId: string) {
     const viewToken = crypto.randomBytes(32).toString('hex');
 
+    // Auto-fill notes from branding default if not provided
+    if (!data.notes) {
+      try {
+        const branding = await this.getBranding();
+        if (branding?.invoice_notes_default) {
+          data.notes = branding.invoice_notes_default;
+        }
+      } catch { /* ignore */ }
+    }
+
     // Auto-compute totals from line items if not provided
     let subtotalAmount = data.subtotal_amount || 0;
     let totalAmount = data.total_amount || 0;
@@ -229,9 +239,10 @@ export class InvoicesService {
         const appUrl = process.env.APP_URL || 'https://www.truckflowcrm.com';
         const viewLink = `${appUrl}/invoice-view/${invoice.view_token}`;
 
-        // Fetch branding for logo and company name
+        // Fetch branding for company name; use public logo proxy URL for emails
         const branding = await this.getBranding();
-        const logoUrl = branding?.logo_url || undefined;
+        const apiUrl = process.env.API_URL || 'https://api.truckflowcrm.com';
+        const logoUrl = branding?.logo_file_path ? `${apiUrl}/api/invoice/branding/logo-image` : undefined;
         const companyName = branding?.company_name || undefined;
 
         const emailService = new EmailService();
@@ -271,7 +282,8 @@ export class InvoicesService {
       const appUrl = process.env.APP_URL || 'https://www.truckflowcrm.com';
       const viewLink = `${appUrl}/invoice-view/${invoice.view_token}`;
       const branding = await this.getBranding();
-      const logoUrl = branding?.logo_url || undefined;
+      const apiUrl = process.env.API_URL || 'https://api.truckflowcrm.com';
+      const logoUrl = branding?.logo_file_path ? `${apiUrl}/api/invoice/branding/logo-image` : undefined;
       const companyName = branding?.company_name || undefined;
       const emailService = new EmailService();
 

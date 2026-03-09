@@ -22,8 +22,31 @@ const upload = multer({
   },
 });
 
-// Public endpoint (no auth)
+// Public endpoints (no auth)
 router.get('/view/:view_token', (req, res) => ctrl.viewByToken(req, res));
+
+// Public logo proxy — serves branding logo directly so email clients can access it
+router.get('/branding/logo-image', async (req: Request, res: Response) => {
+  try {
+    const { getSignedUrl } = await import('../config/storage');
+    const brandingResult = await query('SELECT logo_file_path FROM invoice_branding LIMIT 1');
+    const logoPath = brandingResult.rows[0]?.logo_file_path;
+    if (!logoPath) { res.status(404).send('No logo'); return; }
+
+    const url = await getSignedUrl(logoPath, 300);
+    const response = await fetch(url);
+    if (!response.ok) { res.status(404).send('Logo not found'); return; }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const ext = logoPath.split('.').pop()?.toLowerCase() || 'png';
+    const mimeMap: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', svg: 'image/svg+xml', webp: 'image/webp' };
+    res.setHeader('Content-Type', mimeMap[ext] || 'image/png');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.send(buffer);
+  } catch {
+    res.status(500).send('Error fetching logo');
+  }
+});
 
 // Stripe webhook (public, needs raw body)
 router.post('/webhook/stripe', express.raw({ type: 'application/json' }), async (req: Request, res: Response) => {
@@ -68,11 +91,14 @@ router.post('/webhook/stripe', express.raw({ type: 'application/json' }), async 
               style: 'currency', currency: invoice.currency || 'USD',
             }).format(invoice.total_amount / 100);
 
+            const apiUrl = process.env.API_URL || 'https://api.truckflowcrm.com';
+            const logoUrl = branding?.logo_file_path ? `${apiUrl}/api/invoice/branding/logo-image` : undefined;
+
             if (invoice.recipient_email) {
               await emailService.sendInvoicePaidEmail(
                 invoice.recipient_email, invoice.recipient_name || '',
                 invoice.invoice_number, formattedTotal, viewLink,
-                branding?.logo_url, branding?.company_name, 'recipient'
+                logoUrl, branding?.company_name, 'recipient'
               );
             }
             const team = await query(
@@ -83,7 +109,7 @@ router.post('/webhook/stripe', express.raw({ type: 'application/json' }), async 
             for (const m of team.rows) {
               await emailService.sendInvoicePaidEmail(
                 m.email, m.full_name, invoice.invoice_number, formattedTotal,
-                viewLink, branding?.logo_url, branding?.company_name, 'team'
+                viewLink, logoUrl, branding?.company_name, 'team'
               );
             }
           } catch (emailErr) {

@@ -110,8 +110,10 @@ export class EmailService {
       currency: currency || 'USD',
     }).format(totalAmountCents / 100);
 
-    // Append time to date-only strings to prevent UTC→local timezone shift
-    const dueDateObj = dueDate.length === 10 ? new Date(dueDate + 'T00:00:00') : new Date(dueDate);
+    // Extract YYYY-MM-DD portion to prevent UTC→local timezone shift (DATE columns serialize as ISO strings)
+    const dueDateStr = String(dueDate);
+    const dueDatePart = dueDateStr.includes('T') ? dueDateStr.split('T')[0] : dueDateStr.slice(0, 10);
+    const dueDateObj = new Date(dueDatePart + 'T00:00:00');
     const formattedDue = dueDateObj.toLocaleDateString('en-US', {
       year: 'numeric', month: 'long', day: 'numeric',
     });

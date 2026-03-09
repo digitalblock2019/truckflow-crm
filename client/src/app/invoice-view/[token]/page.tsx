@@ -52,8 +52,10 @@ function fmtCurrency(cents: number, currency: string = "USD") {
 }
 
 function fmtDate(dateStr: string) {
-  // Append time to date-only strings to prevent UTC→local timezone shift
-  const d = dateStr.length === 10 ? new Date(dateStr + "T00:00:00") : new Date(dateStr);
+  // Extract YYYY-MM-DD portion to prevent UTC→local timezone shift (DATE columns serialize as ISO strings)
+  const str = String(dateStr);
+  const datePart = str.includes("T") ? str.split("T")[0] : str.slice(0, 10);
+  const d = new Date(datePart + "T00:00:00");
   return d.toLocaleDateString("en-US", {
     year: "numeric",
     month: "long",

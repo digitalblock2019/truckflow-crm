@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Topbar from "@/components/layout/Topbar";
 import DataGrid, { Column } from "@/components/ui/DataGrid";
 import Tabs from "@/components/ui/Tabs";
@@ -36,8 +36,10 @@ function fmtCurrency(cents: number, currency: string = "USD") {
 }
 
 function fmtDate(dateStr: string) {
-  // Append time to date-only strings to prevent UTC→local timezone shift
-  const d = dateStr.length === 10 ? new Date(dateStr + "T00:00:00") : new Date(dateStr);
+  // Extract YYYY-MM-DD portion to prevent UTC→local timezone shift (DATE columns serialize as ISO strings)
+  const str = String(dateStr);
+  const datePart = str.includes("T") ? str.split("T")[0] : str.slice(0, 10);
+  const d = new Date(datePart + "T00:00:00");
   return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
@@ -46,7 +48,8 @@ export default function InvoicesPage() {
   const [page, setPage] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const isSup = useAuthStore((s) => s.isSupervisorOrAdmin());
+  const [editMode, setEditMode] = useState(false);
+  const [sendPrompt, setSendPrompt] = useState<{ id: string; number: string } | null>(null);
   const canCreate = useAuthStore((s) => s.canCreateInvoice());
 
   const { data, isLoading } = useInvoices({ status: tab, page, limit: 20 });
@@ -57,11 +60,36 @@ export default function InvoicesPage() {
 
   const [form, setForm] = useState({
     recipient_email: "",
+    recipient_name: "",
     due_date: "",
+    notes: "",
     line_items: [{ description: "", quantity: "1", unit_price: "" }],
   });
 
+  // Edit form state (for draft editing)
+  const [editForm, setEditForm] = useState({
+    recipient_email: "",
+    recipient_name: "",
+    due_date: "",
+    notes: "",
+  });
+
   const invoices = data?.data ?? [];
+
+  // Populate edit form when entering edit mode
+  useEffect(() => {
+    if (editMode && invoiceDetail) {
+      const inv = invoiceDetail as any;
+      const dueDateStr = String(inv.due_date || "");
+      const datePart = dueDateStr.includes("T") ? dueDateStr.split("T")[0] : dueDateStr.slice(0, 10);
+      setEditForm({
+        recipient_email: inv.recipient_email || "",
+        recipient_name: inv.recipient_name || "",
+        due_date: datePart,
+        notes: inv.notes || "",
+      });
+    }
+  }, [editMode, invoiceDetail]);
 
   const columns: Column<Invoice>[] = [
     { key: "invoice_number", header: "Invoice#", render: (r) => <span className="font-mono font-semibold">{r.invoice_number}</span> },
@@ -102,13 +130,29 @@ export default function InvoicesPage() {
       }));
 
     createInvoice.mutate(
-      { recipient_email: form.recipient_email, due_date: form.due_date, line_items },
       {
-        onSuccess: () => {
+        recipient_email: form.recipient_email,
+        recipient_name: form.recipient_name || undefined,
+        due_date: form.due_date,
+        notes: form.notes || undefined,
+        line_items,
+      },
+      {
+        onSuccess: (created: any) => {
           setShowCreate(false);
-          setForm({ recipient_email: "", due_date: "", line_items: [{ description: "", quantity: "1", unit_price: "" }] });
+          setForm({ recipient_email: "", recipient_name: "", due_date: "", notes: "", line_items: [{ description: "", quantity: "1", unit_price: "" }] });
+          // Show "Send now?" prompt
+          setSendPrompt({ id: created.id, number: created.invoice_number });
         },
       }
+    );
+  };
+
+  const handleSaveEdit = () => {
+    if (!selectedId) return;
+    updateInvoice.mutate(
+      { id: selectedId, ...editForm },
+      { onSuccess: () => setEditMode(false) }
     );
   };
 
@@ -144,13 +188,13 @@ export default function InvoicesPage() {
             page={page}
             totalPages={totalPages(data)}
             onPageChange={setPage}
-            onRowClick={(row) => setSelectedId(row.id)}
+            onRowClick={(row) => { setSelectedId(row.id); setEditMode(false); }}
           />
         </div>
       </div>
 
       {/* Invoice Detail Modal */}
-      <Modal open={!!selectedId} onClose={() => setSelectedId(null)} title={invoiceDetail ? `Invoice ${(invoiceDetail as any).invoice_number}` : "Invoice Detail"} width="720px">
+      <Modal open={!!selectedId} onClose={() => { setSelectedId(null); setEditMode(false); }} title={invoiceDetail ? `Invoice ${(invoiceDetail as any).invoice_number}` : "Invoice Detail"} width="720px">
         {detailLoading ? (
           <div className="text-xs text-txt-light py-12 text-center">Loading invoice...</div>
         ) : invoiceDetail ? (() => {
@@ -163,6 +207,11 @@ export default function InvoicesPage() {
               {/* Action Buttons */}
               {canCreate && (
                 <div className="flex gap-2 mb-4">
+                  {isDraft && !editMode && (
+                    <Button size="sm" variant="secondary" onClick={() => setEditMode(true)}>
+                      Edit
+                    </Button>
+                  )}
                   {isDraft && (
                     <Button size="sm" onClick={() => { invoiceAction.mutate({ id: inv.id, action: "send" }); setSelectedId(null); }}>
                       Send Invoice
@@ -181,20 +230,63 @@ export default function InvoicesPage() {
                 </div>
               )}
 
-              {/* Status + Meta */}
-              <div className="flex items-center gap-3 mb-4">
-                <Badge color={statusColors[inv.status] ?? "gray"}>{inv.status}</Badge>
-                <span className="text-xs text-txt-light">Created {new Date(inv.created_at).toLocaleDateString()}</span>
-                {inv.sent_at && <span className="text-xs text-txt-light">Sent {new Date(inv.sent_at).toLocaleDateString()}</span>}
-              </div>
+              {/* Edit Form (draft only) */}
+              {editMode && isDraft ? (
+                <div className="bg-surface rounded-lg p-4 mb-4 border border-border">
+                  <h4 className="text-[10px] font-semibold text-txt-mid font-mono uppercase tracking-wide mb-3">Edit Invoice</h4>
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <Input
+                      label="Recipient Email"
+                      type="email"
+                      value={editForm.recipient_email}
+                      onChange={(e) => setEditForm({ ...editForm, recipient_email: e.target.value })}
+                    />
+                    <Input
+                      label="Recipient Name"
+                      value={editForm.recipient_name}
+                      onChange={(e) => setEditForm({ ...editForm, recipient_name: e.target.value })}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <Input
+                      label="Due Date"
+                      type="date"
+                      value={editForm.due_date}
+                      onChange={(e) => setEditForm({ ...editForm, due_date: e.target.value })}
+                    />
+                  </div>
+                  <Input
+                    label="Notes"
+                    value={editForm.notes}
+                    onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                  />
+                  <div className="flex gap-2 mt-3">
+                    <Button size="sm" onClick={handleSaveEdit} disabled={updateInvoice.isPending}>
+                      {updateInvoice.isPending ? "Saving..." : "Save Changes"}
+                    </Button>
+                    <Button size="sm" variant="secondary" onClick={() => setEditMode(false)}>
+                      Cancel Edit
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Status + Meta */}
+                  <div className="flex items-center gap-3 mb-4">
+                    <Badge color={statusColors[inv.status] ?? "gray"}>{inv.status}</Badge>
+                    <span className="text-xs text-txt-light">Created {fmtDate(inv.created_at)}</span>
+                    {inv.sent_at && <span className="text-xs text-txt-light">Sent {fmtDate(inv.sent_at)}</span>}
+                  </div>
 
-              {/* Recipient */}
-              <div className="bg-surface rounded-lg p-4 mb-4">
-                <h4 className="text-[10px] font-semibold text-txt-mid font-mono uppercase tracking-wide mb-2">Bill To</h4>
-                {inv.recipient_name && <p className="text-sm font-semibold text-txt">{inv.recipient_name}</p>}
-                {inv.recipient_email && <p className="text-xs text-txt-light">{inv.recipient_email}</p>}
-                {inv.recipient_address && <p className="text-xs text-txt-light mt-1">{inv.recipient_address}</p>}
-              </div>
+                  {/* Recipient */}
+                  <div className="bg-surface rounded-lg p-4 mb-4">
+                    <h4 className="text-[10px] font-semibold text-txt-mid font-mono uppercase tracking-wide mb-2">Bill To</h4>
+                    {inv.recipient_name && <p className="text-sm font-semibold text-txt">{inv.recipient_name}</p>}
+                    {inv.recipient_email && <p className="text-xs text-txt-light">{inv.recipient_email}</p>}
+                    {inv.recipient_address && <p className="text-xs text-txt-light mt-1">{inv.recipient_address}</p>}
+                  </div>
+                </>
+              )}
 
               {/* Line Items Table */}
               <h4 className="text-[10px] font-semibold text-txt-mid font-mono uppercase tracking-wide mb-2">Line Items</h4>
@@ -246,7 +338,7 @@ export default function InvoicesPage() {
               </div>
 
               {/* Notes */}
-              {inv.notes && (
+              {inv.notes && !editMode && (
                 <div className="mb-3">
                   <h4 className="text-[10px] font-semibold text-txt-mid font-mono uppercase tracking-wide mb-1">Notes</h4>
                   <p className="text-xs text-txt-light whitespace-pre-line">{inv.notes}</p>
@@ -284,6 +376,7 @@ export default function InvoicesPage() {
         )}
       </Modal>
 
+      {/* Create Invoice Modal */}
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Invoice" width="600px">
         <div className="grid grid-cols-2 gap-4 mb-4">
           <Input
@@ -293,6 +386,13 @@ export default function InvoicesPage() {
             onChange={(e) => setForm({ ...form, recipient_email: e.target.value })}
             required
           />
+          <Input
+            label="Recipient Name"
+            value={form.recipient_name}
+            onChange={(e) => setForm({ ...form, recipient_name: e.target.value })}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-4 mb-4">
           <Input
             label="Due Date"
             type="date"
@@ -348,6 +448,35 @@ export default function InvoicesPage() {
           <Button onClick={handleCreate} disabled={createInvoice.isPending}>
             {createInvoice.isPending ? "Creating..." : "Create Invoice"}
           </Button>
+        </div>
+      </Modal>
+
+      {/* Send Now Prompt */}
+      <Modal open={!!sendPrompt} onClose={() => setSendPrompt(null)} title="Invoice Created" width="420px">
+        <div className="text-center py-4">
+          <div className="text-3xl mb-3">&#x2705;</div>
+          <p className="text-sm text-txt mb-1">
+            <span className="font-semibold">{sendPrompt?.number}</span> has been created as a draft.
+          </p>
+          <p className="text-xs text-txt-light mb-6">Would you like to send it to the recipient now?</p>
+          <div className="flex justify-center gap-3">
+            <Button
+              variant="secondary"
+              onClick={() => setSendPrompt(null)}
+            >
+              Keep as Draft
+            </Button>
+            <Button
+              onClick={() => {
+                if (sendPrompt) {
+                  invoiceAction.mutate({ id: sendPrompt.id, action: "send" });
+                }
+                setSendPrompt(null);
+              }}
+            >
+              Send Now
+            </Button>
+          </div>
         </div>
       </Modal>
     </>
