@@ -89,11 +89,11 @@ router.patch('/reminder-rules/:id', authorize('admin'), (req, res) => ctrl.updat
 router.get('/', (req, res) => ctrl.listInvoices(req, res));
 router.post('/', authorize('admin', 'supervisor', 'dispatcher', 'sales_and_dispatcher'), (req, res) => ctrl.createInvoice(req, res));
 router.get('/:id', (req, res) => ctrl.getInvoice(req, res));
-router.patch('/:id', authorize('admin', 'supervisor'), (req, res) => ctrl.updateInvoice(req, res));
-router.post('/:id/send', authorize('admin', 'supervisor'), (req, res) => ctrl.sendInvoice(req, res));
-router.post('/:id/mark-paid', authorize('admin', 'supervisor'), (req, res) => ctrl.markPaid(req, res));
-router.post('/:id/cancel', authorize('admin', 'supervisor'), (req, res) => ctrl.cancelInvoice(req, res));
-router.post('/:id/suppress-reminders', authorize('admin', 'supervisor'), (req, res) => ctrl.suppressReminders(req, res));
+router.patch('/:id', authorize('admin', 'supervisor', 'dispatcher', 'sales_and_dispatcher'), (req, res) => ctrl.updateInvoice(req, res));
+router.post('/:id/send', authorize('admin', 'supervisor', 'dispatcher', 'sales_and_dispatcher'), (req, res) => ctrl.sendInvoice(req, res));
+router.post('/:id/mark-paid', authorize('admin', 'supervisor', 'dispatcher', 'sales_and_dispatcher'), (req, res) => ctrl.markPaid(req, res));
+router.post('/:id/cancel', authorize('admin', 'supervisor', 'dispatcher', 'sales_and_dispatcher'), (req, res) => ctrl.cancelInvoice(req, res));
+router.post('/:id/suppress-reminders', authorize('admin', 'supervisor', 'dispatcher', 'sales_and_dispatcher'), (req, res) => ctrl.suppressReminders(req, res));
 router.get('/:id/pdf', (req, res) => ctrl.getPdf(req, res));
 
 export default router;
