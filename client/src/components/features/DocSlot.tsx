@@ -6,6 +6,7 @@ import { apiFetch } from "@/lib/api";
 
 const docTooltips: Record<string, string> = {
   void_cheque: "Required if using Quick Pay",
+  notice_of_assignment: "Required if using a Factoring Company",
 };
 
 export default function DocSlot({
