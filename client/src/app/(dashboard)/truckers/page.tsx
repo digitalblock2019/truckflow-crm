@@ -52,6 +52,16 @@ const allStatuses = [
   { value: "fully_onboarded", label: "Fully Onboarded" },
 ];
 
+const statusLabels: Record<string, string> = {
+  onboarded: "onboarding",
+  fully_onboarded: "fully onboarded",
+  sms_sent: "sms sent",
+  response_picked_up: "picked up",
+  response_no_answer: "no answer",
+  response_not_in_use: "not in use",
+  not_interested: "not interested",
+};
+
 const tabs = [
   { key: "", label: "All" },
   { key: "imported", label: "Imported" },
@@ -146,7 +156,7 @@ export default function TruckersPage() {
     { key: "legal_name", header: "Legal Name" },
     { key: "dba_name", header: "DBA" },
     { key: "state", header: "State" },
-    { key: "status_system", header: "Status", render: (r) => <Badge color={statusColors[r.status_system ?? ""] ?? "gray"}>{(r.status_system ?? "—").replace(/_/g, " ")}</Badge> },
+    { key: "status_system", header: "Status", render: (r) => <Badge color={statusColors[r.status_system ?? ""] ?? "gray"}>{statusLabels[r.status_system ?? ""] ?? (r.status_system ?? "—").replace(/_/g, " ")}</Badge> },
     { key: "email", header: "Email" },
     { key: "phone", header: "Phone" },
     { key: "agent_name", header: "Agent" },
@@ -439,7 +449,7 @@ export default function TruckersPage() {
               <div className="text-[10px] font-mono text-txt-light uppercase mb-2">Current Status</div>
               <div className="mb-3">
                 <Badge color={statusColors[selectedTrucker.status_system ?? ""] ?? "gray"}>
-                  {(selectedTrucker.status_system ?? "—").replace(/_/g, " ")}
+                  {statusLabels[selectedTrucker.status_system ?? ""] ?? (selectedTrucker.status_system ?? "—").replace(/_/g, " ")}
                 </Badge>
               </div>
 
