@@ -44,7 +44,7 @@ router.get('/branding/logo-image', async (req: Request, res: Response) => {
     // Convert SVG/WebP to PNG for email client compatibility
     let outputBuffer: Buffer = rawBuffer;
     if (ext === 'svg' || ext === 'webp') {
-      outputBuffer = await sharp(rawBuffer).png().resize(400, 120, { fit: 'inside', withoutEnlargement: true }).toBuffer() as Buffer;
+      outputBuffer = await sharp(rawBuffer).png().resize(800, 240, { fit: 'inside', withoutEnlargement: true }).toBuffer() as Buffer;
     }
 
     res.setHeader('Content-Type', ext === 'svg' || ext === 'webp' ? 'image/png' : (ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/png'));

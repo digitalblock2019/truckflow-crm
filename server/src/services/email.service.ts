@@ -128,7 +128,7 @@ export class EmailService {
 
     const headerHtml = logoUrl
       ? `<div style="text-align: center; margin-bottom: 32px;">
-           <img src="${logoUrl}" alt="${companyName || 'Logo'}" style="max-height: 60px; max-width: 200px; object-fit: contain;" />
+           <img src="${logoUrl}" alt="${companyName || 'Logo'}" style="max-height: 120px; max-width: 400px; object-fit: contain;" />
          </div>`
       : `<div style="text-align: center; margin-bottom: 32px;">
            <h1 style="font-family: monospace; font-size: 24px; color: #0f172a; letter-spacing: 2px;">${companyName || 'TRUCKFLOW'}</h1>
@@ -189,7 +189,7 @@ export class EmailService {
 
     const headerHtml = logoUrl
       ? `<div style="text-align: center; margin-bottom: 32px;">
-           <img src="${logoUrl}" alt="${companyName || 'Logo'}" style="max-height: 60px; max-width: 200px; object-fit: contain;" />
+           <img src="${logoUrl}" alt="${companyName || 'Logo'}" style="max-height: 120px; max-width: 400px; object-fit: contain;" />
          </div>`
       : `<div style="text-align: center; margin-bottom: 32px;">
            <h1 style="font-family: monospace; font-size: 24px; color: #0f172a; letter-spacing: 2px;">${companyName || 'TRUCKFLOW'}</h1>
