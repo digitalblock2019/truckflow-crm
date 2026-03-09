@@ -84,7 +84,12 @@ export class EmployeesService {
     if (data.crm_email) {
       const password = data.crm_password || crypto.randomBytes(8).toString('base64url').slice(0, 12);
       const passwordHash = await bcrypt.hash(password, 12);
-      const role = data.crm_role || 'viewer';
+      // Auto-derive CRM role from employee_type
+      const typeToRole: Record<string, string> = {
+        sales_agent: 'sales_agent', dispatcher: 'dispatcher',
+        sales_and_dispatcher: 'sales_and_dispatcher', fixed_salary: 'viewer', contractor: 'viewer',
+      };
+      const role = data.crm_role || typeToRole[data.employee_type] || 'viewer';
 
       const userResult = await query(
         `INSERT INTO users (email, full_name, role, employee_id, password_hash) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
@@ -141,6 +146,24 @@ export class EmployeesService {
     values.push(id);
 
     await query(`UPDATE employees SET ${fields.join(', ')} WHERE id = $${idx}`, values);
+
+    // Auto-sync CRM role when employee_type changes
+    if (data.employee_type && data.employee_type !== old.employee_type) {
+      const typeToRole: Record<string, string> = {
+        sales_agent: 'sales_agent', dispatcher: 'dispatcher',
+        sales_and_dispatcher: 'sales_and_dispatcher', fixed_salary: 'viewer', contractor: 'viewer',
+      };
+      const newRole = typeToRole[data.employee_type];
+      if (newRole && old.crm_user_id) {
+        // Don't downgrade admin or supervisor
+        const userResult = await query('SELECT role FROM users WHERE id = $1', [old.crm_user_id]);
+        const currentRole = userResult.rows[0]?.role;
+        if (currentRole && currentRole !== 'admin' && currentRole !== 'supervisor') {
+          await query('UPDATE users SET role = $1 WHERE id = $2', [newRole, old.crm_user_id]);
+        }
+      }
+    }
+
     return this.getById(id, userId, 'admin');
   }
 

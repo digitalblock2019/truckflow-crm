@@ -49,16 +49,6 @@ const commissionTypes = [
   { value: "flat", label: "Flat" },
 ];
 
-const crmRoles = [
-  { value: "", label: "No CRM Access" },
-  { value: "admin", label: "Admin" },
-  { value: "supervisor", label: "Supervisor" },
-  { value: "sales_agent", label: "Sales Agent" },
-  { value: "dispatcher", label: "Dispatcher" },
-  { value: "sales_and_dispatcher", label: "Sales & Dispatcher" },
-  { value: "viewer", label: "Viewer" },
-];
-
 const emptyForm = {
   full_name: "",
   personal_email: "",
@@ -72,7 +62,6 @@ const emptyForm = {
   commission_type: "",
   commission_value: "",
   crm_email: "",
-  crm_role: "",
   crm_password: "",
 };
 
@@ -138,9 +127,8 @@ export default function PeoplePage() {
       commission_type: form.commission_type || undefined,
       commission_value: form.commission_value ? parseFloat(form.commission_value) : undefined,
     };
-    if (form.crm_email && form.crm_role) {
+    if (form.crm_email) {
       payload.crm_email = form.crm_email;
-      payload.crm_role = form.crm_role;
       if (form.crm_password) payload.crm_password = form.crm_password;
     }
     createEmp.mutate(
@@ -169,7 +157,6 @@ export default function PeoplePage() {
       commission_type: selectedEmployee.commission_type || "",
       commission_value: selectedEmployee.commission_value?.toString() || "",
       crm_email: selectedEmployee.crm_email ?? "",
-      crm_role: (selectedEmployee as any).crm_role ?? "",
       crm_password: "",
     });
     setEditing(true);
@@ -196,7 +183,6 @@ export default function PeoplePage() {
     // CRM account changes (handled separately)
     const crmUpdates: Record<string, string> = {};
     if (form.crm_email !== (selectedEmployee.crm_email ?? "")) crmUpdates.crm_email = form.crm_email;
-    if (form.crm_role !== ((selectedEmployee as any).crm_role ?? "")) crmUpdates.crm_role = form.crm_role;
 
     const hasCrmChanges = Object.keys(crmUpdates).length > 0;
     const hasEmpChanges = Object.keys(updates).length > 0;
@@ -320,15 +306,9 @@ export default function PeoplePage() {
             {selectedEmployee.crm_email && (
               <div className="mt-4 pt-4 border-t border-border">
                 <div className="text-[10px] font-mono text-txt-light uppercase mb-2">CRM Account</div>
-                <div className="grid grid-cols-2 gap-4 text-xs">
-                  <div>
-                    <div className="text-[10px] font-mono text-txt-light uppercase">CRM Email</div>
-                    <div className="mt-0.5 text-txt">{selectedEmployee.crm_email}</div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] font-mono text-txt-light uppercase">CRM Role</div>
-                    <div className="mt-0.5 text-txt capitalize">{((selectedEmployee as any).crm_role ?? "—").replace(/_/g, " ")}</div>
-                  </div>
+                <div className="text-xs">
+                  <div className="text-[10px] font-mono text-txt-light uppercase">CRM Email</div>
+                  <div className="mt-0.5 text-txt">{selectedEmployee.crm_email}</div>
                 </div>
               </div>
             )}
@@ -413,10 +393,8 @@ export default function PeoplePage() {
                 <div className="text-xs font-semibold text-navy mb-3">
                   CRM Account {selectedEmployee.crm_email ? "" : "(Not set up)"}
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <Input label="CRM Email" type="email" value={form.crm_email} onChange={(e) => setForm({ ...form, crm_email: e.target.value })} placeholder="user@company.com" />
-                  <Select label="CRM Role" value={form.crm_role} onChange={(e) => setForm({ ...form, crm_role: e.target.value })} options={crmRoles} />
-                </div>
+                <Input label="CRM Email" type="email" value={form.crm_email} onChange={(e) => setForm({ ...form, crm_email: e.target.value })} placeholder="user@company.com" />
+                <p className="text-[10px] text-txt-light mt-1">CRM role is auto-derived from Employee Type</p>
               </div>
             )}
 
@@ -451,10 +429,10 @@ export default function PeoplePage() {
         {/* CRM Account Section */}
         <div className="mt-5 pt-4 border-t border-border">
           <div className="text-xs font-semibold text-navy mb-3">CRM Account (Optional)</div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-4">
             <Input label="CRM Email" type="email" value={form.crm_email} onChange={(e) => setForm({ ...form, crm_email: e.target.value })} placeholder="user@company.com" />
-            <Select label="CRM Role" value={form.crm_role} onChange={(e) => setForm({ ...form, crm_role: e.target.value })} options={crmRoles} />
-            {form.crm_email && form.crm_role && (
+            <p className="text-[10px] text-txt-light -mt-2">CRM role will be auto-set from Employee Type</p>
+            {form.crm_email && (
               <div className="col-span-2">
                 <div className="flex items-end gap-2">
                   <div className="flex-1">
