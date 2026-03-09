@@ -13,6 +13,7 @@ interface AuthState {
   isAdmin: () => boolean;
   isSupervisorOrAdmin: () => boolean;
   canCreateInvoice: () => boolean;
+  canCreateLoad: () => boolean;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -29,6 +30,10 @@ export const useAuthStore = create<AuthState>()(
         return role === "admin" || role === "supervisor";
       },
       canCreateInvoice: () => {
+        const role = get().user?.role;
+        return role === "admin" || role === "supervisor" || role === "dispatcher" || role === "sales_and_dispatcher";
+      },
+      canCreateLoad: () => {
         const role = get().user?.role;
         return role === "admin" || role === "supervisor" || role === "dispatcher" || role === "sales_and_dispatcher";
       },

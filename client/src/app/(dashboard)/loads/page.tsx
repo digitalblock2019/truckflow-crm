@@ -62,6 +62,7 @@ export default function LoadsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [selectedLoad, setSelectedLoad] = useState<Load | null>(null);
   const isSup = useAuthStore((s) => s.isSupervisorOrAdmin());
+  const canCreate = useAuthStore((s) => s.canCreateLoad());
 
   const { data, isLoading } = useLoads({ status: tab, page, limit: 20 });
   const createLoad = useCreateLoad();
@@ -114,7 +115,7 @@ export default function LoadsPage() {
         title="Loads / Orders"
         subtitle="Manage load records and status pipeline"
         actions={
-          isSup ? <Button onClick={() => setShowCreate(true)}>+ New Load</Button> : undefined
+          canCreate ? <Button onClick={() => setShowCreate(true)}>+ New Load</Button> : undefined
         }
       />
       <Tabs tabs={tabs} active={tab} onChange={(k) => { setTab(k); setPage(1); }} />
@@ -228,7 +229,7 @@ export default function LoadsPage() {
               const missingDoc = requiredType && !(loadDocs ?? []).find((d: LoadDocument) => d.doc_type === requiredType && d.uploaded);
               const docLabel: Record<string, string> = { rate_con: "Rate Confirmation", bol: "Bill of Lading", pod: "Proof of Delivery" };
 
-              return isSup && (next || prevStatus[selectedLoad.load_status]) ? (
+              return canCreate && (next || prevStatus[selectedLoad.load_status]) ? (
                 <div className="flex justify-between pt-3 border-t border-border">
                   <div>
                     {prevStatus[selectedLoad.load_status] && (
