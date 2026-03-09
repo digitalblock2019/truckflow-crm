@@ -80,6 +80,7 @@ export class CommissionsService {
     let idx = 1;
 
     if (filters.month) { conditions.push(`DATE_TRUNC('month', lo.payment_received_date) = $${idx++}`); params.push(filters.month); }
+    if (filters.employee_id) { conditions.push(`c.employee_id = $${idx++}`); params.push(filters.employee_id); }
 
     const where = 'WHERE ' + conditions.join(' AND ');
 

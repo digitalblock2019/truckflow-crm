@@ -35,8 +35,8 @@ const sections: { title: string; items: NavItem[] }[] = [
   {
     title: "Team",
     items: [
-      { href: "/people", label: "People", icon: "&#x1F465;" },
-      { href: "/profile", label: "My Profile", icon: "&#x1F464;" },
+      { href: "/people", label: "People", icon: "&#x1F465;", supervisorOnly: true },
+
       { href: "/chat", label: "Team Chat", icon: "&#x1F4AC;" },
     ],
   },
@@ -113,23 +113,25 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* User footer */}
+      {/* User footer — links to profile */}
       {user && (
-        <div className="px-5 py-3 border-t border-white/10 flex items-center gap-2.5">
-          {profileImageUrl ? (
-            <img src={profileImageUrl} alt={user.full_name} className="w-[30px] h-[30px] rounded-full object-cover shrink-0" />
-          ) : (
-            <div className="w-[30px] h-[30px] rounded-full bg-blue flex items-center justify-center text-[11px] font-bold text-white shrink-0">
-              {user.full_name?.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+        <Link href="/profile" className="block px-5 py-3 border-t border-white/10 hover:bg-white/[0.06] transition-colors">
+          <div className="flex items-center gap-2.5">
+            {profileImageUrl ? (
+              <img src={profileImageUrl} alt={user.full_name} className="w-[30px] h-[30px] rounded-full object-cover shrink-0" />
+            ) : (
+              <div className="w-[30px] h-[30px] rounded-full bg-blue flex items-center justify-center text-[11px] font-bold text-white shrink-0">
+                {user.full_name?.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+              </div>
+            )}
+            <div className="min-w-0">
+              <div className="text-xs text-white truncate">
+                {user.full_name}
+              </div>
+              <div className="text-[10px] text-white/40 font-mono capitalize">{(user.role ?? "").replace(/_/g, " ")}</div>
             </div>
-          )}
-          <div className="min-w-0">
-            <div className="text-xs text-white truncate">
-              {user.full_name}
-            </div>
-            <div className="text-[10px] text-white/40 font-mono capitalize">{(user.role ?? "").replace(/_/g, " ")}</div>
           </div>
-        </div>
+        </Link>
       )}
     </aside>
   );

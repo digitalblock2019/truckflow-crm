@@ -643,6 +643,21 @@ export function useUploadLogo() {
   });
 }
 
+// Dashboard
+export function useDashboard() {
+  return useQuery({
+    queryKey: ["dashboard"],
+    queryFn: () => apiFetch<{
+      loads: { total: number; pending: number; dispatched: number; in_transit: number; delivered: number; payment_received: number };
+      revenue: { total_gross_cents: number; total_net_cents: number; this_month_gross_cents: number };
+      commissions: { total_pending_cents: number; total_approved_cents: number; total_paid_cents: number };
+      invoices: { total: number; draft: number; sent: number; overdue: number; paid: number; total_outstanding_cents: number };
+      truckers: { total: number; onboarding: number; fully_onboarded: number };
+      employees: { total_active: number };
+    }>("/api/dashboard"),
+  });
+}
+
 // Profile Avatar
 export function useUploadAvatar() {
   const qc = useQueryClient();

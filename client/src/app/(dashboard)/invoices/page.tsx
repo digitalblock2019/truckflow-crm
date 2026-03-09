@@ -36,7 +36,9 @@ function fmtCurrency(cents: number, currency: string = "USD") {
 }
 
 function fmtDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  // Append time to date-only strings to prevent UTC→local timezone shift
+  const d = dateStr.length === 10 ? new Date(dateStr + "T00:00:00") : new Date(dateStr);
+  return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
 export default function InvoicesPage() {
@@ -45,6 +47,7 @@ export default function InvoicesPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const isSup = useAuthStore((s) => s.isSupervisorOrAdmin());
+  const canCreate = useAuthStore((s) => s.canCreateInvoice());
 
   const { data, isLoading } = useInvoices({ status: tab, page, limit: 20 });
   const createInvoice = useCreateInvoice();
@@ -63,11 +66,11 @@ export default function InvoicesPage() {
   const columns: Column<Invoice>[] = [
     { key: "invoice_number", header: "Invoice#", render: (r) => <span className="font-mono font-semibold">{r.invoice_number}</span> },
     { key: "client_name", header: "Client", render: (r) => r.client_name ?? r.recipient_email },
-    { key: "total_cents", header: "Total", render: (r) => <span className="font-mono font-semibold">{fmt(r.total_cents)}</span> },
+    { key: "total_amount", header: "Total", render: (r) => <span className="font-mono font-semibold">{fmt(r.total_amount)}</span> },
     { key: "status", header: "Status", render: (r) => <Badge color={statusColors[r.status] ?? "gray"}>{r.status}</Badge> },
-    { key: "due_date", header: "Due Date", render: (r) => new Date(r.due_date).toLocaleDateString() },
-    { key: "created_at", header: "Created", render: (r) => new Date(r.created_at).toLocaleDateString() },
-    ...(isSup
+    { key: "due_date", header: "Due Date", render: (r) => fmtDate(r.due_date) },
+    { key: "created_at", header: "Created", render: (r) => fmtDate(r.created_at) },
+    ...(canCreate
       ? [{
           key: "actions" as const,
           header: "Actions",
@@ -121,7 +124,7 @@ export default function InvoicesPage() {
         title="Invoices"
         subtitle="Invoice management and billing"
         actions={
-          isSup ? <Button onClick={() => setShowCreate(true)}>+ New Invoice</Button> : undefined
+          canCreate ? <Button onClick={() => setShowCreate(true)}>+ New Invoice</Button> : undefined
         }
       />
       <div className="flex-1 overflow-y-auto p-6 bg-surface">
@@ -158,7 +161,7 @@ export default function InvoicesPage() {
           return (
             <div>
               {/* Action Buttons */}
-              {isSup && (
+              {canCreate && (
                 <div className="flex gap-2 mb-4">
                   {isDraft && (
                     <Button size="sm" onClick={() => { invoiceAction.mutate({ id: inv.id, action: "send" }); setSelectedId(null); }}>

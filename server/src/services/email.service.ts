@@ -101,7 +101,9 @@ export class EmailService {
       currency: currency || 'USD',
     }).format(totalAmountCents / 100);
 
-    const formattedDue = new Date(dueDate).toLocaleDateString('en-US', {
+    // Append time to date-only strings to prevent UTC→local timezone shift
+    const dueDateObj = dueDate.length === 10 ? new Date(dueDate + 'T00:00:00') : new Date(dueDate);
+    const formattedDue = dueDateObj.toLocaleDateString('en-US', {
       year: 'numeric', month: 'long', day: 'numeric',
     });
 

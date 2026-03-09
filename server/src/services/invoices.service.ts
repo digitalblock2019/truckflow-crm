@@ -292,9 +292,17 @@ export class InvoicesService {
 
     const lineItems = await query('SELECT * FROM invoice_line_items WHERE invoice_id = $1 ORDER BY sort_order', [inv.rows[0].id]);
     const taxLines = await query('SELECT * FROM invoice_tax_lines WHERE invoice_id = $1', [inv.rows[0].id]);
-    const branding = await query('SELECT * FROM invoice_branding LIMIT 1');
+    const brandingResult = await query('SELECT * FROM invoice_branding LIMIT 1');
+    const branding = brandingResult.rows[0] || null;
+    if (branding?.logo_file_path) {
+      try {
+        branding.logo_url = await getSignedUrl(branding.logo_file_path);
+      } catch {
+        branding.logo_url = null;
+      }
+    }
 
-    return { ...inv.rows[0], line_items: lineItems.rows, tax_lines: taxLines.rows, branding: branding.rows[0] || null };
+    return { ...inv.rows[0], line_items: lineItems.rows, tax_lines: taxLines.rows, branding };
   }
 
   // ── Reminder Rules ──

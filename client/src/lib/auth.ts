@@ -12,6 +12,7 @@ interface AuthState {
   logout: () => void;
   isAdmin: () => boolean;
   isSupervisorOrAdmin: () => boolean;
+  canCreateInvoice: () => boolean;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -26,6 +27,10 @@ export const useAuthStore = create<AuthState>()(
       isSupervisorOrAdmin: () => {
         const role = get().user?.role;
         return role === "admin" || role === "supervisor";
+      },
+      canCreateInvoice: () => {
+        const role = get().user?.role;
+        return role === "admin" || role === "supervisor" || role === "dispatcher" || role === "sales_and_dispatcher";
       },
     }),
     { name: "truckflow-auth" }

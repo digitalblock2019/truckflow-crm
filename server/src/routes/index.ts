@@ -16,6 +16,7 @@ import invoicesRouter from './invoices';
 import notificationsRouter from './notifications';
 import auditLogRouter from './auditLog';
 import settingsRouter from './settings';
+import dashboardRouter from './dashboard';
 import { authenticate } from '../middleware/auth';
 import { CommissionsService } from '../services/commissions.service';
 
@@ -58,6 +59,7 @@ router.use('/invoice', invoicesRouter);
 router.use('/notifications', notificationsRouter);
 router.use('/audit-log', auditLogRouter);
 router.use('/settings', settingsRouter);
+router.use('/dashboard', authenticate, dashboardRouter);
 
 // Exchange rate (standalone endpoint)
 const commSvc = new CommissionsService();

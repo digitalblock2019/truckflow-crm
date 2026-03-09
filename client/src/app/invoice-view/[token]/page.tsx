@@ -52,7 +52,9 @@ function fmtCurrency(cents: number, currency: string = "USD") {
 }
 
 function fmtDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString("en-US", {
+  // Append time to date-only strings to prevent UTC→local timezone shift
+  const d = dateStr.length === 10 ? new Date(dateStr + "T00:00:00") : new Date(dateStr);
+  return d.toLocaleDateString("en-US", {
     year: "numeric",
     month: "long",
     day: "numeric",

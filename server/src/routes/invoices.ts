@@ -87,7 +87,7 @@ router.patch('/reminder-rules/:id', authorize('admin'), (req, res) => ctrl.updat
 
 // Invoices
 router.get('/', (req, res) => ctrl.listInvoices(req, res));
-router.post('/', authorize('admin', 'supervisor'), (req, res) => ctrl.createInvoice(req, res));
+router.post('/', authorize('admin', 'supervisor', 'dispatcher', 'sales_and_dispatcher'), (req, res) => ctrl.createInvoice(req, res));
 router.get('/:id', (req, res) => ctrl.getInvoice(req, res));
 router.patch('/:id', authorize('admin', 'supervisor'), (req, res) => ctrl.updateInvoice(req, res));
 router.post('/:id/send', authorize('admin', 'supervisor'), (req, res) => ctrl.sendInvoice(req, res));

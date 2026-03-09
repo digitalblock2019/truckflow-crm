@@ -1,7 +1,7 @@
 export interface User {
   id: string;
   email: string;
-  role: "admin" | "supervisor" | "agent" | "dispatcher" | "viewer";
+  role: "admin" | "supervisor" | "sales_agent" | "dispatcher" | "sales_and_dispatcher" | "viewer";
   full_name: string;
   employee_id?: string;
   is_active?: boolean;
@@ -122,9 +122,9 @@ export interface Invoice {
   client_name: string | null;
   recipient_email: string;
   status: "draft" | "sent" | "viewed" | "paid" | "overdue" | "cancelled";
-  subtotal_cents: number;
-  tax_cents: number;
-  total_cents: number;
+  subtotal_amount: number;
+  tax_total_amount: number;
+  total_amount: number;
   currency: string;
   due_date: string;
   paid_date: string | null;
