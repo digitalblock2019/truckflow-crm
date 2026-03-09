@@ -69,7 +69,7 @@ export default function LoadsPage() {
   const updateStatus = useUpdateLoadStatus();
   const { data: loadDocs } = useLoadDocuments(selectedLoad?.id ?? "");
   const uploadLoadDoc = useUploadLoadDocument();
-  const { data: truckersData } = useTruckers({ limit: 100 });
+  const { data: truckersData } = useTruckers({ status: "fully_onboarded", limit: 100 });
   const { data: employeesData } = useEmployees({ type: "dispatcher", status: "active", limit: 100 });
 
   const [form, setForm] = useState({

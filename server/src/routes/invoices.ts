@@ -38,17 +38,18 @@ router.get('/branding/logo-image', async (req: Request, res: Response) => {
     const response = await fetch(url);
     if (!response.ok) { res.status(404).send('Logo not found'); return; }
 
-    let buffer = Buffer.from(await response.arrayBuffer());
+    const rawBuffer = Buffer.from(await response.arrayBuffer() as ArrayBuffer);
     const ext = logoPath.split('.').pop()?.toLowerCase() || 'png';
 
     // Convert SVG/WebP to PNG for email client compatibility
+    let outputBuffer: Buffer = rawBuffer;
     if (ext === 'svg' || ext === 'webp') {
-      buffer = await sharp(buffer).png().resize(400, 120, { fit: 'inside', withoutEnlargement: true }).toBuffer();
+      outputBuffer = await sharp(rawBuffer).png().resize(400, 120, { fit: 'inside', withoutEnlargement: true }).toBuffer() as Buffer;
     }
 
     res.setHeader('Content-Type', ext === 'svg' || ext === 'webp' ? 'image/png' : (ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/png'));
     res.setHeader('Cache-Control', 'public, max-age=86400');
-    res.send(buffer);
+    res.send(outputBuffer);
   } catch (err) {
     console.error('[LogoProxy] Error:', err);
     res.status(500).send('Error fetching logo');

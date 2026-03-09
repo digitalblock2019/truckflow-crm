@@ -112,8 +112,8 @@ export class EmailService {
 
     // Handle Date objects (from pg driver) and ISO strings — extract YYYY-MM-DD to avoid timezone shift
     let dueDatePart: string;
-    if (dueDate instanceof Date) {
-      dueDatePart = dueDate.toISOString().split('T')[0];
+    if (typeof dueDate === 'object' && dueDate !== null && 'toISOString' in (dueDate as object)) {
+      dueDatePart = (dueDate as unknown as Date).toISOString().split('T')[0];
     } else {
       const s = String(dueDate);
       dueDatePart = s.includes('T') ? s.split('T')[0] : s.slice(0, 10);
