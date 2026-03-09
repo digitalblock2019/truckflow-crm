@@ -25,10 +25,11 @@ const upload = multer({
 // Public endpoints (no auth)
 router.get('/view/:view_token', (req, res) => ctrl.viewByToken(req, res));
 
-// Public logo proxy — serves branding logo directly so email clients can access it
+// Public logo proxy — serves branding logo as PNG so email clients can render it
 router.get('/branding/logo-image', async (req: Request, res: Response) => {
   try {
     const { getSignedUrl } = await import('../config/storage');
+    const sharp = (await import('sharp')).default;
     const brandingResult = await query('SELECT logo_file_path FROM invoice_branding LIMIT 1');
     const logoPath = brandingResult.rows[0]?.logo_file_path;
     if (!logoPath) { res.status(404).send('No logo'); return; }
@@ -37,13 +38,19 @@ router.get('/branding/logo-image', async (req: Request, res: Response) => {
     const response = await fetch(url);
     if (!response.ok) { res.status(404).send('Logo not found'); return; }
 
-    const buffer = Buffer.from(await response.arrayBuffer());
+    let buffer = Buffer.from(await response.arrayBuffer());
     const ext = logoPath.split('.').pop()?.toLowerCase() || 'png';
-    const mimeMap: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', svg: 'image/svg+xml', webp: 'image/webp' };
-    res.setHeader('Content-Type', mimeMap[ext] || 'image/png');
+
+    // Convert SVG/WebP to PNG for email client compatibility
+    if (ext === 'svg' || ext === 'webp') {
+      buffer = await sharp(buffer).png().resize(400, 120, { fit: 'inside', withoutEnlargement: true }).toBuffer();
+    }
+
+    res.setHeader('Content-Type', ext === 'svg' || ext === 'webp' ? 'image/png' : (ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/png'));
     res.setHeader('Cache-Control', 'public, max-age=86400');
     res.send(buffer);
-  } catch {
+  } catch (err) {
+    console.error('[LogoProxy] Error:', err);
     res.status(500).send('Error fetching logo');
   }
 });

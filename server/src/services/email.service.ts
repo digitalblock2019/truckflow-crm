@@ -110,9 +110,14 @@ export class EmailService {
       currency: currency || 'USD',
     }).format(totalAmountCents / 100);
 
-    // Extract YYYY-MM-DD portion to prevent UTC→local timezone shift (DATE columns serialize as ISO strings)
-    const dueDateStr = String(dueDate);
-    const dueDatePart = dueDateStr.includes('T') ? dueDateStr.split('T')[0] : dueDateStr.slice(0, 10);
+    // Handle Date objects (from pg driver) and ISO strings — extract YYYY-MM-DD to avoid timezone shift
+    let dueDatePart: string;
+    if (dueDate instanceof Date) {
+      dueDatePart = dueDate.toISOString().split('T')[0];
+    } else {
+      const s = String(dueDate);
+      dueDatePart = s.includes('T') ? s.split('T')[0] : s.slice(0, 10);
+    }
     const dueDateObj = new Date(dueDatePart + 'T00:00:00');
     const formattedDue = dueDateObj.toLocaleDateString('en-US', {
       year: 'numeric', month: 'long', day: 'numeric',
