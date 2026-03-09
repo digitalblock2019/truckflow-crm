@@ -111,11 +111,11 @@ export class InvoicesService {
        recipient_address, recipient_tax_id, currency, subtotal_amount, tax_total_amount,
        discount_amount, total_amount, invoice_date, payment_terms, custom_due_days, due_date,
        notes, terms, internal_notes, view_token, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,COALESCE($13::date, CURRENT_DATE),$14,$15,$16,$17,$18,$19,$20,$21) RETURNING *`,
       [data.trigger || 'manual', data.load_order_id, data.client_id, data.recipient_email,
        data.recipient_name, data.recipient_address, data.recipient_tax_id,
        data.currency || 'USD', subtotalAmount, data.tax_total_amount || 0,
-       data.discount_amount || 0, totalAmount, data.invoice_date || new Date(),
+       data.discount_amount || 0, totalAmount, data.invoice_date || null,
        data.payment_terms || 'net_30', data.custom_due_days, data.due_date,
        data.notes, data.terms, data.internal_notes, viewToken, userId]
     );
@@ -228,16 +228,24 @@ export class InvoicesService {
       try {
         const appUrl = process.env.APP_URL || 'https://www.truckflowcrm.com';
         const viewLink = `${appUrl}/invoice-view/${invoice.view_token}`;
+
+        // Fetch branding for logo and company name
+        const branding = await this.getBranding();
+        const logoUrl = branding?.logo_url || undefined;
+        const companyName = branding?.company_name || undefined;
+
         const emailService = new EmailService();
         await emailService.sendInvoiceEmail(
           invoice.recipient_email,
-          invoice.recipient_name || 'Customer',
+          invoice.recipient_name || '',
           invoice.invoice_number,
           invoice.total_amount,
           invoice.currency || 'USD',
           invoice.due_date,
           viewLink,
-          stripeUrl || undefined
+          stripeUrl || undefined,
+          logoUrl,
+          companyName
         );
       } catch (err) {
         console.error('[SendInvoice] Email send failed:', err);

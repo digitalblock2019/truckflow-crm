@@ -94,7 +94,9 @@ export class EmailService {
     currency: string,
     dueDate: string,
     viewLink: string,
-    payLink?: string
+    _payLink?: string,
+    logoUrl?: string,
+    companyName?: string
   ) {
     const formattedTotal = new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -107,22 +109,23 @@ export class EmailService {
       year: 'numeric', month: 'long', day: 'numeric',
     });
 
-    const payButton = payLink
-      ? `<div style="text-align: center; margin: 16px 0;">
-           <a href="${payLink}" style="background: #16a34a; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px;">
-             Pay Now
-           </a>
+    const greeting = recipientName && recipientName !== 'Customer'
+      ? `Hi ${recipientName},` : 'Hi,';
+
+    const headerHtml = logoUrl
+      ? `<div style="text-align: center; margin-bottom: 32px;">
+           <img src="${logoUrl}" alt="${companyName || 'Logo'}" style="max-height: 60px; max-width: 200px; object-fit: contain;" />
          </div>`
-      : '';
+      : `<div style="text-align: center; margin-bottom: 32px;">
+           <h1 style="font-family: monospace; font-size: 24px; color: #0f172a; letter-spacing: 2px;">${companyName || 'TRUCKFLOW'}</h1>
+         </div>`;
 
     const html = `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px;">
-        <div style="text-align: center; margin-bottom: 32px;">
-          <h1 style="font-family: monospace; font-size: 24px; color: #0f172a; letter-spacing: 2px;">TRUCKFLOW</h1>
-        </div>
+        ${headerHtml}
         <h2 style="color: #0f172a; font-size: 18px;">Invoice ${invoiceNumber}</h2>
         <p style="color: #475569; font-size: 14px; line-height: 1.6;">
-          Hi ${recipientName},
+          ${greeting}
         </p>
         <p style="color: #475569; font-size: 14px; line-height: 1.6;">
           You have received a new invoice. Here are the details:
@@ -148,7 +151,6 @@ export class EmailService {
             View Invoice
           </a>
         </div>
-        ${payButton}
         <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
         <p style="color: #94a3b8; font-size: 11px; text-align: center;">
           TruckFlow CRM &mdash; Operations Management Platform

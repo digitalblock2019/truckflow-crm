@@ -63,11 +63,21 @@ function fmtDate(dateStr: string) {
 
 const statusColors: Record<string, string> = {
   draft: "bg-gray-100 text-gray-600",
-  sent: "bg-blue-50 text-blue-600",
-  viewed: "bg-purple-50 text-purple-600",
+  sent: "bg-orange-50 text-orange-600",
+  viewed: "bg-orange-50 text-orange-600",
   paid: "bg-green-50 text-green-700",
   overdue: "bg-red-50 text-red-600",
   cancelled: "bg-gray-100 text-gray-500",
+};
+
+// Customer-facing labels — don't show internal statuses
+const statusLabels: Record<string, string> = {
+  draft: "DRAFT",
+  sent: "UNPAID",
+  viewed: "UNPAID",
+  overdue: "OVERDUE",
+  paid: "PAID",
+  cancelled: "CANCELLED",
 };
 
 export default function PublicInvoiceView() {
@@ -119,7 +129,7 @@ export default function PublicInvoiceView() {
             {/* Company Info */}
             <div>
               {b?.logo_url ? (
-                <img src={b.logo_url} alt="Logo" className="h-12 mb-3 object-contain" />
+                <img src={b.logo_url} alt="Logo" className="h-24 mb-3 object-contain" />
               ) : (
                 <h1 className="text-xl font-bold text-gray-900 mb-1 font-mono tracking-wider">
                   {b?.company_name || "TRUCKFLOW"}
@@ -141,7 +151,7 @@ export default function PublicInvoiceView() {
               <h2 className="text-2xl font-bold text-gray-900 mb-1">INVOICE</h2>
               <p className="font-mono text-sm font-semibold text-gray-700">{invoice.invoice_number}</p>
               <span className={`inline-block mt-2 px-2.5 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide ${statusColors[invoice.status] || "bg-gray-100 text-gray-600"}`}>
-                {invoice.status}
+                {statusLabels[invoice.status] || invoice.status}
               </span>
             </div>
           </div>
