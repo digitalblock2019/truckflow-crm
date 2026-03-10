@@ -4,11 +4,12 @@ import { uploadFile, getSignedUrl } from '../config/storage';
 import { AppError } from '../utils/AppError';
 
 const BUCKET = 'load-documents';
-const VALID_TYPES = ['rate_con', 'bol', 'pod'];
+const VALID_TYPES = ['rate_con', 'bol', 'pod', 'receipt'];
 const TYPE_LABELS: Record<string, string> = {
   rate_con: 'Rate Confirmation',
   bol: 'Bill of Lading',
   pod: 'Proof of Delivery',
+  receipt: 'Receipt / Proof of Payment',
 };
 
 export class LoadDocumentsService {
