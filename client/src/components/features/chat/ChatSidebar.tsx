@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useConversations, useTogglePin } from "@/lib/hooks";
 import { useAuthStore } from "@/lib/auth";
 import { useChatStore } from "@/lib/chatStore";
@@ -9,15 +9,35 @@ import ConversationItem from "./ConversationItem";
 import NewChatModal from "./NewChatModal";
 import Link from "next/link";
 
+interface ContextMenuState {
+  x: number;
+  y: number;
+  conversation: Conversation;
+}
+
 export default function ChatSidebar() {
   const [search, setSearch] = useState("");
   const [showNewChat, setShowNewChat] = useState(false);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const { data: conversations } = useConversations();
   const userId = useAuthStore((s) => s.user?.id) ?? "";
   const userRole = useAuthStore((s) => s.user?.role);
   const { activeConversationId, setActiveConversation } = useChatStore();
   const togglePin = useTogglePin();
   const isAdmin = userRole === "admin";
+
+  // Close context menu on click outside
+  useEffect(() => {
+    if (!contextMenu) return;
+    function handleClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setContextMenu(null);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [contextMenu]);
 
   const filtered = useMemo(() => {
     if (!conversations) return [];
@@ -39,6 +59,18 @@ export default function ChatSidebar() {
     ...(dms.length ? [{ title: "Direct Messages", items: dms }] : []),
     ...(groups.length ? [{ title: "Groups", items: groups }] : []),
   ];
+
+  const handleContextMenu = (e: React.MouseEvent, c: Conversation) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, conversation: c });
+  };
+
+  const handlePin = () => {
+    if (contextMenu) {
+      togglePin.mutate(contextMenu.conversation.id);
+      setContextMenu(null);
+    }
+  };
 
   return (
     <>
@@ -76,10 +108,7 @@ export default function ChatSidebar() {
               {section.items.map((c) => (
                 <div
                   key={c.id}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    togglePin.mutate(c.id);
-                  }}
+                  onContextMenu={(e) => handleContextMenu(e, c)}
                 >
                   <ConversationItem
                     conversation={c}
@@ -109,6 +138,29 @@ export default function ChatSidebar() {
           </Link>
         )}
       </div>
+
+      {/* Right-click context menu */}
+      {contextMenu && (
+        <div
+          ref={menuRef}
+          className="fixed z-[100] bg-white rounded-lg shadow-lg border border-border py-1 min-w-[160px]"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          <button
+            onClick={handlePin}
+            className="w-full text-left px-3 py-2 text-[13px] text-txt hover:bg-surface flex items-center gap-2 transition-colors"
+          >
+            <span>{contextMenu.conversation.is_pinned ? "\u{274C}" : "\u{1F4CC}"}</span>
+            {contextMenu.conversation.is_pinned ? "Unpin conversation" : "Pin conversation"}
+          </button>
+          <button
+            onClick={() => setContextMenu(null)}
+            className="w-full text-left px-3 py-2 text-[13px] text-txt-light hover:bg-surface transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
 
       {showNewChat && (
         <NewChatModal

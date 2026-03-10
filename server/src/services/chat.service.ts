@@ -1,6 +1,21 @@
 import { query } from '../config/database';
 import { AppError } from '../utils/AppError';
+import { getSignedUrl } from '../config/storage';
 import { emitToConversation, emitToUser, getOnlineUsers, joinConversationRoom } from '../config/socket';
+
+// Convert profile_image_path to signed URL, returns null on failure
+async function resolveAvatar(path: string | null): Promise<string | null> {
+  if (!path) return null;
+  try { return await getSignedUrl(path); } catch { return null; }
+}
+
+// Resolve avatars for an array of objects with a given key
+async function resolveAvatars(items: Record<string, any>[], key: string): Promise<Record<string, any>[]> {
+  await Promise.all(items.map(async (item) => {
+    if (item[key]) item[key] = await resolveAvatar(item[key]);
+  }));
+  return items;
+}
 
 export class ChatService {
   // ── List conversations ──────────────────────────────────────────────
@@ -33,6 +48,9 @@ export class ChatService {
          WHERE cm.conversation_id = ANY($1) AND cm.left_at IS NULL`,
         [convIds]
       );
+      // Resolve signed URLs for avatars
+      await resolveAvatars(parts.rows, 'profile_image_url');
+
       const partMap: Record<string, any[]> = {};
       for (const p of parts.rows) {
         if (!partMap[p.conversation_id]) partMap[p.conversation_id] = [];
@@ -134,6 +152,8 @@ export class ChatService {
     );
 
     const messages = data.rows;
+    // Resolve sender avatars
+    await resolveAvatars(messages, 'sender_avatar');
     const msgIds = messages.map((m: any) => m.id);
 
     if (msgIds.length > 0) {
@@ -230,11 +250,12 @@ export class ChatService {
     );
 
     // Get sender info for the socket event
-    const sender = await query('SELECT full_name, profile_image_path as profile_image_url FROM users WHERE id = $1', [userId]);
+    const sender = await query('SELECT full_name, profile_image_path FROM users WHERE id = $1', [userId]);
+    const avatarUrl = await resolveAvatar(sender.rows[0]?.profile_image_path);
     const enriched = {
       ...msg,
       sender_name: sender.rows[0]?.full_name,
-      sender_avatar: sender.rows[0]?.profile_image_url,
+      sender_avatar: avatarUrl,
       attachments: [],
       reactions: [],
       reply_to: null,
@@ -387,6 +408,7 @@ export class ChatService {
        ORDER BY cm.is_admin DESC, u.full_name`,
       [conversationId]
     );
+    await resolveAvatars(data.rows, 'profile_image_url');
     return data.rows;
   }
 
@@ -547,6 +569,7 @@ export class ChatService {
        ORDER BY m.created_at DESC LIMIT $${idx}`,
       params
     );
+    await resolveAvatars(data.rows, 'sender_avatar');
     return { messages: data.rows, nextCursor: data.rows.length === limit ? data.rows[data.rows.length - 1].created_at : null };
   }
 
@@ -570,6 +593,7 @@ export class ChatService {
        FROM users WHERE ${conditions.join(' AND ')} ORDER BY full_name LIMIT 50`,
       params
     );
+    await resolveAvatars(data.rows, 'profile_image_url');
     return data.rows;
   }
 }
