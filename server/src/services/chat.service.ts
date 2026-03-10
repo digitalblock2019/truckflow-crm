@@ -27,7 +27,7 @@ export class ChatService {
     const convIds = data.rows.map((c: any) => c.id);
     if (convIds.length > 0) {
       const parts = await query(
-        `SELECT cm.conversation_id, u.id, u.full_name, u.profile_image_url, u.last_seen_at
+        `SELECT cm.conversation_id, u.id, u.full_name, u.profile_image_path as profile_image_url, u.last_seen_at
          FROM chat_members cm
          JOIN users u ON u.id = cm.user_id
          WHERE cm.conversation_id = ANY($1) AND cm.left_at IS NULL`,
@@ -125,7 +125,7 @@ export class ChatService {
     const data = await query(
       `SELECT m.id, m.conversation_id, m.sender_id, m.content, m.reply_to_id,
               m.is_deleted, m.edited_at, m.created_at,
-              u.full_name as sender_name, u.role as sender_role, u.profile_image_url as sender_avatar
+              u.full_name as sender_name, u.role as sender_role, u.profile_image_path as sender_avatar
        FROM chat_messages m
        JOIN users u ON u.id = m.sender_id
        WHERE ${conditions.join(' AND ')}
@@ -230,7 +230,7 @@ export class ChatService {
     );
 
     // Get sender info for the socket event
-    const sender = await query('SELECT full_name, profile_image_url FROM users WHERE id = $1', [userId]);
+    const sender = await query('SELECT full_name, profile_image_path as profile_image_url FROM users WHERE id = $1', [userId]);
     const enriched = {
       ...msg,
       sender_name: sender.rows[0]?.full_name,
@@ -380,7 +380,7 @@ export class ChatService {
     if (!member.rows.length) throw new AppError('Not a member', 403, 'FORBIDDEN');
 
     const data = await query(
-      `SELECT cm.user_id, cm.is_admin, cm.joined_at, u.full_name, u.email, u.role, u.profile_image_url, u.last_seen_at
+      `SELECT cm.user_id, cm.is_admin, cm.joined_at, u.full_name, u.email, u.role, u.profile_image_path as profile_image_url, u.last_seen_at
        FROM chat_members cm
        JOIN users u ON u.id = cm.user_id
        WHERE cm.conversation_id = $1 AND cm.left_at IS NULL
@@ -540,7 +540,7 @@ export class ChatService {
     params.push(limit);
 
     const data = await query(
-      `SELECT m.*, u.full_name as sender_name, u.profile_image_url as sender_avatar
+      `SELECT m.*, u.full_name as sender_name, u.profile_image_path as sender_avatar
        FROM chat_messages m
        JOIN users u ON u.id = m.sender_id
        WHERE ${conditions.join(' AND ')}
@@ -566,7 +566,7 @@ export class ChatService {
       idx++;
     }
     const data = await query(
-      `SELECT id, full_name, email, role, profile_image_url, last_seen_at
+      `SELECT id, full_name, email, role, profile_image_path as profile_image_url, last_seen_at
        FROM users WHERE ${conditions.join(' AND ')} ORDER BY full_name LIMIT 50`,
       params
     );

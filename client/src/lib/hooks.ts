@@ -714,6 +714,8 @@ export function useChatUsers(search?: string) {
   return useQuery({
     queryKey: ["chat-users", search || ""],
     queryFn: () => apiFetch<{ id: string; full_name: string; email: string; role: string; profile_image_url: string | null }[]>(`/api/chat/users${qs}`),
+    retry: 2,
+    staleTime: 60000,
   });
 }
 
