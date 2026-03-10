@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useCreateConversation, useUserSearch } from "@/lib/hooks";
+import { useState, useMemo } from "react";
+import { useCreateConversation, useChatUsers } from "@/lib/hooks";
 import { useAuthStore } from "@/lib/auth";
 
 interface Props {
@@ -16,14 +16,21 @@ export default function NewChatModal({ onClose, onCreated }: Props) {
   const [description, setDescription] = useState("");
   const [selectedUsers, setSelectedUsers] = useState<{ id: string; full_name: string }[]>([]);
   const createConvo = useCreateConversation();
-  const { data: searchResults } = useUserSearch(search);
+  const { data: allUsers } = useChatUsers();
   const userId = useAuthStore((s) => s.user?.id);
   const userRole = useAuthStore((s) => s.user?.role);
   const canCreateAnnouncement = userRole === "admin" || userRole === "supervisor";
 
-  const users = (searchResults?.data ?? []).filter(
-    (u) => u.id !== userId && !selectedUsers.some((s) => s.id === u.id)
-  );
+  const filteredUsers = useMemo(() => {
+    if (!allUsers) return [];
+    const q = search.toLowerCase();
+    return allUsers.filter(
+      (u) =>
+        u.id !== userId &&
+        !selectedUsers.some((s) => s.id === u.id) &&
+        (!q || u.full_name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q))
+    );
+  }, [allUsers, search, userId, selectedUsers]);
 
   const handleCreate = () => {
     const type = tab === "dm" ? "direct" : tab;
@@ -38,6 +45,24 @@ export default function NewChatModal({ onClose, onCreated }: Props) {
         onClose();
       },
     });
+  };
+
+  const toggleUser = (u: { id: string; full_name: string }) => {
+    if (tab === "dm") {
+      // For DM, toggle single selection
+      if (selectedUsers.some((s) => s.id === u.id)) {
+        setSelectedUsers([]);
+      } else {
+        setSelectedUsers([{ id: u.id, full_name: u.full_name }]);
+      }
+    } else {
+      // For group, toggle in list
+      if (selectedUsers.some((s) => s.id === u.id)) {
+        setSelectedUsers((prev) => prev.filter((p) => p.id !== u.id));
+      } else {
+        setSelectedUsers((prev) => [...prev, { id: u.id, full_name: u.full_name }]);
+      }
+    }
   };
 
   return (
@@ -107,44 +132,59 @@ export default function NewChatModal({ onClose, onCreated }: Props) {
                 </div>
               )}
 
-              {/* Search users */}
+              {/* Search/filter */}
               <div>
                 <input
                   type="text"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search people..."
+                  placeholder="Filter people..."
                   className="w-full px-3 py-2 border border-border rounded-lg text-[13px] focus:outline-none focus:border-blue-light"
                 />
               </div>
 
-              {/* Search results */}
-              {users.length > 0 && (
-                <div className="border border-border rounded-lg max-h-[200px] overflow-y-auto">
-                  {users.map((u) => (
+              {/* User list (always visible) */}
+              <div className="border border-border rounded-lg max-h-[220px] overflow-y-auto">
+                {filteredUsers.length === 0 && (
+                  <div className="px-3 py-4 text-center text-[12px] text-txt-light">
+                    {allUsers ? "No users found" : "Loading users..."}
+                  </div>
+                )}
+                {filteredUsers.map((u) => {
+                  const isSelected = selectedUsers.some((s) => s.id === u.id);
+                  return (
                     <button
                       key={u.id}
-                      onClick={() => {
-                        if (tab === "dm") {
-                          setSelectedUsers([{ id: u.id, full_name: u.full_name }]);
-                        } else {
-                          setSelectedUsers((prev) => [...prev, { id: u.id, full_name: u.full_name }]);
-                        }
-                        setSearch("");
-                      }}
-                      className="w-full text-left px-3 py-2 hover:bg-surface text-[13px] flex items-center gap-2 border-b border-border last:border-0"
+                      onClick={() => toggleUser(u)}
+                      className={`w-full text-left px-3 py-2.5 text-[13px] flex items-center gap-2.5 border-b border-border last:border-0 transition-colors ${
+                        isSelected ? "bg-blue/5" : "hover:bg-surface"
+                      }`}
                     >
-                      <div className="w-7 h-7 rounded-full bg-blue flex items-center justify-center text-[10px] font-bold text-white shrink-0">
-                        {u.full_name?.[0]?.toUpperCase() ?? "?"}
+                      {/* Checkbox for group, radio for DM */}
+                      <div className={`w-4 h-4 rounded${tab === "dm" ? "-full" : ""} border-2 flex items-center justify-center shrink-0 ${
+                        isSelected ? "border-blue bg-blue" : "border-gray-300"
+                      }`}>
+                        {isSelected && (
+                          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                            <path d="M2 5L4 7L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        )}
                       </div>
-                      <div>
-                        <div className="font-medium text-txt">{u.full_name}</div>
-                        <div className="text-[11px] text-txt-light">{u.crm_email || u.personal_email}</div>
+                      {u.profile_image_url ? (
+                        <img src={u.profile_image_url} alt="" className="w-7 h-7 rounded-full object-cover shrink-0" />
+                      ) : (
+                        <div className="w-7 h-7 rounded-full bg-blue flex items-center justify-center text-[10px] font-bold text-white shrink-0">
+                          {u.full_name?.[0]?.toUpperCase() ?? "?"}
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <div className="font-medium text-txt truncate">{u.full_name}</div>
+                        <div className="text-[11px] text-txt-light truncate">{u.email} &middot; <span className="capitalize">{u.role?.replace(/_/g, " ")}</span></div>
                       </div>
                     </button>
-                  ))}
-                </div>
-              )}
+                  );
+                })}
+              </div>
             </>
           )}
 

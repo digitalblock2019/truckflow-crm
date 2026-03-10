@@ -709,6 +709,14 @@ export function useUserSearch(q: string) {
   });
 }
 
+export function useChatUsers(search?: string) {
+  const qs = search ? `?search=${encodeURIComponent(search)}` : "";
+  return useQuery({
+    queryKey: ["chat-users", search || ""],
+    queryFn: () => apiFetch<{ id: string; full_name: string; email: string; role: string; profile_image_url: string | null }[]>(`/api/chat/users${qs}`),
+  });
+}
+
 export function usePresence() {
   return useQuery({
     queryKey: ["presence"],

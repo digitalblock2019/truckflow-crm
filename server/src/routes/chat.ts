@@ -43,4 +43,7 @@ router.post('/conversations/:id/attachments', (req, res) => ctrl.uploadAttachmen
 // Presence
 router.get('/presence', (req, res) => ctrl.getPresence(req, res));
 
+// Users (for chat user picker)
+router.get('/users', (req, res) => ctrl.listUsers(req, res));
+
 export default router;

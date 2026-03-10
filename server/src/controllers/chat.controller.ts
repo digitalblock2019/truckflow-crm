@@ -127,4 +127,9 @@ export class ChatController {
     const result = svc.getPresence();
     res.json(result);
   }
+
+  async listUsers(req: Request, res: Response) {
+    const result = await svc.listUsers(req.query.search as string);
+    res.json(result);
+  }
 }

@@ -554,4 +554,22 @@ export class ChatService {
   getPresence() {
     return { online: getOnlineUsers() };
   }
+
+  // ── List active users (for chat user picker) ───────────────────────
+  async listUsers(search?: string) {
+    const conditions = ['is_active = TRUE'];
+    const params: any[] = [];
+    let idx = 1;
+    if (search) {
+      conditions.push(`(full_name ILIKE $${idx} OR email ILIKE $${idx})`);
+      params.push(`%${search}%`);
+      idx++;
+    }
+    const data = await query(
+      `SELECT id, full_name, email, role, profile_image_url, last_seen_at
+       FROM users WHERE ${conditions.join(' AND ')} ORDER BY full_name LIMIT 50`,
+      params
+    );
+    return data.rows;
+  }
 }

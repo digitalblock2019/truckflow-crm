@@ -8,7 +8,7 @@ import {
   useAddMembers,
   useRemoveMember,
   usePromoteMember,
-  useUserSearch,
+  useChatUsers,
 } from "@/lib/hooks";
 import { useChatStore } from "@/lib/chatStore";
 import type { Conversation } from "@/types";
@@ -24,7 +24,7 @@ export default function GroupSettingsModal({ conversation: c, userId, onClose }:
   const [description, setDescription] = useState(c.description ?? "");
   const [addSearch, setAddSearch] = useState("");
   const { data: members } = useConversationMembers(c.id);
-  const { data: searchResults } = useUserSearch(addSearch);
+  const { data: allChatUsers } = useChatUsers();
   const updateConvo = useUpdateConversation();
   const deleteConvo = useDeleteConversation();
   const addMembers = useAddMembers();
@@ -34,7 +34,12 @@ export default function GroupSettingsModal({ conversation: c, userId, onClose }:
 
   const isAdmin = c.is_admin;
   const memberIds = new Set((members ?? []).map((m) => m.user_id));
-  const searchUsers = (searchResults?.data ?? []).filter((u) => !memberIds.has(u.id));
+  const searchUsers = (allChatUsers ?? []).filter((u) => {
+    if (memberIds.has(u.id)) return false;
+    if (!addSearch) return true;
+    const q = addSearch.toLowerCase();
+    return u.full_name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
+  });
 
   const handleSave = () => {
     updateConvo.mutate({ id: c.id, name, description }, { onSuccess: onClose });

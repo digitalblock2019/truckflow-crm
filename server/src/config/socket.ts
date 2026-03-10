@@ -128,8 +128,9 @@ export function getOnlineUsers(): string[] {
 }
 
 export function joinConversationRoom(conversationId: string, userId: string) {
+  if (!io) return;
   const sockets = presenceMap.get(userId);
-  if (sockets && io) {
+  if (sockets) {
     for (const socketId of sockets) {
       const socket = io.sockets.sockets.get(socketId);
       socket?.join(`conv:${conversationId}`);
