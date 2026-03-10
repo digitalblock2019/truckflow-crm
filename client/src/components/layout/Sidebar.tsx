@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuthStore } from "@/lib/auth";
 import { useMe } from "@/lib/hooks";
+import { useChatStore } from "@/lib/chatStore";
 
 interface NavItem {
   href: string;
@@ -55,6 +56,15 @@ export default function Sidebar() {
   const { data: me } = useMe();
   const role = user?.role ?? "viewer";
   const profileImageUrl = (me as Record<string, unknown> | undefined)?.profile_image_url as string | undefined;
+  const totalUnread = useChatStore((s) => s.totalUnread);
+
+  // Dynamically set badge on Team Chat
+  const dynamicSections = sections.map((section) => ({
+    ...section,
+    items: section.items.map((item) =>
+      item.href === "/chat" ? { ...item, badge: totalUnread } : item
+    ),
+  }));
 
   return (
     <aside className="w-[220px] bg-navy flex flex-col shrink-0 h-screen sticky top-0">
@@ -68,7 +78,7 @@ export default function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-2">
-        {sections.map((section) => {
+        {dynamicSections.map((section) => {
           const visibleItems = section.items.filter((item) => {
             if (item.adminOnly && role !== "admin") return false;
             if (item.supervisorOnly && role !== "admin" && role !== "supervisor") return false;

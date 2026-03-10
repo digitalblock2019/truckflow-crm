@@ -161,16 +161,43 @@ export interface Shipper {
   created_at: string;
 }
 
+export interface ConversationParticipant {
+  id: string;
+  full_name: string;
+  profile_image_url: string | null;
+  last_seen_at: string | null;
+}
+
 export interface Conversation {
   id: string;
   type: "announcement" | "group" | "direct";
   name: string | null;
+  description: string | null;
   created_by: string;
+  is_admin: boolean;
+  is_pinned: boolean;
   last_message_at: string | null;
   last_message_preview: string | null;
   unread_count: number;
   participant_count: number;
-  participants?: string[];
+  participants: ConversationParticipant[];
+  dm_partner?: ConversationParticipant;
+}
+
+export interface ChatAttachment {
+  id: string;
+  message_id: string;
+  file_name: string;
+  file_path: string;
+  file_size_bytes: number;
+  mime_type: string;
+  created_at: string;
+}
+
+export interface ChatReaction {
+  emoji: string;
+  user_id: string;
+  user_name: string;
 }
 
 export interface ChatMessage {
@@ -178,9 +205,27 @@ export interface ChatMessage {
   conversation_id: string;
   sender_id: string;
   sender_name: string | null;
-  content: string;
+  sender_avatar: string | null;
+  sender_role: string | null;
+  content: string | null;
   reply_to_id: string | null;
+  reply_to: { id: string; content: string; sender_name: string } | null;
+  is_deleted: boolean;
+  edited_at: string | null;
   created_at: string;
+  attachments: ChatAttachment[];
+  reactions: ChatReaction[];
+}
+
+export interface ConversationMember {
+  user_id: string;
+  is_admin: boolean;
+  joined_at: string;
+  full_name: string;
+  email: string;
+  role: string;
+  profile_image_url: string | null;
+  last_seen_at: string | null;
 }
 
 export interface AuditLogEntry {

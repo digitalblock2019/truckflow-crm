@@ -15,6 +15,8 @@ import type {
   InvoiceClient,
   Conversation,
   ChatMessage,
+  ChatAttachment,
+  ConversationMember,
   AuditLogEntry,
   Setting,
   LeaveRequest,
@@ -484,12 +486,19 @@ export function useConversations() {
   });
 }
 
-export function useMessages(conversationId: string, cursor?: string) {
-  const qs = cursor ? `?cursor=${cursor}` : "";
+export function useMessages(conversationId: string) {
+  return useQuery({
+    queryKey: ["messages", conversationId],
+    queryFn: () => apiFetch<{ messages: ChatMessage[]; nextCursor: string | null }>(`/api/chat/conversations/${conversationId}/messages`),
+    enabled: !!conversationId,
+  });
+}
+
+export function useOlderMessages(conversationId: string, cursor: string | null) {
   return useQuery({
     queryKey: ["messages", conversationId, cursor],
-    queryFn: () => apiFetch<{ messages: ChatMessage[]; nextCursor: string | null }>(`/api/chat/conversations/${conversationId}/messages${qs}`),
-    enabled: !!conversationId,
+    queryFn: () => apiFetch<{ messages: ChatMessage[]; nextCursor: string | null }>(`/api/chat/conversations/${conversationId}/messages?cursor=${cursor}`),
+    enabled: !!conversationId && !!cursor,
   });
 }
 
@@ -511,9 +520,200 @@ export function useSendMessage() {
 export function useCreateConversation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { type: string; name?: string; participant_ids?: string[] }) =>
+    mutationFn: (data: { type: string; name?: string; description?: string; member_ids?: string[] }) =>
       apiFetch<Conversation>("/api/chat/conversations", { method: "POST", body: JSON.stringify(data) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["conversations"] }),
+  });
+}
+
+export function useEditMessage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationId, messageId, content }: { conversationId: string; messageId: string; content: string }) =>
+      apiFetch(`/api/chat/conversations/${conversationId}/messages/${messageId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ content }),
+      }),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["messages", vars.conversationId] });
+    },
+  });
+}
+
+export function useDeleteMessage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationId, messageId }: { conversationId: string; messageId: string }) =>
+      apiFetch(`/api/chat/conversations/${conversationId}/messages/${messageId}`, { method: "DELETE" }),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["messages", vars.conversationId] });
+    },
+  });
+}
+
+export function useAddReaction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationId, messageId, emoji }: { conversationId: string; messageId: string; emoji: string }) =>
+      apiFetch(`/api/chat/conversations/${conversationId}/messages/${messageId}/reactions`, {
+        method: "POST",
+        body: JSON.stringify({ emoji }),
+      }),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["messages", vars.conversationId] });
+    },
+  });
+}
+
+export function useRemoveReaction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationId, messageId, emoji }: { conversationId: string; messageId: string; emoji: string }) =>
+      apiFetch(`/api/chat/conversations/${conversationId}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`, { method: "DELETE" }),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["messages", vars.conversationId] });
+    },
+  });
+}
+
+export function useUpdateConversation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string; name?: string; description?: string }) =>
+      apiFetch(`/api/chat/conversations/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["conversations"] }),
+  });
+}
+
+export function useDeleteConversation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch(`/api/chat/conversations/${id}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["conversations"] }),
+  });
+}
+
+export function useConversationMembers(conversationId: string) {
+  return useQuery({
+    queryKey: ["conversation-members", conversationId],
+    queryFn: () => apiFetch<ConversationMember[]>(`/api/chat/conversations/${conversationId}/members`),
+    enabled: !!conversationId,
+  });
+}
+
+export function useAddMembers() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationId, member_ids }: { conversationId: string; member_ids: string[] }) =>
+      apiFetch(`/api/chat/conversations/${conversationId}/members`, {
+        method: "POST",
+        body: JSON.stringify({ member_ids }),
+      }),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["conversation-members", vars.conversationId] });
+      qc.invalidateQueries({ queryKey: ["conversations"] });
+    },
+  });
+}
+
+export function useRemoveMember() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationId, userId }: { conversationId: string; userId: string }) =>
+      apiFetch(`/api/chat/conversations/${conversationId}/members/${userId}`, { method: "DELETE" }),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["conversation-members", vars.conversationId] });
+      qc.invalidateQueries({ queryKey: ["conversations"] });
+    },
+  });
+}
+
+export function usePromoteMember() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationId, userId }: { conversationId: string; userId: string }) =>
+      apiFetch(`/api/chat/conversations/${conversationId}/members/${userId}/promote`, { method: "PATCH" }),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["conversation-members", vars.conversationId] });
+    },
+  });
+}
+
+export function useTogglePin() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (conversationId: string) =>
+      apiFetch(`/api/chat/conversations/${conversationId}/pin`, { method: "PATCH" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["conversations"] }),
+  });
+}
+
+export function useSearchConversations(q: string) {
+  return useQuery({
+    queryKey: ["conversation-search", q],
+    queryFn: () => apiFetch<Conversation[]>(`/api/chat/conversations/search?q=${encodeURIComponent(q)}`),
+    enabled: q.length >= 2,
+  });
+}
+
+export function useUploadChatFile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationId, file_name, file_path, file_size_bytes, mime_type, content }: {
+      conversationId: string; file_name: string; file_path: string;
+      file_size_bytes: number; mime_type: string; content?: string;
+    }) =>
+      apiFetch(`/api/chat/conversations/${conversationId}/attachments`, {
+        method: "POST",
+        body: JSON.stringify({ file_name, file_path, file_size_bytes, mime_type, content }),
+      }),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["messages", vars.conversationId] });
+      qc.invalidateQueries({ queryKey: ["conversations"] });
+    },
+  });
+}
+
+export function useAllConversations() {
+  return useQuery({
+    queryKey: ["all-conversations"],
+    queryFn: () => apiFetch<any[]>("/api/chat/conversations/all"),
+  });
+}
+
+export function useAllMessages(conversationId: string) {
+  return useQuery({
+    queryKey: ["all-messages", conversationId],
+    queryFn: () => apiFetch<{ messages: ChatMessage[]; nextCursor: string | null }>(`/api/chat/conversations/all/${conversationId}/messages`),
+    enabled: !!conversationId,
+  });
+}
+
+export function useMarkRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (conversationId: string) =>
+      apiFetch(`/api/chat/conversations/${conversationId}/read`, { method: "PATCH" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["conversations"] });
+    },
+  });
+}
+
+export function useUserSearch(q: string) {
+  return useQuery({
+    queryKey: ["user-search", q],
+    queryFn: () => apiFetch<PaginatedResponse<Employee>>(`/api/employees?search=${encodeURIComponent(q)}&limit=20`),
+    enabled: q.length >= 2,
+  });
+}
+
+export function usePresence() {
+  return useQuery({
+    queryKey: ["presence"],
+    queryFn: () => apiFetch<{ online: string[] }>("/api/chat/presence"),
+    refetchInterval: 60000,
   });
 }
 

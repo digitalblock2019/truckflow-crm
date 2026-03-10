@@ -9,7 +9,10 @@ import { errorHandler } from './middleware/errorHandler';
 const app = express();
 
 app.use(helmet());
-app.use(cors());
+app.use(cors({
+  origin: process.env.APP_URL || 'http://localhost:3001',
+  credentials: true,
+}));
 app.use(morgan('dev'));
 // Skip JSON parsing for Stripe webhook (needs raw body for signature verification)
 app.use((req, res, next) => {
