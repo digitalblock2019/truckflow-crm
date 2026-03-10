@@ -50,6 +50,7 @@ export default function InvoicesPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [sendPrompt, setSendPrompt] = useState<{ id: string; number: string } | null>(null);
+  const [paidPrompt, setPaidPrompt] = useState<{ id: string; number: string; amount: string; client: string } | null>(null);
   const canCreate = useAuthStore((s) => s.canCreateInvoice());
 
   const { data, isLoading } = useInvoices({ status: tab, page, limit: 20 });
@@ -110,7 +111,7 @@ export default function InvoicesPage() {
                 </Button>
               )}
               {(r.status === "sent" || r.status === "overdue") && (
-                <Button size="sm" variant="accent" onClick={(e) => { e.stopPropagation(); invoiceAction.mutate({ id: r.id, action: "mark-paid" }); }}>
+                <Button size="sm" variant="accent" onClick={(e) => { e.stopPropagation(); setPaidPrompt({ id: r.id, number: r.invoice_number, amount: fmtCurrency(r.total_amount, r.currency), client: r.client_name ?? r.recipient_email }); }}>
                   Mark Paid
                 </Button>
               )}
@@ -218,7 +219,7 @@ export default function InvoicesPage() {
                     </Button>
                   )}
                   {(inv.status === "sent" || inv.status === "overdue" || inv.status === "viewed") && (
-                    <Button size="sm" variant="accent" onClick={() => { invoiceAction.mutate({ id: inv.id, action: "mark-paid" }); setSelectedId(null); }}>
+                    <Button size="sm" variant="accent" onClick={() => { setPaidPrompt({ id: inv.id, number: inv.invoice_number, amount: fmtCurrency(inv.total_amount, inv.currency), client: inv.recipient_name ?? inv.recipient_email }); }}>
                       Mark Paid
                     </Button>
                   )}
@@ -448,6 +449,39 @@ export default function InvoicesPage() {
           <Button onClick={handleCreate} disabled={createInvoice.isPending}>
             {createInvoice.isPending ? "Creating..." : "Create Invoice"}
           </Button>
+        </div>
+      </Modal>
+
+      {/* Mark Paid Confirmation */}
+      <Modal open={!!paidPrompt} onClose={() => setPaidPrompt(null)} title="Confirm Mark as Paid" width="420px">
+        <div className="text-center py-4">
+          <div className="text-3xl mb-3">&#x1F4B0;</div>
+          <p className="text-sm text-txt mb-1">
+            Mark <span className="font-semibold">{paidPrompt?.number}</span> as paid?
+          </p>
+          <p className="text-xs text-txt-light mb-1">
+            Client: <span className="font-semibold text-txt">{paidPrompt?.client}</span>
+          </p>
+          <p className="text-xs text-txt-light mb-6">
+            Amount: <span className="font-semibold text-txt font-mono">{paidPrompt?.amount}</span>
+          </p>
+          <div className="flex justify-center gap-3">
+            <Button variant="secondary" onClick={() => setPaidPrompt(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="accent"
+              onClick={() => {
+                if (paidPrompt) {
+                  invoiceAction.mutate({ id: paidPrompt.id, action: "mark-paid" });
+                  setSelectedId(null);
+                }
+                setPaidPrompt(null);
+              }}
+            >
+              Confirm Paid
+            </Button>
+          </div>
         </div>
       </Modal>
 
