@@ -104,7 +104,8 @@ export class EmailService {
     viewLink: string,
     _payLink?: string,
     logoUrl?: string,
-    companyName?: string
+    companyName?: string,
+    pdfBuffer?: Buffer
   ) {
     const formattedTotal = new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -172,7 +173,10 @@ export class EmailService {
         </p>
       </div>
     `;
-    await this.sendEmail(email, `Invoice ${invoiceNumber} — ${formattedTotal} due ${formattedDue}`, html, undefined, companyName);
+    const attachments = pdfBuffer
+      ? [{ filename: `${invoiceNumber}.pdf`, content: pdfBuffer }]
+      : undefined;
+    await this.sendEmail(email, `Invoice ${invoiceNumber} — ${formattedTotal} due ${formattedDue}`, html, attachments, companyName);
   }
 
   async sendInvoicePaidEmail(

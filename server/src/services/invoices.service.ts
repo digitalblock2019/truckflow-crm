@@ -233,7 +233,7 @@ export class InvoicesService {
     await query(`UPDATE invoices SET status='sent', sent_at=NOW(), updated_at=NOW() WHERE id=$1`, [id]);
     await query(`INSERT INTO invoice_activity (invoice_id, event_type, description, actor_id) VALUES ($1, 'sent', 'Invoice sent', $2)`, [id, userId]);
 
-    // Send email to recipient
+    // Send email to recipient with PDF attachment
     if (invoice.recipient_email) {
       try {
         const appUrl = process.env.APP_URL || 'https://www.truckflowcrm.com';
@@ -244,6 +244,17 @@ export class InvoicesService {
         const apiUrl = process.env.API_URL || 'https://api.truckflowcrm.com';
         const logoUrl = branding?.logo_file_path ? `${apiUrl}/api/invoice/branding/logo-image` : undefined;
         const companyName = branding?.company_name || undefined;
+
+        // Generate invoice PDF
+        let pdfBuffer: Buffer | undefined;
+        try {
+          const { InvoicePdfService } = await import('./invoice-pdf.service');
+          const pdfService = new InvoicePdfService();
+          pdfBuffer = await pdfService.generatePdf(id);
+          console.log(`[SendInvoice] PDF generated successfully: ${pdfBuffer.length} bytes`);
+        } catch (pdfErr: any) {
+          console.error('[SendInvoice] PDF generation failed, sending without attachment:', pdfErr?.message, pdfErr?.stack);
+        }
 
         const emailService = new EmailService();
         await emailService.sendInvoiceEmail(
@@ -256,7 +267,8 @@ export class InvoicesService {
           viewLink,
           stripeUrl || undefined,
           logoUrl,
-          companyName
+          companyName,
+          pdfBuffer
         );
       } catch (err) {
         console.error('[SendInvoice] Email send failed:', err);
@@ -297,8 +309,9 @@ export class InvoicesService {
         const { InvoicePdfService } = await import('./invoice-pdf.service');
         const pdfService = new InvoicePdfService();
         pdfBuffer = await pdfService.generatePdf(invoice.id);
-      } catch (pdfErr) {
-        console.error('[MarkPaid] PDF generation failed, sending without attachment:', pdfErr);
+        console.log(`[MarkPaid] PDF generated successfully: ${pdfBuffer.length} bytes`);
+      } catch (pdfErr: any) {
+        console.error('[MarkPaid] PDF generation failed, sending without attachment:', pdfErr?.message, pdfErr?.stack);
       }
 
       // 1. Email to recipient (trucker/client)
