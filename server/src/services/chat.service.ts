@@ -249,13 +249,15 @@ export class ChatService {
       [conversationId, preview]
     );
 
-    // Get sender info for the socket event
+    // Get sender info + conversation type for the socket event
     const sender = await query('SELECT full_name, profile_image_path FROM users WHERE id = $1', [userId]);
+    const convoType = await query('SELECT type FROM chat_conversations WHERE id = $1', [conversationId]);
     const avatarUrl = await resolveAvatar(sender.rows[0]?.profile_image_path);
     const enriched = {
       ...msg,
       sender_name: sender.rows[0]?.full_name,
       sender_avatar: avatarUrl,
+      conversation_type: convoType.rows[0]?.type || 'direct',
       attachments: [],
       reactions: [],
       reply_to: null,
