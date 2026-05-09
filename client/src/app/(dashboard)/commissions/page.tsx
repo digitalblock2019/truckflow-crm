@@ -90,6 +90,8 @@ export default function CommissionsPage() {
             loading={isLoading}
             page={page}
             totalPages={totalPages(data)}
+            total={data?.total}
+            pageSize={20}
             onPageChange={setPage}
           />
         </div>

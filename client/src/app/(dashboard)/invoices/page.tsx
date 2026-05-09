@@ -188,6 +188,8 @@ export default function InvoicesPage() {
             loading={isLoading}
             page={page}
             totalPages={totalPages(data)}
+            total={data?.total}
+            pageSize={20}
             onPageChange={setPage}
             onRowClick={(row) => { setSelectedId(row.id); setEditMode(false); }}
           />

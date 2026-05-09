@@ -70,6 +70,8 @@ export default function AuditLogPage() {
           loading={isLoading}
           page={page}
           totalPages={totalPages(data)}
+          total={data?.total}
+          pageSize={30}
           onPageChange={setPage}
           toolbar={
             <div className="flex gap-2 items-end flex-wrap">
