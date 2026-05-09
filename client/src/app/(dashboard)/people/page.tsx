@@ -43,6 +43,15 @@ const payTypes = [
   { value: "contractor_rate", label: "Contractor Rate" },
 ];
 
+function fmtDateOnly(dateStr: string) {
+  // Postgres DATE columns serialize as ISO strings ("2026-05-08" or "2026-05-08T00:00:00Z").
+  // new Date("2026-05-08") parses as UTC midnight, which shifts back a day in any negative-offset timezone.
+  // Append T00:00:00 to force local-timezone parsing.
+  const s = String(dateStr);
+  const datePart = s.includes("T") ? s.split("T")[0] : s.slice(0, 10);
+  return new Date(datePart + "T00:00:00").toLocaleDateString();
+}
+
 const commissionTypes = [
   { value: "", label: "None" },
   { value: "percentage", label: "Percentage" },
@@ -57,7 +66,7 @@ const emptyForm = {
   department: "",
   employee_type: "sales_agent",
   start_date: "",
-  pay_type: "salary_only",
+  pay_type: "salary_plus_commission",
   base_salary_pkr_paisa: "",
   commission_type: "",
   commission_value: "",
@@ -102,7 +111,7 @@ export default function PeoplePage() {
     { key: "crm_email", header: "CRM Email", render: (r) => <span>{r.crm_email ?? "—"}</span> },
     { key: "employee_type", header: "Type", render: (r) => <Badge color="blue">{employeeTypeLabel(r.employee_type)}</Badge> },
     { key: "employment_status", header: "Status", render: (r) => <Badge color={statusColors[r.employment_status ?? ""] ?? "gray"}>{r.employment_status ?? "—"}</Badge> },
-    { key: "start_date", header: "Start Date", render: (r) => r.start_date ? new Date(r.start_date).toLocaleDateString() : "—" },
+    { key: "start_date", header: "Start Date", render: (r) => r.start_date ? fmtDateOnly(r.start_date) : "—" },
     { key: "phone", header: "Phone" },
   ];
 
@@ -276,7 +285,7 @@ export default function PeoplePage() {
               </div>
               <div>
                 <div className="text-[10px] font-mono text-txt-light uppercase">Start Date</div>
-                <div className="mt-0.5 text-txt">{selectedEmployee.start_date ? new Date(selectedEmployee.start_date).toLocaleDateString() : "—"}</div>
+                <div className="mt-0.5 text-txt">{selectedEmployee.start_date ? fmtDateOnly(selectedEmployee.start_date) : "—"}</div>
               </div>
               <div>
                 <div className="text-[10px] font-mono text-txt-light uppercase">Department</div>
