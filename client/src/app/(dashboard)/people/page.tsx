@@ -91,6 +91,7 @@ export default function PeoplePage() {
   const updateCrm = useUpdateCrmAccount();
   const resetPw = useAdminResetPassword();
   const [resetMsg, setResetMsg] = useState<string | null>(null);
+  const [formErr, setFormErr] = useState<string | null>(null);
   const terminateEmp = useTerminateEmployee();
   const reinstateEmp = useReinstateEmployee();
 
@@ -198,10 +199,13 @@ export default function PeoplePage() {
 
     if (!hasEmpChanges && !hasCrmChanges) { setEditing(false); return; }
 
+    setFormErr(null);
+
     const onDone = (updatedEmp?: any) => {
       setEditing(false);
       if (updatedEmp) setSelectedEmployee(updatedEmp);
     };
+    const onError = (err: any) => setFormErr(err?.message || "Save failed");
 
     if (hasEmpChanges) {
       updateEmp.mutate(
@@ -209,15 +213,16 @@ export default function PeoplePage() {
         {
           onSuccess: (updatedEmp) => {
             if (hasCrmChanges) {
-              updateCrm.mutate({ id: selectedEmployee.id, ...crmUpdates }, { onSuccess: onDone });
+              updateCrm.mutate({ id: selectedEmployee.id, ...crmUpdates }, { onSuccess: onDone, onError });
             } else {
               onDone(updatedEmp);
             }
           },
+          onError,
         }
       );
     } else if (hasCrmChanges) {
-      updateCrm.mutate({ id: selectedEmployee.id, ...crmUpdates }, { onSuccess: onDone });
+      updateCrm.mutate({ id: selectedEmployee.id, ...crmUpdates }, { onSuccess: onDone, onError });
     }
   };
 
@@ -409,8 +414,13 @@ export default function PeoplePage() {
               </div>
             )}
 
+            {formErr && (
+              <div className="mt-4 bg-red-50 border border-red-200 text-red-700 text-xs px-3 py-2 rounded">
+                {formErr}
+              </div>
+            )}
             <div className="flex justify-end gap-2 mt-5">
-              <Button variant="secondary" onClick={() => setEditing(false)}>Cancel</Button>
+              <Button variant="secondary" onClick={() => { setEditing(false); setFormErr(null); }}>Cancel</Button>
               <Button onClick={handleUpdate} disabled={updateEmp.isPending || updateCrm.isPending}>
                 {updateEmp.isPending || updateCrm.isPending ? "Saving..." : "Save Changes"}
               </Button>
