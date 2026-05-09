@@ -228,7 +228,15 @@ export class ChatService {
   }
 
   // ── Send message ────────────────────────────────────────────────────
-  async sendMessage(conversationId: string, content: string | null, userId: string, replyToId?: string) {
+  // skipBroadcast lets the caller delay the message:new emit so that follow-up
+  // work (e.g. attaching a file) can be persisted before clients refetch.
+  async sendMessage(
+    conversationId: string,
+    content: string | null,
+    userId: string,
+    replyToId?: string,
+    opts: { skipBroadcast?: boolean } = {}
+  ) {
     // Verify membership
     const member = await query(
       'SELECT id FROM chat_members WHERE conversation_id = $1 AND user_id = $2 AND left_at IS NULL',
@@ -290,7 +298,9 @@ export class ChatService {
       }
     }
 
-    emitToConversation(conversationId, 'message:new', enriched);
+    if (!opts.skipBroadcast) {
+      emitToConversation(conversationId, 'message:new', enriched);
+    }
     return enriched;
   }
 
@@ -545,7 +555,12 @@ export class ChatService {
     const storagePath = `chat/${conversationId}/${Date.now()}-${userId.slice(0, 8)}${ext}`;
     await uploadFile(storagePath, data.file.buffer, data.file.mimetype, CHAT_ATTACHMENT_BUCKET);
 
-    const msg = await this.sendMessage(conversationId, data.content, userId);
+    // Defer the message:new broadcast until the attachment row is persisted.
+    // Without this, the broadcast fires here, clients invalidate-and-refetch,
+    // and the refetch can race ahead of the INSERT below — returning the
+    // message with an empty attachments array. The sender then has to leave
+    // and re-enter the conversation to see their own image.
+    const msg = await this.sendMessage(conversationId, data.content, userId, undefined, { skipBroadcast: true });
 
     const result = await query(
       `INSERT INTO chat_message_attachments (message_id, file_name, file_path, file_size_bytes, mime_type)
@@ -554,10 +569,12 @@ export class ChatService {
     );
 
     const attachment = result.rows[0];
-    // Resolve to signed URL before returning/emitting so clients can render immediately
     try { attachment.file_path = await getSignedUrl(storagePath, 3600, CHAT_ATTACHMENT_BUCKET); } catch {}
 
-    emitToConversation(conversationId, 'message:attachment', { messageId: msg.id, attachment });
+    // Now safe to broadcast — attachment row is in the DB so any refetch
+    // triggered by message:new will return the message with attachments populated.
+    const enrichedWithAttachment = { ...msg, attachments: [attachment] };
+    emitToConversation(conversationId, 'message:new', enrichedWithAttachment);
     return { message: msg, attachment };
   }
 
