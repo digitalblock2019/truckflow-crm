@@ -7,9 +7,10 @@ import Picker from "@emoji-mart/react";
 interface Props {
   onSelect: (emoji: string) => void;
   onClose: () => void;
+  align?: "left" | "right"; // which edge to anchor — "right" expands the picker leftward
 }
 
-export default function EmojiPicker({ onSelect, onClose }: Props) {
+export default function EmojiPicker({ onSelect, onClose, align = "left" }: Props) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -21,7 +22,7 @@ export default function EmojiPicker({ onSelect, onClose }: Props) {
   }, [onClose]);
 
   return (
-    <div ref={ref} className="absolute bottom-full mb-2 z-50">
+    <div ref={ref} className={`absolute bottom-full mb-2 z-50 ${align === "right" ? "right-0" : "left-0"}`}>
       <Picker
         data={data}
         onEmojiSelect={(emoji: any) => onSelect(emoji.native)}

@@ -180,6 +180,7 @@ export default function MessageBubble({ message: m, isOwn, userId, conversationI
                 <EmojiPicker
                   onSelect={handleReaction}
                   onClose={() => setShowEmojiPicker(false)}
+                  align={isOwn ? "right" : "left"}
                 />
               )}
             </div>
