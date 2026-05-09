@@ -1,7 +1,10 @@
+import path from 'path';
 import { query } from '../config/database';
 import { AppError } from '../utils/AppError';
-import { getSignedUrl } from '../config/storage';
+import { getSignedUrl, uploadFile } from '../config/storage';
 import { emitToConversation, emitToUser, getOnlineUsers, joinConversationRoom } from '../config/socket';
+
+const CHAT_ATTACHMENT_BUCKET = 'trucker-documents'; // reuse the existing bucket; chat/ prefix isolates files
 
 // Convert profile_image_path to signed URL, returns null on failure
 async function resolveAvatar(path: string | null): Promise<string | null> {
@@ -166,6 +169,12 @@ export class ChatService {
          FROM chat_message_attachments WHERE message_id = ANY($1)`,
         [msgIds]
       );
+      // Resolve storage paths to signed URLs in parallel — clients render the URL directly
+      await Promise.all(attachments.rows.map(async (a: any) => {
+        if (a.file_path && !a.file_path.startsWith('http')) {
+          try { a.file_path = await getSignedUrl(a.file_path, 3600, CHAT_ATTACHMENT_BUCKET); } catch {}
+        }
+      }));
       const attachMap: Record<string, any[]> = {};
       for (const a of attachments.rows) {
         if (!attachMap[a.message_id]) attachMap[a.message_id] = [];
@@ -520,17 +529,34 @@ export class ChatService {
   }
 
   // ── Upload attachment ───────────────────────────────────────────────
-  async uploadAttachment(conversationId: string, messageData: any, userId: string) {
-    const msg = await this.sendMessage(conversationId, messageData.content || null, userId);
+  async uploadAttachment(
+    conversationId: string,
+    data: { file: { buffer: Buffer; originalname: string; size: number; mimetype: string }; content: string | null },
+    userId: string
+  ) {
+    // Verify membership before doing anything (sendMessage also checks, but fail fast on the upload path)
+    const member = await query(
+      'SELECT id FROM chat_members WHERE conversation_id = $1 AND user_id = $2 AND left_at IS NULL',
+      [conversationId, userId]
+    );
+    if (!member.rows.length) throw new AppError('Not a member of this conversation', 403, 'FORBIDDEN');
+
+    const ext = path.extname(data.file.originalname);
+    const storagePath = `chat/${conversationId}/${Date.now()}-${userId.slice(0, 8)}${ext}`;
+    await uploadFile(storagePath, data.file.buffer, data.file.mimetype, CHAT_ATTACHMENT_BUCKET);
+
+    const msg = await this.sendMessage(conversationId, data.content, userId);
 
     const result = await query(
       `INSERT INTO chat_message_attachments (message_id, file_name, file_path, file_size_bytes, mime_type)
        VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-      [msg.id, messageData.file_name, messageData.file_path || `chat/${conversationId}/${messageData.file_name}`,
-       messageData.file_size_bytes, messageData.mime_type]
+      [msg.id, data.file.originalname, storagePath, data.file.size, data.file.mimetype]
     );
 
     const attachment = result.rows[0];
+    // Resolve to signed URL before returning/emitting so clients can render immediately
+    try { attachment.file_path = await getSignedUrl(storagePath, 3600, CHAT_ATTACHMENT_BUCKET); } catch {}
+
     emitToConversation(conversationId, 'message:attachment', { messageId: msg.id, attachment });
     return { message: msg, attachment };
   }

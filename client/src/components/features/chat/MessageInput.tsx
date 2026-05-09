@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useSendMessage, useEditMessage } from "@/lib/hooks";
+import { useSendMessage, useEditMessage, useUploadChatFile } from "@/lib/hooks";
 import { useChatStore } from "@/lib/chatStore";
 import { getSocket } from "@/lib/socket";
 import EmojiPicker from "./EmojiPicker";
@@ -14,12 +14,16 @@ interface Props {
 export default function MessageInput({ conversationId, canPost }: Props) {
   const [text, setText] = useState("");
   const [showEmoji, setShowEmoji] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [uploadErr, setUploadErr] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTypingRef = useRef(false);
 
   const sendMsg = useSendMessage();
   const editMsg = useEditMessage();
+  const uploadFile = useUploadChatFile();
   const replyTo = useChatStore((s) => s.replyTo);
   const editingMessage = useChatStore((s) => s.editingMessage);
   const setReplyTo = useChatStore((s) => s.setReplyTo);
@@ -64,18 +68,58 @@ export default function MessageInput({ conversationId, canPost }: Props) {
 
   const handleSend = () => {
     const content = text.trim();
-    if (!content) return;
 
     if (editingMessage) {
+      if (!content) return;
       editMsg.mutate({ conversationId, messageId: editingMessage.id, content });
       setEditingMessage(null);
-    } else {
-      sendMsg.mutate({ conversationId, content, reply_to_id: replyTo?.id });
-      setReplyTo(null);
+      setText("");
+      broadcastTyping(false);
+      textareaRef.current?.focus();
+      return;
     }
+
+    if (pendingFile) {
+      setUploadErr(null);
+      uploadFile.mutate(
+        { conversationId, file: pendingFile, content: content || undefined },
+        {
+          onSuccess: () => {
+            setPendingFile(null);
+            setText("");
+            setReplyTo(null);
+            broadcastTyping(false);
+            textareaRef.current?.focus();
+          },
+          onError: (err: unknown) => {
+            setUploadErr(err instanceof Error ? err.message : "Upload failed");
+          },
+        }
+      );
+      return;
+    }
+
+    if (!content) return;
+    sendMsg.mutate({ conversationId, content, reply_to_id: replyTo?.id });
+    setReplyTo(null);
     setText("");
     broadcastTyping(false);
     textareaRef.current?.focus();
+  };
+
+  const handleFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) {
+      // 25 MB cap matches server-side multer limit
+      if (f.size > 25 * 1024 * 1024) {
+        setUploadErr("File too large (max 25 MB)");
+        e.target.value = "";
+        return;
+      }
+      setUploadErr(null);
+      setPendingFile(f);
+    }
+    e.target.value = "";
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -121,6 +165,27 @@ export default function MessageInput({ conversationId, canPost }: Props) {
         </div>
       )}
 
+      {/* Pending attachment preview */}
+      {pendingFile && (
+        <div className="px-5 pt-2 flex items-center gap-2">
+          <div className="flex-1 px-3 py-1.5 bg-blue/5 border border-blue/20 rounded-lg text-[11px] text-txt flex items-center gap-2">
+            <span>{"\u{1F4CE}"}</span>
+            <span className="truncate flex-1">{pendingFile.name}</span>
+            <span className="text-txt-light text-[10px] shrink-0">{(pendingFile.size / 1024).toFixed(0)} KB</span>
+          </div>
+          <button onClick={() => setPendingFile(null)} className="text-txt-light hover:text-txt text-[16px]">&times;</button>
+        </div>
+      )}
+
+      {/* Upload error */}
+      {uploadErr && (
+        <div className="px-5 pt-2">
+          <div className="bg-red-50 border border-red-200 text-red-700 text-[11px] px-3 py-1.5 rounded">
+            {uploadErr}
+          </div>
+        </div>
+      )}
+
       {/* Input row */}
       <div className="px-5 py-3 flex items-end gap-2">
         {/* Emoji button */}
@@ -143,13 +208,30 @@ export default function MessageInput({ conversationId, canPost }: Props) {
           )}
         </div>
 
+        {/* Attach button — disabled while editing since edits are content-only */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          onChange={handleFilePick}
+        />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={!!editingMessage}
+          title="Attach file"
+          className="p-2 rounded-lg hover:bg-surface text-txt-light hover:text-txt transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {"\u{1F4CE}"}
+        </button>
+
         {/* Textarea */}
         <textarea
           ref={textareaRef}
           value={text}
           onChange={(e) => handleChange(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Type a message..."
+          placeholder={pendingFile ? "Add a message (optional)..." : "Type a message..."}
           rows={1}
           className="flex-1 px-3 py-2 border border-border rounded-lg text-[13px] resize-none focus:outline-none focus:border-blue-light leading-relaxed"
           style={{ maxHeight: 120 }}
@@ -158,10 +240,10 @@ export default function MessageInput({ conversationId, canPost }: Props) {
         {/* Send button */}
         <button
           onClick={handleSend}
-          disabled={!text.trim()}
+          disabled={(!text.trim() && !pendingFile) || uploadFile.isPending}
           className="px-4 py-2 bg-blue text-white text-[13px] font-medium rounded-lg hover:bg-blue-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
         >
-          {editingMessage ? "Save" : "Send"}
+          {uploadFile.isPending ? "Sending..." : editingMessage ? "Save" : "Send"}
         </button>
       </div>
     </div>

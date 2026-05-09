@@ -660,14 +660,25 @@ export function useSearchConversations(q: string) {
 export function useUploadChatFile() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ conversationId, file_name, file_path, file_size_bytes, mime_type, content }: {
-      conversationId: string; file_name: string; file_path: string;
-      file_size_bytes: number; mime_type: string; content?: string;
-    }) =>
-      apiFetch(`/api/chat/conversations/${conversationId}/attachments`, {
+    mutationFn: async ({ conversationId, file, content }: {
+      conversationId: string; file: File; content?: string;
+    }) => {
+      const token = useAuthStore.getState().tokens?.access_token;
+      const formData = new FormData();
+      formData.append("file", file);
+      if (content) formData.append("content", content);
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+      const res = await fetch(`${apiUrl}/api/chat/conversations/${conversationId}/attachments`, {
         method: "POST",
-        body: JSON.stringify({ file_name, file_path, file_size_bytes, mime_type, content }),
-      }),
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ message: res.statusText }));
+        throw new Error(body?.error?.message || body?.message || "Upload failed");
+      }
+      return res.json();
+    },
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ["messages", vars.conversationId] });
       qc.invalidateQueries({ queryKey: ["conversations"] });

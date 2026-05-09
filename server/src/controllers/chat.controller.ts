@@ -101,8 +101,13 @@ export class ChatController {
   }
 
   async uploadAttachment(req: Request, res: Response) {
-    if (!req.body.file_name) throw new AppError('file_name required', 400, 'VALIDATION_ERROR');
-    const result = await svc.uploadAttachment(req.params.id as string, req.body, req.user!.id);
+    const file = (req as any).file as { buffer: Buffer; originalname: string; size: number; mimetype: string } | undefined;
+    if (!file) throw new AppError('file required', 400, 'VALIDATION_ERROR');
+    const result = await svc.uploadAttachment(
+      req.params.id as string,
+      { file, content: req.body?.content || null },
+      req.user!.id
+    );
     res.status(201).json(result);
   }
 
