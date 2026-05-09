@@ -82,6 +82,11 @@ export class EmployeesService {
 
     // Create CRM user if email provided
     if (data.crm_email) {
+      const conflict = await query('SELECT id FROM users WHERE email = $1', [data.crm_email]);
+      if (conflict.rows.length) {
+        throw new AppError('That email is already in use by another account', 409, 'EMAIL_IN_USE');
+      }
+
       const password = data.crm_password || crypto.randomBytes(8).toString('base64url').slice(0, 12);
       const passwordHash = await bcrypt.hash(password, 12);
       // Auto-derive CRM role from employee_type
@@ -288,6 +293,15 @@ export class EmployeesService {
 
     if (emp.rows[0].crm_user_id) {
       // Update existing CRM user
+      if (data.crm_email) {
+        const conflict = await query(
+          'SELECT id FROM users WHERE email = $1 AND id <> $2',
+          [data.crm_email, emp.rows[0].crm_user_id]
+        );
+        if (conflict.rows.length) {
+          throw new AppError('That email is already in use by another account', 409, 'EMAIL_IN_USE');
+        }
+      }
       const updates: string[] = [];
       const params: any[] = [];
       let idx = 1;
@@ -299,6 +313,12 @@ export class EmployeesService {
         await query(`UPDATE users SET ${updates.join(', ')} WHERE id = $${idx}`, params);
       }
     } else if (data.crm_email) {
+      // Block early on email conflict so we can return a clean 409 instead of a Postgres unique-violation 500
+      const conflict = await query('SELECT id FROM users WHERE email = $1', [data.crm_email]);
+      if (conflict.rows.length) {
+        throw new AppError('That email is already in use by another account', 409, 'EMAIL_IN_USE');
+      }
+
       // Create new CRM user for this employee. Auto-derive role from employee_type
       // if caller didn't supply one (matches the create-employee flow at line ~88).
       const typeToRole: Record<string, string> = {
