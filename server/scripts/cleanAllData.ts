@@ -7,14 +7,22 @@ dotenv.config();
 async function cleanAll() {
   console.log('=== TruckFlow Data Cleanup ===\n');
 
-  // 1. Find admin user to preserve
-  const adminResult = await query("SELECT id, email, full_name FROM users WHERE role = 'admin' LIMIT 1");
+  // 1. Find admin users to preserve — explicit whitelist by email
+  const PROTECTED_ADMIN_EMAILS = ['admin@truckflow.com', '83.mumair@gmail.com'];
+  const adminResult = await query(
+    "SELECT id, email, full_name FROM users WHERE role = 'admin' AND email = ANY($1::citext[])",
+    [PROTECTED_ADMIN_EMAILS]
+  );
   if (!adminResult.rows.length) {
-    console.error('No admin user found! Aborting.');
+    console.error('None of the protected admin emails were found! Aborting.');
+    console.error('Expected one of: ' + PROTECTED_ADMIN_EMAILS.join(', '));
     process.exit(1);
   }
-  const admin = adminResult.rows[0];
-  console.log(`Preserving admin: ${admin.full_name} (${admin.email})\n`);
+  const protectedAdmins = adminResult.rows;
+  const protectedIds = protectedAdmins.map((a) => a.id);
+  console.log('Preserving admins:');
+  protectedAdmins.forEach((a) => console.log(`  - ${a.full_name} (${a.email})`));
+  console.log('');
 
   // 2. Delete in dependency order (children first)
   const deletions = [
@@ -74,17 +82,17 @@ async function cleanAll() {
     // Shippers
     "DELETE FROM shippers",
 
-    // Refresh tokens (except admin's)
-    `DELETE FROM refresh_tokens WHERE user_id != '${admin.id}'`,
+    // Refresh tokens (except protected admins')
+    `DELETE FROM refresh_tokens WHERE user_id NOT IN (${protectedIds.map((id) => `'${id}'`).join(',')})`,
 
-    // Users (except admin) — must come before employees if users reference employees
-    `DELETE FROM users WHERE id != '${admin.id}'`,
+    // Users (except protected admins) — must come before employees if users reference employees
+    `DELETE FROM users WHERE id NOT IN (${protectedIds.map((id) => `'${id}'`).join(',')})`,
 
     // Employees
     "DELETE FROM employees",
 
-    // Clear admin's employee_id link since employees are gone
-    `UPDATE users SET employee_id = NULL WHERE id = '${admin.id}'`,
+    // Clear protected admins' employee_id links since employees are gone
+    `UPDATE users SET employee_id = NULL WHERE id IN (${protectedIds.map((id) => `'${id}'`).join(',')})`,
   ];
 
   for (const sql of deletions) {
@@ -150,7 +158,8 @@ async function cleanAll() {
   }
 
   console.log('\n=== Cleanup complete! ===');
-  console.log(`Admin user preserved: ${admin.email}`);
+  console.log('Admins preserved:');
+  protectedAdmins.forEach((a) => console.log(`  - ${a.email}`));
   process.exit(0);
 }
 
