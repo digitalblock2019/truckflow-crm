@@ -246,7 +246,7 @@ export default function TruckersPage() {
           <a href="/truckers" className="underline font-semibold">View All Truckers</a>
         </div>
       )}
-      <div className="flex-1 overflow-y-auto p-6 bg-surface">
+      <div className="flex-1 min-h-0 overflow-y-auto p-6 bg-surface">
         <DataGrid
           columns={columns}
           data={rows}

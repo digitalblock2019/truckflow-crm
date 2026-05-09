@@ -172,7 +172,7 @@ export default function InvoicesPage() {
           canCreate ? <Button onClick={() => setShowCreate(true)}>+ New Invoice</Button> : undefined
         }
       />
-      <div className="flex-1 overflow-y-auto p-6 bg-surface">
+      <div className="flex-1 min-h-0 overflow-y-auto p-6 bg-surface">
         <div className="grid grid-cols-4 gap-3 mb-5">
           <StatCard label="Total Records" value={data?.total ?? 0} />
           <StatCard label="Drafts" value={invoices.filter((i) => i.status === "draft").length} />
