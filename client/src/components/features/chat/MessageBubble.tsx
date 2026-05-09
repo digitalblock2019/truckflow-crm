@@ -191,7 +191,7 @@ export default function MessageBubble({ message: m, isOwn, userId, conversationI
                   className="p-1 rounded hover:bg-surface text-txt-light hover:text-txt text-[12px]"
                   title="Edit"
                 >
-                  {"\u270F"}
+                  <span className="inline-block scale-x-[-1]">{"\u270F\uFE0F"}</span>
                 </button>
                 <button
                   onClick={() => { if (confirm("Delete this message?")) deleteMessage.mutate({ conversationId, messageId: m.id }); }}
