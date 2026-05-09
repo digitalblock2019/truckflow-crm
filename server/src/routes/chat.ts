@@ -1,10 +1,16 @@
 import { Router } from 'express';
+import multer from 'multer';
 import { ChatController } from '../controllers/chat.controller';
 import { authenticate } from '../middleware/auth';
 import { authorize } from '../middleware/authorize';
 
 const router = Router();
 const ctrl = new ChatController();
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB cap per chat attachment
+});
 
 router.use(authenticate);
 
@@ -38,7 +44,7 @@ router.post('/conversations/:id/messages/:msgId/reactions', (req, res) => ctrl.a
 router.delete('/conversations/:id/messages/:msgId/reactions/:emoji', (req, res) => ctrl.removeReaction(req, res));
 
 // Attachments
-router.post('/conversations/:id/attachments', (req, res) => ctrl.uploadAttachment(req, res));
+router.post('/conversations/:id/attachments', upload.single('file'), (req, res) => ctrl.uploadAttachment(req, res));
 
 // Presence
 router.get('/presence', (req, res) => ctrl.getPresence(req, res));
