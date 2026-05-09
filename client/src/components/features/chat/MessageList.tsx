@@ -99,7 +99,7 @@ export default function MessageList({ conversationId, conversation, userId }: Pr
   }
 
   return (
-    <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto py-4 space-y-2">
+    <div ref={scrollRef} onScroll={handleScroll} className="flex-1 min-h-0 overflow-y-auto py-4 space-y-2">
       {data?.nextCursor && (
         <div className="text-center py-2">
           <button

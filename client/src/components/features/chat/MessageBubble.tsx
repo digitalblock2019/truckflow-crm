@@ -59,6 +59,19 @@ export default function MessageBubble({ message: m, isOwn, userId, conversationI
   const isImage = (mime: string) => mime?.startsWith("image/");
   const time = new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
+  // Pick a thumbnail icon for non-image files based on extension/mime
+  function fileIcon(name: string, mime?: string | null): string {
+    const ext = name.split(".").pop()?.toLowerCase() || "";
+    if (mime?.startsWith("video/")) return "\u{1F3AC}";       // movie clapper
+    if (mime?.startsWith("audio/")) return "\u{1F3B5}";       // music note
+    if (ext === "pdf") return "\u{1F4D5}";                    // closed book (red-ish)
+    if (["doc", "docx"].includes(ext)) return "\u{1F4D8}";    // blue book
+    if (["xls", "xlsx", "csv"].includes(ext)) return "\u{1F4D7}"; // green book
+    if (["ppt", "pptx"].includes(ext)) return "\u{1F4D9}";    // orange book
+    if (["zip", "rar", "7z", "tar", "gz"].includes(ext)) return "\u{1F4E6}"; // package
+    return "\u{1F4C4}";                                       // page facing up (default doc)
+  }
+
   return (
     <div
       className={`flex ${isOwn ? "flex-row-reverse" : "flex-row"} gap-2 group px-5`}
@@ -119,15 +132,21 @@ export default function MessageBubble({ message: m, isOwn, userId, conversationI
                     href={a.file_path}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-[12px] ${
-                      isOwn ? "bg-blue-dark text-white/90" : "bg-surface border border-border text-txt"
+                    className={`block w-[260px] rounded-lg overflow-hidden border hover:opacity-90 transition-opacity ${
+                      isOwn ? "border-blue-dark/30 bg-blue-dark/10" : "border-border bg-white"
                     }`}
                   >
-                    <span>{"\u{1F4CE}"}</span>
-                    <span className="truncate">{a.file_name}</span>
-                    <span className="text-[10px] opacity-60 shrink-0">
-                      {(a.file_size_bytes / 1024).toFixed(0)}KB
-                    </span>
+                    <div className={`flex items-center justify-center h-[120px] ${
+                      isOwn ? "bg-blue-dark/30" : "bg-surface"
+                    }`}>
+                      <span className="text-[56px] leading-none">{fileIcon(a.file_name, a.mime_type)}</span>
+                    </div>
+                    <div className={`px-3 py-2 ${isOwn ? "text-white" : "text-txt"}`}>
+                      <div className="text-[12px] font-medium truncate">{a.file_name}</div>
+                      <div className={`text-[10px] mt-0.5 font-mono ${isOwn ? "text-white/60" : "text-txt-light"}`}>
+                        {(a.file_size_bytes / 1024).toFixed(0)} KB
+                      </div>
+                    </div>
                   </a>
                 )}
               </div>
