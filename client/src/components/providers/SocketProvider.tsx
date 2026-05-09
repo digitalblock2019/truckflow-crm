@@ -176,8 +176,8 @@ export default function SocketProvider({ children }: { children: React.ReactNode
         qc.invalidateQueries({ queryKey: ["conversation-members"] });
       });
 
-      socket.on("typing:start", ({ conversationId, userId: uid }: { conversationId: string; userId: string }) => {
-        if (uid !== userId) setTyping(conversationId, uid, true);
+      socket.on("typing:start", ({ conversationId, userId: uid, userName }: { conversationId: string; userId: string; userName?: string }) => {
+        if (uid !== userId) setTyping(conversationId, uid, true, userName);
       });
 
       socket.on("typing:stop", ({ conversationId, userId: uid }: { conversationId: string; userId: string }) => {

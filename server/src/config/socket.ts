@@ -52,6 +52,10 @@ export function initSocket(httpServer: HttpServer) {
     presenceMap.get(user.id)!.add(socket.id);
     socketUserMap.set(socket.id, user.id);
 
+    // Cache full_name once so typing events don't need a DB hit per keystroke
+    const nameResult = await query('SELECT full_name FROM users WHERE id = $1', [user.id]).catch(() => null);
+    const fullName: string = nameResult?.rows[0]?.full_name || '';
+
     // Update last_seen_at
     await query('UPDATE users SET last_seen_at = NOW() WHERE id = $1', [user.id]).catch(() => {});
 
@@ -73,7 +77,7 @@ export function initSocket(httpServer: HttpServer) {
       socket.to(`conv:${data.conversationId}`).emit('typing:start', {
         conversationId: data.conversationId,
         userId: user.id,
-        userName: '', // Client fills from cache
+        userName: fullName,
       });
     });
 

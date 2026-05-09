@@ -97,6 +97,9 @@ export class ChatService {
     // Add creator as admin member
     await query('INSERT INTO chat_members (conversation_id, user_id, is_admin) VALUES ($1, $2, TRUE)', [convId, userId]);
     await query('INSERT INTO chat_member_state (conversation_id, user_id, last_read_at) VALUES ($1, $2, NOW())', [convId, userId]);
+    // Join creator's existing socket(s) to the new room — without this they miss every reply
+    // until they refresh, since their connection joined rooms only at the time of connect.
+    joinConversationRoom(convId, userId);
 
     // Add other members
     if (data.member_ids) {

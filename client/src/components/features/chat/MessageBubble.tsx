@@ -14,7 +14,6 @@ interface Props {
 }
 
 export default function MessageBubble({ message: m, isOwn, userId, conversationId }: Props) {
-  const [showActions, setShowActions] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const addReaction = useAddReaction();
   const removeReaction = useRemoveReaction();
@@ -63,8 +62,7 @@ export default function MessageBubble({ message: m, isOwn, userId, conversationI
   return (
     <div
       className={`flex ${isOwn ? "flex-row-reverse" : "flex-row"} gap-2 group px-5`}
-      onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => { setShowActions(false); setShowEmojiPicker(false); }}
+      onMouseLeave={() => setShowEmojiPicker(false)}
     >
       {/* Avatar */}
       <div className="shrink-0 mt-1">
@@ -78,7 +76,7 @@ export default function MessageBubble({ message: m, isOwn, userId, conversationI
       </div>
 
       {/* Bubble */}
-      <div className={`max-w-[480px] ${isOwn ? "items-end" : "items-start"} flex flex-col`}>
+      <div className={`max-w-[480px] ${isOwn ? "items-end" : "items-start"} flex flex-col relative`}>
         {/* Sender + time */}
         <div className={`text-[10px] mb-1 ${isOwn ? "text-right" : ""} text-txt-light flex items-center gap-1.5`}>
           {!isOwn && <span className="font-medium">{m.sender_name}</span>}
@@ -158,9 +156,11 @@ export default function MessageBubble({ message: m, isOwn, userId, conversationI
           </div>
         )}
 
-        {/* Hover action bar */}
-        {showActions && (
-          <div className={`flex items-center gap-0.5 mt-1 ${isOwn ? "flex-row-reverse" : ""}`}>
+        {/* Hover action bar — absolutely positioned beside the bubble so it
+            doesn't expand the column and push the input field below the fold. */}
+        <div
+          className={`absolute -top-3 ${isOwn ? "right-2" : "left-2"} flex items-center gap-0.5 bg-white border border-border rounded-full shadow-sm px-1 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-10`}
+        >
             <button
               onClick={() => setReplyTo({ id: m.id, content: m.content ?? "", sender_name: m.sender_name ?? "" })}
               className="p-1 rounded hover:bg-surface text-txt-light hover:text-txt text-[12px]"
@@ -202,7 +202,6 @@ export default function MessageBubble({ message: m, isOwn, userId, conversationI
               </>
             )}
           </div>
-        )}
       </div>
     </div>
   );

@@ -5,7 +5,7 @@ import { create } from "zustand";
 interface ChatState {
   activeConversationId: string | null;
   onlineUsers: Set<string>;
-  typingUsers: Map<string, Set<string>>; // conversationId -> Set of userIds
+  typingUsers: Map<string, Map<string, string>>; // conversationId -> Map<userId, userName>
   totalUnread: number;
   replyTo: { id: string; content: string; sender_name: string } | null;
   editingMessage: { id: string; content: string } | null;
@@ -13,7 +13,7 @@ interface ChatState {
   setOnlineUsers: (ids: string[]) => void;
   addOnlineUser: (id: string) => void;
   removeOnlineUser: (id: string) => void;
-  setTyping: (conversationId: string, userId: string, isTyping: boolean) => void;
+  setTyping: (conversationId: string, userId: string, isTyping: boolean, userName?: string) => void;
   setTotalUnread: (count: number) => void;
   setReplyTo: (msg: { id: string; content: string; sender_name: string } | null) => void;
   setEditingMessage: (msg: { id: string; content: string } | null) => void;
@@ -43,10 +43,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ onlineUsers: s });
   },
 
-  setTyping: (conversationId, userId, isTyping) => {
+  setTyping: (conversationId, userId, isTyping, userName) => {
     const map = new Map(get().typingUsers);
-    const users = new Set(map.get(conversationId) || []);
-    if (isTyping) users.add(userId);
+    const users = new Map(map.get(conversationId) || []);
+    if (isTyping) users.set(userId, userName || users.get(userId) || "");
     else users.delete(userId);
     if (users.size === 0) map.delete(conversationId);
     else map.set(conversationId, users);
