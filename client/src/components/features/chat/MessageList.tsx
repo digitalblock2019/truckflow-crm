@@ -10,6 +10,14 @@ function isSameDay(a: string, b: string) {
   return new Date(a).toDateString() === new Date(b).toDateString();
 }
 
+function formatTypingNames(names: string[]): string {
+  const valid = names.filter((n) => n.trim());
+  if (valid.length === 0) return "Someone is typing...";
+  if (valid.length === 1) return `${valid[0]} is typing...`;
+  if (valid.length === 2) return `${valid[0]} and ${valid[1]} are typing...`;
+  return `${valid[0]}, ${valid[1]} and ${valid.length - 2} other${valid.length - 2 === 1 ? "" : "s"} are typing...`;
+}
+
 function formatDate(dateStr: string) {
   const d = new Date(dateStr);
   const today = new Date();
@@ -133,7 +141,7 @@ export default function MessageList({ conversationId, conversation, userId }: Pr
               <span className="w-1.5 h-1.5 bg-txt-light/40 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
               <span className="w-1.5 h-1.5 bg-txt-light/40 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
             </span>
-            Someone is typing...
+            {formatTypingNames(Array.from(typingHere.values()).filter(Boolean))}
           </div>
         </div>
       )}
