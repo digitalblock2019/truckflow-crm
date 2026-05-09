@@ -32,7 +32,7 @@ export default function OnboardingPage() {
   return (
     <>
       <Topbar title="Onboarding" subtitle="Track trucker onboarding progress and documents" />
-      <div className="flex-1 overflow-y-auto p-6 bg-surface">
+      <div className="flex-1 min-h-0 overflow-y-auto p-6 bg-surface">
         <div className="grid grid-cols-[340px_1fr] gap-4">
           <Card className="!p-0 max-h-[calc(100vh-140px)] overflow-y-auto">
             <div className="bg-navy px-4 py-4 rounded-t-xl">

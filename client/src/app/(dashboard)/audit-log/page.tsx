@@ -63,7 +63,7 @@ export default function AuditLogPage() {
   return (
     <>
       <Topbar title="Audit Log" subtitle="System activity and security log" />
-      <div className="flex-1 overflow-y-auto p-6 bg-surface">
+      <div className="flex-1 min-h-0 overflow-y-auto p-6 bg-surface">
         <DataGrid
           columns={columns}
           data={(data?.data ?? [])}

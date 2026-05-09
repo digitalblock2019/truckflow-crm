@@ -40,7 +40,7 @@ export default function DashboardPage() {
   return (
     <>
       <Topbar title="Dashboard" subtitle="Overview of your operations" />
-      <div className="flex-1 overflow-y-auto p-6 bg-surface space-y-4">
+      <div className="flex-1 min-h-0 overflow-y-auto p-6 bg-surface space-y-4">
         {/* Row 1: Key Stats */}
         <div className="grid grid-cols-4 gap-4">
           <StatCard label="Total Loads" value={loads.total} />

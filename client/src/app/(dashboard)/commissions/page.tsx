@@ -64,7 +64,7 @@ export default function CommissionsPage() {
   return (
     <>
       <Topbar title="Commissions" subtitle="Commission management dashboard" />
-      <div className="flex-1 overflow-y-auto p-6 bg-surface">
+      <div className="flex-1 min-h-0 overflow-y-auto p-6 bg-surface">
         {(data?.total ?? 0) > 0 && (
           <CommissionFormula
             grossLoad={fmt(summaryData?.total_gross_cents ?? 0)}

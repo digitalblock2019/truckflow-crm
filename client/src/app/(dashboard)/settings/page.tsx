@@ -260,7 +260,7 @@ export default function SettingsPage() {
         subtitle="System configuration (admin only)"
       />
       <Tabs tabs={tabs} active={activeTab} onChange={setActiveTab} />
-      <div className="flex-1 overflow-y-auto p-6 bg-surface space-y-4">
+      <div className="flex-1 min-h-0 overflow-y-auto p-6 bg-surface space-y-4">
         {activeTab === "branding" && isAdmin && <InvoiceBrandingCard />}
         {activeTab === "system" && <SystemSettingsCard />}
       </div>

@@ -62,7 +62,7 @@ export default function ChatMonitorPage() {
         {/* Messages */}
         <div className="flex-1 flex flex-col bg-surface min-w-0">
           {selectedConvo ? (
-            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
+            <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-2">
               {sorted.map((m: ChatMessage) => (
                 <div key={m.id} className="flex gap-2">
                   <div className="w-7 h-7 rounded-full bg-blue flex items-center justify-center text-[10px] font-bold text-white shrink-0 mt-0.5">

@@ -99,7 +99,7 @@ export default function ChatSidebar() {
         </div>
 
         {/* Conversation list */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 min-h-0 overflow-y-auto">
           {sections.map((section) => (
             <div key={section.title}>
               <div className="px-4 py-1.5 text-[9px] font-mono uppercase tracking-[1.5px] text-white/25">

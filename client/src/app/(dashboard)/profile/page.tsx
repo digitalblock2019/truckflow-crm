@@ -89,7 +89,7 @@ export default function ProfilePage() {
           </Button>
         }
       />
-      <div className="flex-1 overflow-y-auto p-6 bg-surface">
+      <div className="flex-1 min-h-0 overflow-y-auto p-6 bg-surface">
         <div className="grid grid-cols-[280px_1fr] gap-4">
           <Card className="text-center">
             {/* Avatar with upload */}

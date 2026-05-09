@@ -138,7 +138,7 @@ export default function UploadPage() {
     return (
       <>
         <Topbar title="Upload Truck Data" subtitle="Import trucker records from CSV or Excel" />
-        <div className="flex-1 overflow-y-auto p-6 bg-surface">
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 bg-surface">
           <Card>
             <div className="text-center py-10">
               <div className="text-5xl mb-4">&#x2705;</div>
@@ -178,7 +178,7 @@ export default function UploadPage() {
   return (
     <>
       <Topbar title="Upload Truck Data" subtitle="Import trucker records from CSV or Excel" />
-      <div className="flex-1 overflow-y-auto p-6 bg-surface">
+      <div className="flex-1 min-h-0 overflow-y-auto p-6 bg-surface">
         {/* Delete Batch Confirmation Modal */}
         <Modal
           open={!!deleteBatchId}
