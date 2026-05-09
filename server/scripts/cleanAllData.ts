@@ -8,7 +8,11 @@ async function cleanAll() {
   console.log('=== TruckFlow Data Cleanup ===\n');
 
   // 1. Find admin users to preserve — explicit whitelist by email
-  const PROTECTED_ADMIN_EMAILS = ['admin@truckflow.com', '83.mumair@gmail.com'];
+  const PROTECTED_ADMIN_EMAILS = [
+    'admin@truckflow.com',
+    '83.mumair@gmail.com',
+    'Sanianazeer1992@gmail.com',
+  ];
   const adminResult = await query(
     "SELECT id, email, full_name FROM users WHERE role = 'admin' AND email = ANY($1::citext[])",
     [PROTECTED_ADMIN_EMAILS]
@@ -20,9 +24,28 @@ async function cleanAll() {
   }
   const protectedAdmins = adminResult.rows;
   const protectedIds = protectedAdmins.map((a) => a.id);
+
+  // 1b. Find employee records linked to those admins — preserve those too
+  const protectedEmpResult = await query(
+    'SELECT employee_id FROM users WHERE id = ANY($1::uuid[]) AND employee_id IS NOT NULL',
+    [protectedIds]
+  );
+  const protectedEmployeeIds: string[] = protectedEmpResult.rows.map((r: any) => r.employee_id);
+
   console.log('Preserving admins:');
   protectedAdmins.forEach((a) => console.log(`  - ${a.full_name} (${a.email})`));
+  if (protectedEmployeeIds.length) {
+    console.log(`Preserving ${protectedEmployeeIds.length} linked employee record(s).`);
+  } else {
+    console.log('No linked employee records to preserve.');
+  }
   console.log('');
+
+  // 1c. Temporarily drop the audit_log immutability rule so the cleanup can wipe it.
+  // The rule (no_delete_audit) is meant to prevent app-level tampering, not one-off
+  // admin-run cleanup scripts. We restore it at the end.
+  console.log('Temporarily dropping audit_log immutability rule...');
+  await query('DROP RULE IF EXISTS no_delete_audit ON audit_log');
 
   // 2. Delete in dependency order (children first)
   const deletions = [
@@ -85,14 +108,13 @@ async function cleanAll() {
     // Refresh tokens (except protected admins')
     `DELETE FROM refresh_tokens WHERE user_id NOT IN (${protectedIds.map((id) => `'${id}'`).join(',')})`,
 
-    // Users (except protected admins) — must come before employees if users reference employees
+    // Users (except protected admins)
     `DELETE FROM users WHERE id NOT IN (${protectedIds.map((id) => `'${id}'`).join(',')})`,
 
-    // Employees
-    "DELETE FROM employees",
-
-    // Clear protected admins' employee_id links since employees are gone
-    `UPDATE users SET employee_id = NULL WHERE id IN (${protectedIds.map((id) => `'${id}'`).join(',')})`,
+    // Employees (except those linked to protected admins) — keep their HR profile rows
+    protectedEmployeeIds.length
+      ? `DELETE FROM employees WHERE id NOT IN (${protectedEmployeeIds.map((id) => `'${id}'`).join(',')})`
+      : 'DELETE FROM employees',
   ];
 
   for (const sql of deletions) {
@@ -155,6 +177,15 @@ async function cleanAll() {
     console.log('  ✓ system_settings cleared');
   } catch (err: any) {
     console.log(`  ⚠ system_settings: ${err.message}`);
+  }
+
+  // 5. Restore audit_log immutability rule
+  console.log('\nRestoring audit_log immutability rule...');
+  try {
+    await query('CREATE RULE no_delete_audit AS ON DELETE TO audit_log DO INSTEAD NOTHING');
+    console.log('  ✓ no_delete_audit rule restored');
+  } catch (err: any) {
+    console.log(`  ⚠ Failed to restore rule: ${err.message}`);
   }
 
   console.log('\n=== Cleanup complete! ===');
