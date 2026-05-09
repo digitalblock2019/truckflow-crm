@@ -253,6 +253,8 @@ export default function TruckersPage() {
           loading={isLoading}
           page={page}
           totalPages={totalPages(data)}
+          total={data?.total}
+          pageSize={20}
           onPageChange={(p) => { setPage(p); setSelectedIds(new Set()); }}
           onRowClick={openDetail}
           toolbar={

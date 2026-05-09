@@ -17,6 +17,8 @@ interface DataGridProps<T> {
   loading?: boolean;
   page?: number;
   totalPages?: number;
+  total?: number;
+  pageSize?: number;
   onPageChange?: (page: number) => void;
   onRowClick?: (row: T) => void;
   emptyMessage?: string;
@@ -31,10 +33,19 @@ export default function DataGrid<T extends Record<string, any>>({
   loading,
   page = 1,
   totalPages = 1,
+  total,
+  pageSize,
   onPageChange,
   onRowClick,
   emptyMessage = "No records found",
 }: DataGridProps<T>) {
+  const hasPaging = totalPages > 1 && !!onPageChange;
+  const showFooter = hasPaging || total !== undefined;
+  const effectivePageSize = pageSize ?? data.length;
+  const rangeStart = total === 0 ? 0 : (page - 1) * effectivePageSize + 1;
+  const rangeEnd = total !== undefined
+    ? Math.min(rangeStart + data.length - 1, total)
+    : rangeStart + data.length - 1;
   return (
     <div className="bg-white border border-border rounded-lg overflow-hidden">
       {toolbar && (
@@ -92,27 +103,41 @@ export default function DataGrid<T extends Record<string, any>>({
           </tbody>
         </table>
       </div>
-      {totalPages > 1 && onPageChange && (
+      {showFooter && (
         <div className="px-4 py-2.5 border-t border-border flex items-center justify-between text-xs text-txt-mid bg-[#fafbfc]">
           <span>
-            Page {page} of {totalPages}
+            {total !== undefined ? (
+              hasPaging ? (
+                <>
+                  Page {page} of {totalPages}
+                  <span className="text-txt-light"> · </span>
+                  Showing {rangeStart}–{rangeEnd} of {total}
+                </>
+              ) : (
+                <>{total} {total === 1 ? "record" : "records"}</>
+              )
+            ) : (
+              <>Page {page} of {totalPages}</>
+            )}
           </span>
-          <div className="flex gap-1">
-            <button
-              disabled={page <= 1}
-              onClick={() => onPageChange(page - 1)}
-              className="px-2.5 py-1 border border-border rounded bg-white disabled:opacity-40 hover:bg-surface cursor-pointer"
-            >
-              Prev
-            </button>
-            <button
-              disabled={page >= totalPages}
-              onClick={() => onPageChange(page + 1)}
-              className="px-2.5 py-1 border border-border rounded bg-white disabled:opacity-40 hover:bg-surface cursor-pointer"
-            >
-              Next
-            </button>
-          </div>
+          {hasPaging && (
+            <div className="flex gap-1">
+              <button
+                disabled={page <= 1}
+                onClick={() => onPageChange!(page - 1)}
+                className="px-2.5 py-1 border border-border rounded bg-white disabled:opacity-40 hover:bg-surface cursor-pointer"
+              >
+                Prev
+              </button>
+              <button
+                disabled={page >= totalPages}
+                onClick={() => onPageChange!(page + 1)}
+                className="px-2.5 py-1 border border-border rounded bg-white disabled:opacity-40 hover:bg-surface cursor-pointer"
+              >
+                Next
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

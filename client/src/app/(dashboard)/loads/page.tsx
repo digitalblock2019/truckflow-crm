@@ -125,6 +125,8 @@ export default function LoadsPage() {
           loading={isLoading}
           page={page}
           totalPages={totalPages(data)}
+          total={data?.total}
+          pageSize={20}
           onPageChange={setPage}
           onRowClick={(row) => setSelectedLoad(row as unknown as Load)}
         />

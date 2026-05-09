@@ -234,6 +234,8 @@ export default function PeoplePage() {
           loading={isLoading}
           page={page}
           totalPages={totalPages(data)}
+          total={data?.total}
+          pageSize={20}
           onPageChange={setPage}
           onRowClick={(row) => { setSelectedEmployee(row as unknown as Employee); setEditing(false); setResetMsg(null); }}
           toolbar={
