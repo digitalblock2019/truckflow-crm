@@ -298,13 +298,20 @@ export class EmployeesService {
         params.push(emp.rows[0].crm_user_id);
         await query(`UPDATE users SET ${updates.join(', ')} WHERE id = $${idx}`, params);
       }
-    } else if (data.crm_email && data.crm_role) {
-      // Create new CRM user for this employee
+    } else if (data.crm_email) {
+      // Create new CRM user for this employee. Auto-derive role from employee_type
+      // if caller didn't supply one (matches the create-employee flow at line ~88).
+      const typeToRole: Record<string, string> = {
+        sales_agent: 'sales_agent', dispatcher: 'dispatcher',
+        sales_and_dispatcher: 'sales_and_dispatcher', fixed_salary: 'viewer', contractor: 'viewer',
+      };
+      const role = data.crm_role || typeToRole[emp.rows[0].employee_type] || 'viewer';
+
       const password = crypto.randomBytes(8).toString('base64url').slice(0, 12);
       const passwordHash = await bcrypt.hash(password, 12);
       const userResult = await query(
         'INSERT INTO users (email, full_name, role, employee_id, password_hash) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-        [data.crm_email, emp.rows[0].full_name, data.crm_role, employeeId, passwordHash]
+        [data.crm_email, emp.rows[0].full_name, role, employeeId, passwordHash]
       );
       await query('UPDATE employees SET crm_user_id = $1 WHERE id = $2', [userResult.rows[0].id, employeeId]);
 
