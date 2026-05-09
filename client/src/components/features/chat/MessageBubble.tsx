@@ -59,17 +59,9 @@ export default function MessageBubble({ message: m, isOwn, userId, conversationI
   const isImage = (mime: string) => mime?.startsWith("image/");
   const time = new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
-  // Pick a thumbnail icon for non-image files based on extension/mime
-  function fileIcon(name: string, mime?: string | null): string {
-    const ext = name.split(".").pop()?.toLowerCase() || "";
-    if (mime?.startsWith("video/")) return "\u{1F3AC}";       // movie clapper
-    if (mime?.startsWith("audio/")) return "\u{1F3B5}";       // music note
-    if (ext === "pdf") return "\u{1F4D5}";                    // closed book (red-ish)
-    if (["doc", "docx"].includes(ext)) return "\u{1F4D8}";    // blue book
-    if (["xls", "xlsx", "csv"].includes(ext)) return "\u{1F4D7}"; // green book
-    if (["ppt", "pptx"].includes(ext)) return "\u{1F4D9}";    // orange book
-    if (["zip", "rar", "7z", "tar", "gz"].includes(ext)) return "\u{1F4E6}"; // package
-    return "\u{1F4C4}";                                       // page facing up (default doc)
+  function fileExt(name: string): string {
+    const ext = name.split(".").pop();
+    return ext && ext !== name ? ext.toUpperCase() : "FILE";
   }
 
   return (
@@ -132,18 +124,19 @@ export default function MessageBubble({ message: m, isOwn, userId, conversationI
                     href={a.file_path}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className={`block w-[260px] rounded-lg overflow-hidden border hover:opacity-90 transition-opacity ${
-                      isOwn ? "border-blue-dark/30 bg-blue-dark/10" : "border-border bg-white"
-                    }`}
+                    className="block w-[260px] rounded-lg overflow-hidden border border-border bg-white hover:bg-bg transition-colors"
                   >
-                    <div className={`flex items-center justify-center h-[120px] ${
-                      isOwn ? "bg-blue-dark/30" : "bg-surface"
-                    }`}>
-                      <span className="text-[56px] leading-none">{fileIcon(a.file_name, a.mime_type)}</span>
+                    <div className="flex items-center justify-center h-[120px] bg-surface relative">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" className="w-14 h-14 text-blue">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9z" />
+                      </svg>
+                      <span className="absolute bottom-2 right-2 text-[9px] font-mono font-bold text-txt-light bg-white px-1.5 py-0.5 rounded border border-border tracking-wide">
+                        {fileExt(a.file_name)}
+                      </span>
                     </div>
-                    <div className={`px-3 py-2 ${isOwn ? "text-white" : "text-txt"}`}>
+                    <div className="px-3 py-2 text-txt">
                       <div className="text-[12px] font-medium truncate">{a.file_name}</div>
-                      <div className={`text-[10px] mt-0.5 font-mono ${isOwn ? "text-white/60" : "text-txt-light"}`}>
+                      <div className="text-[10px] mt-0.5 font-mono text-txt-light">
                         {(a.file_size_bytes / 1024).toFixed(0)} KB
                       </div>
                     </div>
