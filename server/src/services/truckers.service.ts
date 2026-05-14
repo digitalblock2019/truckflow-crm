@@ -142,12 +142,22 @@ export class TruckersService {
     return this.getById(id);
   }
 
-  async bulkImport(rows: any[], userId: string, filename?: string) {
-    const batch = await query(
-      'INSERT INTO trucker_upload_batches (filename, uploaded_by) VALUES ($1, $2) RETURNING id',
-      [filename || 'import', userId]
-    );
-    const batchId = batch.rows[0].id;
+  async bulkImport(rows: any[], userId: string, filename?: string, existingBatchId?: string, isLastChunk: boolean = true) {
+    // If a batch_id is passed (subsequent chunk), append to that batch instead of
+    // creating a new one. Large client-side uploads chunk into ~500-row pieces and
+    // thread the batch_id through so they roll up into a single upload-history row.
+    let batchId: string;
+    if (existingBatchId) {
+      const r = await query('SELECT id FROM trucker_upload_batches WHERE id = $1', [existingBatchId]);
+      if (!r.rows.length) throw new AppError('Batch not found', 404, 'NOT_FOUND');
+      batchId = existingBatchId;
+    } else {
+      const batch = await query(
+        'INSERT INTO trucker_upload_batches (filename, uploaded_by) VALUES ($1, $2) RETURNING id',
+        [filename || 'import', userId]
+      );
+      batchId = batch.rows[0].id;
+    }
 
     let added = 0, skipped = 0, errored = 0;
     for (const row of rows) {
@@ -167,18 +177,34 @@ export class TruckersService {
       } catch { errored++; }
     }
 
-    await query('UPDATE trucker_upload_batches SET rows_added=$1, rows_skipped=$2, rows_errored=$3 WHERE id=$4',
-      [added, skipped, errored, batchId]);
+    // Increment cumulative totals on the batch row
+    const totals = await query(
+      `UPDATE trucker_upload_batches
+       SET rows_added = COALESCE(rows_added, 0) + $1,
+           rows_skipped = COALESCE(rows_skipped, 0) + $2,
+           rows_errored = COALESCE(rows_errored, 0) + $3
+       WHERE id = $4
+       RETURNING rows_added, rows_skipped, rows_errored`,
+      [added, skipped, errored, batchId]
+    );
+    const cumulative = totals.rows[0];
 
-    // Notify admins & supervisors
-    try {
-      const title = 'New batch uploaded';
-      const body = `${filename || 'import'} — ${added} truckers added`;
-      await notifications.createForRole('admin', title, body, 'trucker_batch', batchId);
-      await notifications.createForRole('supervisor', title, body, 'trucker_batch', batchId);
-    } catch (err) { console.error('[TruckersService] Notification error:', err); }
+    // Only notify on the final chunk so admins get one notification per upload, not N
+    if (isLastChunk) {
+      try {
+        const title = 'New batch uploaded';
+        const body = `${filename || 'import'} — ${cumulative.rows_added} truckers added`;
+        await notifications.createForRole('admin', title, body, 'trucker_batch', batchId);
+        await notifications.createForRole('supervisor', title, body, 'trucker_batch', batchId);
+      } catch (err) { console.error('[TruckersService] Notification error:', err); }
+    }
 
-    return { batch_id: batchId, rows_added: added, rows_skipped: skipped, rows_errored: errored };
+    return {
+      batch_id: batchId,
+      rows_added: cumulative.rows_added,
+      rows_skipped: cumulative.rows_skipped,
+      rows_errored: cumulative.rows_errored,
+    };
   }
 
   async initiateOnboarding(id: string, userId: string) {

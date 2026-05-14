@@ -164,8 +164,16 @@ export function useTruckerBatches() {
 export function useImportTruckers() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ rows, filename }: { rows: Record<string, string>[]; filename?: string }) =>
-      apiFetch("/api/truckers/import", { method: "POST", body: JSON.stringify({ rows, filename }) }),
+    mutationFn: (input: {
+      rows: Record<string, string>[];
+      filename?: string;
+      batch_id?: string;
+      is_last_chunk?: boolean;
+    }) =>
+      apiFetch<{ batch_id: string; rows_added: number; rows_skipped: number; rows_errored: number }>(
+        "/api/truckers/import",
+        { method: "POST", body: JSON.stringify(input) }
+      ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["truckers"] });
       qc.invalidateQueries({ queryKey: ["trucker-batches"] });

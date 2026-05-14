@@ -14,12 +14,14 @@ app.use(cors({
   credentials: true,
 }));
 app.use(morgan('dev'));
-// Skip JSON parsing for Stripe webhook (needs raw body for signature verification)
+// Skip JSON parsing for Stripe webhook (needs raw body for signature verification).
+// 10mb cap covers ~30k trucker import rows per chunk comfortably; large uploads
+// are chunked on the client into batches of 500.
 app.use((req, res, next) => {
   if (req.originalUrl === '/api/invoice/webhook/stripe') {
     next();
   } else {
-    express.json()(req, res, next);
+    express.json({ limit: '10mb' })(req, res, next);
   }
 });
 

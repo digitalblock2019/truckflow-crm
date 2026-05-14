@@ -78,6 +78,7 @@ export default function UploadPage() {
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [chunkProgress, setChunkProgress] = useState<{ done: number; total: number } | null>(null);
   const [deleteBatchId, setDeleteBatchId] = useState<string | null>(null);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const importMut = useImportTruckers();
@@ -103,7 +104,7 @@ export default function UploadPage() {
     setRows(result.rows);
   };
 
-  const handleImport = () => {
+  const handleImport = async () => {
     const mapped = rows.map((row) => {
       const out: ParsedRow = {};
       for (const [fileCol, val] of Object.entries(row)) {
@@ -118,11 +119,37 @@ export default function UploadPage() {
       }
       return out;
     });
-    importMut.mutate({ rows: mapped, filename: file?.name }, {
-      onSuccess: (data) => {
-        setImportResult(data as unknown as ImportResult);
-      },
-    });
+
+    // Chunk into batches of 500 rows. Each chunk reuses the same batch_id so
+    // the upload history shows one row, not N. Progress updates as chunks land.
+    const CHUNK_SIZE = 500;
+    const chunks: ParsedRow[][] = [];
+    for (let i = 0; i < mapped.length; i += CHUNK_SIZE) {
+      chunks.push(mapped.slice(i, i + CHUNK_SIZE));
+    }
+    setChunkProgress({ done: 0, total: chunks.length });
+
+    let batchId: string | undefined;
+    let lastResult: ImportResult | null = null;
+    try {
+      for (let i = 0; i < chunks.length; i++) {
+        const isLast = i === chunks.length - 1;
+        const res = await importMut.mutateAsync({
+          rows: chunks[i],
+          filename: file?.name,
+          batch_id: batchId,
+          is_last_chunk: isLast,
+        });
+        batchId = res.batch_id;
+        lastResult = res as unknown as ImportResult;
+        setChunkProgress({ done: i + 1, total: chunks.length });
+      }
+      if (lastResult) setImportResult(lastResult);
+    } catch {
+      // mutation error state already surfaces below
+    } finally {
+      setChunkProgress(null);
+    }
   };
 
   const handleReset = () => {
@@ -298,7 +325,11 @@ export default function UploadPage() {
                       Cancel
                     </Button>
                     <Button onClick={handleImport} disabled={importMut.isPending}>
-                      {importMut.isPending ? "Importing..." : `Import ${rows.length} Records`}
+                      {chunkProgress
+                        ? `Importing batch ${chunkProgress.done + (importMut.isPending ? 1 : 0)} of ${chunkProgress.total}...`
+                        : importMut.isPending
+                        ? "Importing..."
+                        : `Import ${rows.length} Records`}
                     </Button>
                   </div>
                 }

@@ -33,7 +33,8 @@ export class TruckersController {
 
   async bulkImport(req: Request, res: Response) {
     if (!req.body.rows || !Array.isArray(req.body.rows)) throw new AppError('rows array required', 400, 'VALIDATION_ERROR');
-    const result = await svc.bulkImport(req.body.rows, req.user!.id, req.body.filename);
+    const isLastChunk = req.body.is_last_chunk !== false; // default true for backward compat
+    const result = await svc.bulkImport(req.body.rows, req.user!.id, req.body.filename, req.body.batch_id, isLastChunk);
     res.status(201).json(result);
   }
 

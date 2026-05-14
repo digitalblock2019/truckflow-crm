@@ -48,6 +48,9 @@ export default function UploadZone({
       <div className="text-xs text-txt-light mt-1.5">
         Supports CSV, XLSX up to 10 MB
       </div>
+      <div className="text-[11px] text-txt-light/80 mt-1">
+        Large files are imported automatically in batches of 500 rows — no manual splitting needed.
+      </div>
     </div>
   );
 }
