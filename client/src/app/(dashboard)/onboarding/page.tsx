@@ -111,7 +111,21 @@ export default function OnboardingPage() {
   // Require at least one configured doc type; an empty list otherwise passes vacuously.
   const allRequiredUploaded = docsArr.length > 0 && docsArr.filter((d) => d.required).every((d) => d.uploaded);
 
+  // Toast state. We capture the trucker name into `pendingOnboardName` as soon
+  // as the button is clicked, then a useEffect promotes it to the visible toast
+  // once the mutation reports success — more reliable than .mutate(onSuccess),
+  // which can be swallowed by query-invalidation timing if `selected` becomes
+  // undefined before the callback fires.
   const [onboardedToast, setOnboardedToast] = useState<string | null>(null);
+  const [pendingOnboardName, setPendingOnboardName] = useState<string | null>(null);
+  useEffect(() => {
+    if (markOnboarded.isSuccess && pendingOnboardName) {
+      setOnboardedToast(`${pendingOnboardName} marked as fully onboarded`);
+      setPendingOnboardName(null);
+      setSelectedId("");
+      markOnboarded.reset();
+    }
+  }, [markOnboarded.isSuccess, pendingOnboardName, markOnboarded]);
   useEffect(() => {
     if (!onboardedToast) return;
     const t = setTimeout(() => setOnboardedToast(null), 4000);
@@ -122,12 +136,23 @@ export default function OnboardingPage() {
     <>
       <Topbar title="Onboarding" subtitle="Track trucker onboarding progress and documents" />
       {onboardedToast && (
-        <div className="mx-6 mt-3 px-4 py-2.5 bg-green/10 border border-green/30 rounded-md text-xs text-green flex items-center justify-between">
-          <span className="font-semibold">✓ {onboardedToast}</span>
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed top-6 right-6 z-50 max-w-md flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg bg-white border-l-4"
+          style={{ borderLeftColor: "#16a34a" }}
+        >
+          <span
+            className="flex-shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-full text-white text-sm font-bold"
+            style={{ backgroundColor: "#16a34a" }}
+          >
+            ✓
+          </span>
+          <span className="text-sm text-txt font-medium">{onboardedToast}</span>
           <button
             type="button"
             onClick={() => setOnboardedToast(null)}
-            className="text-green hover:opacity-70 text-base leading-none"
+            className="ml-2 text-txt-light hover:text-txt text-lg leading-none"
             aria-label="Dismiss"
           >
             ×
@@ -363,13 +388,8 @@ export default function OnboardingPage() {
                 <div className="mt-5 pt-4 border-t border-border">
                   <Button
                     onClick={() => {
-                      const name = selected.legal_name;
-                      markOnboarded.mutate(selected.id, {
-                        onSuccess: () => {
-                          setOnboardedToast(`${name} marked as fully onboarded`);
-                          setSelectedId("");
-                        },
-                      });
+                      setPendingOnboardName(selected.legal_name);
+                      markOnboarded.mutate(selected.id);
                     }}
                     disabled={markOnboarded.isPending || !allRequiredUploaded}
                     className={`w-full ${allRequiredUploaded ? "!bg-green !border-green hover:!bg-green/90" : "!bg-green/50 !border-green/50 !cursor-not-allowed"}`}
