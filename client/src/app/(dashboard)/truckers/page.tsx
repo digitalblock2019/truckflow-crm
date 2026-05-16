@@ -62,6 +62,18 @@ const statusLabels: Record<string, string> = {
   not_interested: "not interested",
 };
 
+const TRUCK_KIND_OPTIONS = [
+  { value: "dry_van", label: "Dry Van" },
+  { value: "reefer", label: "Reefer" },
+  { value: "flatbed", label: "Flatbed" },
+  { value: "box_truck", label: "Box Truck" },
+  { value: "tanker", label: "Tanker" },
+  { value: "other", label: "Other" },
+];
+
+const truckKindLabel = (value: string) =>
+  TRUCK_KIND_OPTIONS.find((o) => o.value === value)?.label ?? value;
+
 const tabs = [
   { key: "", label: "All" },
   { key: "imported", label: "Imported" },
@@ -110,8 +122,34 @@ export default function TruckersPage() {
   const modalDocsUploaded = modalDocsArr.filter((d) => d.uploaded).length;
   const modalDocsProgress = modalDocsArr.length > 0 ? Math.round((modalDocsUploaded / modalDocsArr.length) * 100) : 0;
 
-  const [form, setForm] = useState({ mc_number: "", legal_name: "", phone: "", email: "", state: "" });
-  const [editForm, setEditForm] = useState({ phone: "", email: "", dba_name: "", physical_address: "", dot_number: "" });
+  const [form, setForm] = useState({
+    mc_number: "",
+    legal_name: "",
+    phone: "",
+    email: "",
+    city: "",
+    state: "",
+    power_units: "",
+    truck_types: [] as string[],
+    truck_length_ft: "",
+    truck_width_ft: "",
+    truck_height_ft: "",
+    max_payload_lbs: "",
+  });
+  const [editForm, setEditForm] = useState({
+    phone: "",
+    email: "",
+    dba_name: "",
+    physical_address: "",
+    dot_number: "",
+    city: "",
+    power_units: "",
+    truck_types: [] as string[],
+    truck_length_ft: "",
+    truck_width_ft: "",
+    truck_height_ft: "",
+    max_payload_lbs: "",
+  });
 
   const rows = data?.data ?? [];
 
@@ -163,11 +201,36 @@ export default function TruckersPage() {
   ];
 
   const handleCreate = () => {
-    createTrucker.mutate(form as unknown as Partial<Trucker>, {
+    const payload: Record<string, unknown> = {
+      mc_number: form.mc_number,
+      legal_name: form.legal_name,
+      phone: form.phone || null,
+      email: form.email || null,
+      city: form.city || null,
+      state: form.state || null,
+      power_units: form.power_units ? parseInt(form.power_units) || null : null,
+      truck_types: form.truck_types.length ? form.truck_types : null,
+      truck_length_ft: form.truck_length_ft ? parseFloat(form.truck_length_ft) || null : null,
+      truck_width_ft: form.truck_width_ft ? parseFloat(form.truck_width_ft) || null : null,
+      truck_height_ft: form.truck_height_ft ? parseFloat(form.truck_height_ft) || null : null,
+      max_payload_lbs: form.max_payload_lbs ? parseInt(form.max_payload_lbs) || null : null,
+    };
+    createTrucker.mutate(payload as Partial<Trucker>, {
       onSuccess: () => {
         setShowCreate(false);
-        setForm({ mc_number: "", legal_name: "", phone: "", email: "", state: "" });
+        setForm({
+          mc_number: "", legal_name: "", phone: "", email: "", city: "", state: "",
+          power_units: "", truck_types: [], truck_length_ft: "", truck_width_ft: "",
+          truck_height_ft: "", max_payload_lbs: "",
+        });
       },
+    });
+  };
+
+  const toggleTruckType = (value: string) => {
+    setForm((prev) => {
+      const has = prev.truck_types.includes(value);
+      return { ...prev, truck_types: has ? prev.truck_types.filter((t) => t !== value) : [...prev.truck_types, value] };
     });
   };
 
@@ -206,17 +269,66 @@ export default function TruckersPage() {
       dba_name: trucker.dba_name || "",
       physical_address: trucker.physical_address || "",
       dot_number: trucker.dot_number || "",
+      city: trucker.city || "",
+      power_units: trucker.power_units != null ? String(trucker.power_units) : "",
+      truck_types: Array.isArray(trucker.truck_types) ? trucker.truck_types : [],
+      truck_length_ft: trucker.truck_length_ft != null ? String(trucker.truck_length_ft) : "",
+      truck_width_ft: trucker.truck_width_ft != null ? String(trucker.truck_width_ft) : "",
+      truck_height_ft: trucker.truck_height_ft != null ? String(trucker.truck_height_ft) : "",
+      max_payload_lbs: trucker.max_payload_lbs != null ? String(trucker.max_payload_lbs) : "",
     });
     setModalTab("details");
   };
 
   const handleSaveDetails = () => {
     if (!selectedTrucker) return;
+    const payload: Record<string, unknown> = {
+      id: selectedTrucker.id,
+      phone: editForm.phone || null,
+      email: editForm.email || null,
+      dba_name: editForm.dba_name || null,
+      physical_address: editForm.physical_address || null,
+      dot_number: editForm.dot_number || null,
+      city: editForm.city || null,
+      power_units: editForm.power_units ? parseInt(editForm.power_units) || null : null,
+      truck_types: editForm.truck_types.length ? editForm.truck_types : null,
+      truck_length_ft: editForm.truck_length_ft ? parseFloat(editForm.truck_length_ft) || null : null,
+      truck_width_ft: editForm.truck_width_ft ? parseFloat(editForm.truck_width_ft) || null : null,
+      truck_height_ft: editForm.truck_height_ft ? parseFloat(editForm.truck_height_ft) || null : null,
+      max_payload_lbs: editForm.max_payload_lbs ? parseInt(editForm.max_payload_lbs) || null : null,
+    };
     updateTrucker.mutate(
-      { id: selectedTrucker.id, ...editForm } as Partial<Trucker> & { id: string },
+      payload as Partial<Trucker> & { id: string },
       { onSuccess: () => setSelectedTrucker(null) }
     );
   };
+
+  const toggleEditTruckType = (value: string) => {
+    setEditForm((prev) => {
+      const has = prev.truck_types.includes(value);
+      return { ...prev, truck_types: has ? prev.truck_types.filter((t) => t !== value) : [...prev.truck_types, value] };
+    });
+  };
+
+  const detailDirty = (() => {
+    if (!selectedTrucker) return false;
+    const t = selectedTrucker;
+    if (editForm.phone !== (t.phone || "")) return true;
+    if (editForm.email !== (t.email || "")) return true;
+    if (editForm.dba_name !== (t.dba_name || "")) return true;
+    if (editForm.physical_address !== (t.physical_address || "")) return true;
+    if (editForm.dot_number !== (t.dot_number || "")) return true;
+    if (editForm.city !== (t.city || "")) return true;
+    if (editForm.power_units !== (t.power_units != null ? String(t.power_units) : "")) return true;
+    if (editForm.truck_length_ft !== (t.truck_length_ft != null ? String(t.truck_length_ft) : "")) return true;
+    if (editForm.truck_width_ft !== (t.truck_width_ft != null ? String(t.truck_width_ft) : "")) return true;
+    if (editForm.truck_height_ft !== (t.truck_height_ft != null ? String(t.truck_height_ft) : "")) return true;
+    if (editForm.max_payload_lbs !== (t.max_payload_lbs != null ? String(t.max_payload_lbs) : "")) return true;
+    const origTypes = Array.isArray(t.truck_types) ? t.truck_types : [];
+    if (editForm.truck_types.length !== origTypes.length) return true;
+    if (editForm.truck_types.some((v) => !origTypes.includes(v))) return true;
+    return false;
+  })();
 
   return (
     <>
@@ -396,22 +508,92 @@ export default function TruckersPage() {
                   onChange={(e) => setEditForm({ ...editForm, physical_address: e.target.value })}
                 />
               </div>
-              <div>
-                <div className="text-[10px] font-mono text-txt-light uppercase">Power Units</div>
-                <div className="mt-0.5 text-txt">{selectedTrucker.power_units ?? "—"}</div>
-              </div>
+              <Input
+                label="City"
+                value={editForm.city}
+                onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
+              />
+              <Input
+                label="Number of Trucks"
+                type="number"
+                min="0"
+                value={editForm.power_units}
+                onChange={(e) => setEditForm({ ...editForm, power_units: e.target.value })}
+              />
               <div>
                 <div className="text-[10px] font-mono text-txt-light uppercase">Assigned Agent</div>
                 <div className="mt-0.5 text-txt">{selectedTrucker.agent_name || "—"}</div>
               </div>
             </div>
 
+            {/* Truck Kinds */}
+            <div className="mb-4">
+              <div className="text-[10px] font-mono text-txt-light uppercase mb-2">Truck Kind(s)</div>
+              <div className="flex flex-wrap gap-2">
+                {TRUCK_KIND_OPTIONS.map((opt) => {
+                  const checked = editForm.truck_types.includes(opt.value);
+                  return (
+                    <label
+                      key={opt.value}
+                      className={`flex items-center gap-2 px-3 py-1.5 border rounded-md text-xs cursor-pointer transition-colors
+                        ${checked ? "border-blue bg-blue/5 text-blue" : "border-border text-txt-mid hover:bg-surface-mid"}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleEditTruckType(opt.value)}
+                        className="accent-blue"
+                      />
+                      {opt.label}
+                    </label>
+                  );
+                })}
+              </div>
+              {selectedTrucker.truck_type && !editForm.truck_types.length && (
+                <div className="mt-1.5 text-[10px] text-txt-light">Legacy value: {selectedTrucker.truck_type}</div>
+              )}
+            </div>
+
+            {/* Truck Dimensions */}
+            <div className="mb-4">
+              <div className="text-[10px] font-mono text-txt-light uppercase mb-2">Truck Dimensions</div>
+              <div className="grid grid-cols-4 gap-3">
+                <Input
+                  label="Length (ft)"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={editForm.truck_length_ft}
+                  onChange={(e) => setEditForm({ ...editForm, truck_length_ft: e.target.value })}
+                />
+                <Input
+                  label="Width (ft)"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={editForm.truck_width_ft}
+                  onChange={(e) => setEditForm({ ...editForm, truck_width_ft: e.target.value })}
+                />
+                <Input
+                  label="Height (ft)"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={editForm.truck_height_ft}
+                  onChange={(e) => setEditForm({ ...editForm, truck_height_ft: e.target.value })}
+                />
+                <Input
+                  label="Max Payload (lbs)"
+                  type="number"
+                  min="0"
+                  value={editForm.max_payload_lbs}
+                  onChange={(e) => setEditForm({ ...editForm, max_payload_lbs: e.target.value })}
+                />
+              </div>
+            </div>
+
             {/* Save edits button */}
-            {(editForm.phone !== (selectedTrucker.phone || "") ||
-              editForm.email !== (selectedTrucker.email || "") ||
-              editForm.dba_name !== (selectedTrucker.dba_name || "") ||
-              editForm.physical_address !== (selectedTrucker.physical_address || "") ||
-              editForm.dot_number !== (selectedTrucker.dot_number || "")) && (
+            {detailDirty && (
               <div className="mb-4">
                 <Button
                   onClick={handleSaveDetails}
@@ -498,18 +680,89 @@ export default function TruckersPage() {
       </Modal>
 
       {/* Create Trucker Modal */}
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Add New Trucker">
-        <div className="grid grid-cols-2 gap-4">
-          <Input label="MC Number" value={form.mc_number} onChange={(e) => setForm({ ...form, mc_number: e.target.value })} required />
-          <Input label="Legal Name" value={form.legal_name} onChange={(e) => setForm({ ...form, legal_name: e.target.value })} required />
-          <Input label="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-          <Input label="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          <Select
-            label="State"
-            value={form.state}
-            onChange={(e) => setForm({ ...form, state: e.target.value })}
-            options={[{ value: "", label: "Select..." }, ...["CA", "TX", "FL", "NY", "IL", "PA", "OH", "GA", "NC", "MI"].map((s) => ({ value: s, label: s }))]}
-          />
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Add New Trucker" width="720px">
+        <div className="max-h-[70vh] overflow-y-auto pr-1">
+          <div className="grid grid-cols-2 gap-4">
+            <Input label="MC Number" value={form.mc_number} onChange={(e) => setForm({ ...form, mc_number: e.target.value })} required />
+            <Input label="Legal Name" value={form.legal_name} onChange={(e) => setForm({ ...form, legal_name: e.target.value })} required />
+            <Input label="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+            <Input label="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            <Input label="City" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
+            <Select
+              label="State"
+              value={form.state}
+              onChange={(e) => setForm({ ...form, state: e.target.value })}
+              options={[{ value: "", label: "Select..." }, ...["CA", "TX", "FL", "NY", "IL", "PA", "OH", "GA", "NC", "MI"].map((s) => ({ value: s, label: s }))]}
+            />
+            <Input
+              label="Number of Trucks"
+              type="number"
+              min="0"
+              value={form.power_units}
+              onChange={(e) => setForm({ ...form, power_units: e.target.value })}
+            />
+          </div>
+
+          <div className="mt-4">
+            <div className="text-[10px] font-mono text-txt-light uppercase mb-2">Truck Kind(s)</div>
+            <div className="flex flex-wrap gap-2">
+              {TRUCK_KIND_OPTIONS.map((opt) => {
+                const checked = form.truck_types.includes(opt.value);
+                return (
+                  <label
+                    key={opt.value}
+                    className={`flex items-center gap-2 px-3 py-1.5 border rounded-md text-xs cursor-pointer transition-colors
+                      ${checked ? "border-blue bg-blue/5 text-blue" : "border-border text-txt-mid hover:bg-surface-mid"}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleTruckType(opt.value)}
+                      className="accent-blue"
+                    />
+                    {opt.label}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <div className="text-[10px] font-mono text-txt-light uppercase mb-2">Truck Dimensions</div>
+            <div className="grid grid-cols-4 gap-3">
+              <Input
+                label="Length (ft)"
+                type="number"
+                step="0.1"
+                min="0"
+                value={form.truck_length_ft}
+                onChange={(e) => setForm({ ...form, truck_length_ft: e.target.value })}
+              />
+              <Input
+                label="Width (ft)"
+                type="number"
+                step="0.1"
+                min="0"
+                value={form.truck_width_ft}
+                onChange={(e) => setForm({ ...form, truck_width_ft: e.target.value })}
+              />
+              <Input
+                label="Height (ft)"
+                type="number"
+                step="0.1"
+                min="0"
+                value={form.truck_height_ft}
+                onChange={(e) => setForm({ ...form, truck_height_ft: e.target.value })}
+              />
+              <Input
+                label="Max Payload (lbs)"
+                type="number"
+                min="0"
+                value={form.max_payload_lbs}
+                onChange={(e) => setForm({ ...form, max_payload_lbs: e.target.value })}
+              />
+            </div>
+          </div>
         </div>
         <div className="flex justify-end gap-2 mt-5">
           <Button variant="secondary" onClick={() => setShowCreate(false)}>Cancel</Button>
