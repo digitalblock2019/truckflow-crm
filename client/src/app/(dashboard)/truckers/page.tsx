@@ -234,11 +234,16 @@ export default function TruckersPage() {
     });
   };
 
+  const [statusError, setStatusError] = useState<string | null>(null);
   const handleStatusChange = () => {
     if (!selectedTrucker || !newStatus) return;
+    setStatusError(null);
     updateTrucker.mutate(
       { id: selectedTrucker.id, status_system: newStatus } as Partial<Trucker> & { id: string },
-      { onSuccess: () => { setSelectedTrucker(null); setNewStatus(""); } }
+      {
+        onSuccess: () => { setSelectedTrucker(null); setNewStatus(""); setStatusError(null); },
+        onError: (err) => setStatusError((err as Error)?.message || "Status change failed"),
+      }
     );
   };
 
@@ -642,7 +647,7 @@ export default function TruckersPage() {
                   <Select
                     label="Change Status"
                     value={newStatus}
-                    onChange={(e) => setNewStatus(e.target.value)}
+                    onChange={(e) => { setNewStatus(e.target.value); setStatusError(null); }}
                     options={allStatuses}
                   />
                 </div>
@@ -653,6 +658,11 @@ export default function TruckersPage() {
                   {updateTrucker.isPending ? "Updating..." : "Update Status"}
                 </Button>
               </div>
+              {statusError && (
+                <div className="mt-2 px-3 py-2 bg-red/5 border border-red/30 rounded-md text-xs text-red">
+                  {statusError}
+                </div>
+              )}
             </div>
 
             {isSup && (
