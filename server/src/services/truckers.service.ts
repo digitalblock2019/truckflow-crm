@@ -102,10 +102,66 @@ export class TruckersService {
     return result.rows[0];
   }
 
+  // Throws AppError(400) if the trucker still has unfulfilled required documents.
+  // "Required" = non-conditional doc types where is_required=TRUE,
+  //   plus conditional doc types whose flag (uses_factoring / is_new_authority /
+  //   uses_quick_pay) is currently TRUE on the trucker.
+  // Called from every code path that can flip status_system to 'fully_onboarded'
+  // so the rule can't be bypassed via the generic update endpoint or dropdown.
+  private async assertReadyForFullyOnboarded(id: string) {
+    const flagRow = await query(
+      'SELECT uses_factoring, is_new_authority, uses_quick_pay FROM truckers WHERE id = $1',
+      [id]
+    );
+    if (!flagRow.rows.length) throw new AppError('Trucker not found', 404, 'NOT_FOUND');
+    const flags = flagRow.rows[0];
+
+    const requiredRes = await query(
+      `SELECT id, label
+         FROM trucker_document_types
+        WHERE (condition_flag IS NULL AND is_required = TRUE)
+           OR (condition_flag = 'uses_factoring'   AND $1::boolean = TRUE)
+           OR (condition_flag = 'is_new_authority' AND $2::boolean = TRUE)
+           OR (condition_flag = 'uses_quick_pay'   AND $3::boolean = TRUE)`,
+      [flags.uses_factoring, flags.is_new_authority, flags.uses_quick_pay]
+    );
+    const required = requiredRes.rows as { id: string; label: string }[];
+
+    if (required.length === 0) {
+      throw new AppError(
+        'Cannot mark fully onboarded: no document types are configured',
+        400,
+        'VALIDATION_ERROR'
+      );
+    }
+
+    const uploadedRes = await query(
+      'SELECT document_type_id FROM trucker_documents WHERE trucker_id = $1 AND is_current = TRUE',
+      [id]
+    );
+    const uploaded = new Set(uploadedRes.rows.map((r: any) => r.document_type_id));
+
+    const missing = required.filter((t) => !uploaded.has(t.id));
+    if (missing.length > 0) {
+      throw new AppError(
+        `Cannot mark fully onboarded — missing required document(s): ${missing.map((m) => m.label).join(', ')}`,
+        400,
+        'VALIDATION_ERROR'
+      );
+    }
+  }
+
   async update(id: string, data: any, userId: string) {
     const existing = await query('SELECT * FROM truckers WHERE id = $1', [id]);
     if (!existing.rows.length) throw new AppError('Trucker not found', 404, 'NOT_FOUND');
     const old = existing.rows[0];
+
+    // Block any path that tries to flip status to fully_onboarded without
+    // the required document checklist being complete. Enforced server-side so
+    // the Truckers-page status dropdown can't bypass the onboarding workflow.
+    if (data.status_system === 'fully_onboarded' && old.status_system !== 'fully_onboarded') {
+      await this.assertReadyForFullyOnboarded(id);
+    }
 
     // Track status changes and auto-assign agent
     if (data.status_system && data.status_system !== old.status_system) {
@@ -305,6 +361,8 @@ export class TruckersService {
 
     const old = trucker.rows[0];
     if (old.status_system === 'fully_onboarded') throw new AppError('Trucker is already fully onboarded', 400, 'VALIDATION_ERROR');
+
+    await this.assertReadyForFullyOnboarded(id);
 
     await query(
       `UPDATE truckers SET status_system='fully_onboarded', fully_onboarded_at=NOW(), updated_at=NOW() WHERE id=$1`,
