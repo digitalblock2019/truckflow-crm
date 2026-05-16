@@ -129,6 +129,27 @@ async function cleanAll() {
     }
   }
 
+  // 2b. Re-seed master document type list (wiped above).
+  // Without these rows, every onboarding trucker shows an empty checklist
+  // and "Mark Fully Onboarded" trivially passes (vacuous truth).
+  console.log('\nRe-seeding trucker_document_types...');
+  try {
+    await query(`
+      INSERT INTO trucker_document_types (slug, label, is_required, sort_order, condition_flag) VALUES
+        ('mc_authority_letter',          'MC Authority Letter',              TRUE,  1, NULL),
+        ('w9_form',                      'W-9 Form',                         TRUE,  2, NULL),
+        ('certificate_of_insurance',     'Certificate of Insurance (COI)',   TRUE,  3, NULL),
+        ('dispatcher_carrier_agreement', 'Dispatcher–Carrier Agreement',     TRUE,  4, NULL),
+        ('notice_of_assignment',         'Notice of Assignment',             FALSE, 5, 'uses_factoring'),
+        ('cdl_copy',                     'Copy of CDL',                      FALSE, 6, 'is_new_authority'),
+        ('voided_check',                 'Voided Check',                     FALSE, 7, 'uses_quick_pay')
+      ON CONFLICT (slug) DO NOTHING
+    `);
+    console.log('  ✓ 7 document types re-seeded');
+  } catch (err: any) {
+    console.log(`  ⚠ trucker_document_types seed failed: ${err.message}`);
+  }
+
   // 3. Clean Supabase Storage
   console.log('\nCleaning Supabase Storage...');
   const supabaseUrl = process.env.SUPABASE_URL;
