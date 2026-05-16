@@ -108,11 +108,32 @@ export default function OnboardingPage() {
   const docsArr = docs ?? [];
   const uploadedCount = docsArr.filter((d) => d.uploaded).length;
   const progress = docsArr.length > 0 ? Math.round((uploadedCount / docsArr.length) * 100) : 0;
-  const allRequiredUploaded = docsArr.filter((d) => d.required).every((d) => d.uploaded);
+  // Require at least one configured doc type; an empty list otherwise passes vacuously.
+  const allRequiredUploaded = docsArr.length > 0 && docsArr.filter((d) => d.required).every((d) => d.uploaded);
+
+  const [onboardedToast, setOnboardedToast] = useState<string | null>(null);
+  useEffect(() => {
+    if (!onboardedToast) return;
+    const t = setTimeout(() => setOnboardedToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [onboardedToast]);
 
   return (
     <>
       <Topbar title="Onboarding" subtitle="Track trucker onboarding progress and documents" />
+      {onboardedToast && (
+        <div className="mx-6 mt-3 px-4 py-2.5 bg-green/10 border border-green/30 rounded-md text-xs text-green flex items-center justify-between">
+          <span className="font-semibold">✓ {onboardedToast}</span>
+          <button
+            type="button"
+            onClick={() => setOnboardedToast(null)}
+            className="text-green hover:opacity-70 text-base leading-none"
+            aria-label="Dismiss"
+          >
+            ×
+          </button>
+        </div>
+      )}
       <div className="flex-1 min-h-0 overflow-y-auto p-6 bg-surface">
         <div className="grid grid-cols-[340px_1fr] gap-4">
           <Card className="!p-0 max-h-[calc(100vh-140px)] overflow-y-auto">
@@ -342,8 +363,12 @@ export default function OnboardingPage() {
                 <div className="mt-5 pt-4 border-t border-border">
                   <Button
                     onClick={() => {
+                      const name = selected.legal_name;
                       markOnboarded.mutate(selected.id, {
-                        onSuccess: () => setSelectedId(""),
+                        onSuccess: () => {
+                          setOnboardedToast(`${name} marked as fully onboarded`);
+                          setSelectedId("");
+                        },
                       });
                     }}
                     disabled={markOnboarded.isPending || !allRequiredUploaded}
@@ -351,6 +376,11 @@ export default function OnboardingPage() {
                   >
                     {markOnboarded.isPending ? "Marking..." : "Mark as Fully Onboarded"}
                   </Button>
+                  {docsArr.length === 0 && (
+                    <p className="text-[10px] text-txt-light mt-1.5 text-center">
+                      No document types configured — cannot mark fully onboarded
+                    </p>
+                  )}
                   {!allRequiredUploaded && docsArr.length > 0 && (
                     <p className="text-[10px] text-txt-light mt-1.5 text-center">
                       {docsArr.filter((d) => d.required && !d.uploaded).length} required document(s) still missing
