@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import Topbar from "@/components/layout/Topbar";
 import Card, { CardHeader } from "@/components/ui/Card";
 import ProgressBar from "@/components/ui/ProgressBar";
@@ -132,33 +133,75 @@ export default function OnboardingPage() {
     return () => clearTimeout(t);
   }, [onboardedToast]);
 
+  // Render toast via portal directly onto document.body so it can't be clipped
+  // or repositioned by any ancestor with transform/overflow/contain.
+  // Every visual property is inline so a missing Tailwind utility cannot hide it.
+  const toastNode =
+    typeof document !== "undefined" && onboardedToast
+      ? createPortal(
+          <div
+            role="status"
+            aria-live="polite"
+            style={{
+              position: "fixed",
+              top: 24,
+              right: 24,
+              zIndex: 2147483647,
+              maxWidth: 420,
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              padding: "12px 16px",
+              borderRadius: 10,
+              boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
+              backgroundColor: "#ffffff",
+              borderLeft: "4px solid #16a34a",
+              fontFamily: "system-ui, -apple-system, sans-serif",
+            }}
+          >
+            <span
+              style={{
+                flexShrink: 0,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 24,
+                height: 24,
+                borderRadius: "50%",
+                backgroundColor: "#16a34a",
+                color: "#ffffff",
+                fontSize: 14,
+                fontWeight: 700,
+              }}
+            >
+              ✓
+            </span>
+            <span style={{ fontSize: 14, color: "#0f172a", fontWeight: 500 }}>{onboardedToast}</span>
+            <button
+              type="button"
+              onClick={() => setOnboardedToast(null)}
+              aria-label="Dismiss"
+              style={{
+                marginLeft: 8,
+                background: "transparent",
+                border: "none",
+                color: "#64748b",
+                fontSize: 18,
+                lineHeight: 1,
+                cursor: "pointer",
+              }}
+            >
+              ×
+            </button>
+          </div>,
+          document.body,
+        )
+      : null;
+
   return (
     <>
+      {toastNode}
       <Topbar title="Onboarding" subtitle="Track trucker onboarding progress and documents" />
-      {onboardedToast && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="fixed top-6 right-6 z-50 max-w-md flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg bg-white border-l-4"
-          style={{ borderLeftColor: "#16a34a" }}
-        >
-          <span
-            className="flex-shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-full text-white text-sm font-bold"
-            style={{ backgroundColor: "#16a34a" }}
-          >
-            ✓
-          </span>
-          <span className="text-sm text-txt font-medium">{onboardedToast}</span>
-          <button
-            type="button"
-            onClick={() => setOnboardedToast(null)}
-            className="ml-2 text-txt-light hover:text-txt text-lg leading-none"
-            aria-label="Dismiss"
-          >
-            ×
-          </button>
-        </div>
-      )}
       <div className="flex-1 min-h-0 overflow-y-auto p-6 bg-surface">
         <div className="grid grid-cols-[340px_1fr] gap-4">
           <Card className="!p-0 max-h-[calc(100vh-140px)] overflow-y-auto">
