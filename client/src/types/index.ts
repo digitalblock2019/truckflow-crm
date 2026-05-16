@@ -49,9 +49,15 @@ export interface Trucker {
   phone: string | null;
   email: string | null;
   physical_address: string | null;
+  city: string | null;
   state: string | null;
   status_system: string | null;
   truck_type: string | null;
+  truck_types: string[] | null;
+  truck_length_ft: string | number | null;
+  truck_width_ft: string | number | null;
+  truck_height_ft: string | number | null;
+  max_payload_lbs: number | null;
   power_units: number | null;
   driver_count: number | null;
   assigned_agent_id: string | null;

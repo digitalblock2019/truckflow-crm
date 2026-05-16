@@ -392,9 +392,15 @@ CREATE TABLE truckers (
   owner_driver_name TEXT,
   phone             TEXT,
   email             CITEXT,
-  truck_type        TEXT,                      -- Flatbed, Dry Van, Reefer etc — CRM-entered
+  truck_type        TEXT,                      -- Flatbed, Dry Van, Reefer etc — legacy single-value, kept for back-compat
+  truck_types       TEXT[],                    -- Multi-select: ['dry_van','reefer','flatbed','box_truck','tanker','other']
+  city              TEXT,
   state             TEXT,                      -- Derived from PhysicalAddress on import
   physical_address  TEXT,                      -- PhysicalAddress column — full address string
+  truck_length_ft   NUMERIC(6,2),              -- Trailer/cargo length in feet
+  truck_width_ft    NUMERIC(6,2),              -- Trailer/cargo width in feet
+  truck_height_ft   NUMERIC(6,2),              -- Trailer/cargo interior height in feet
+  max_payload_lbs   INTEGER,                   -- Maximum cargo weight in lbs
   notes             TEXT,
 
   -- Status: either a system enum value OR a custom status id (one must be set)

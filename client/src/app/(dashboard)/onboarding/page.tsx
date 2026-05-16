@@ -1,14 +1,54 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Topbar from "@/components/layout/Topbar";
 import Card, { CardHeader } from "@/components/ui/Card";
 import ProgressBar from "@/components/ui/ProgressBar";
 import Badge from "@/components/ui/Badge";
+import Input from "@/components/ui/Input";
 import DocSlot from "@/components/features/DocSlot";
 import Button from "@/components/ui/Button";
 import { useTruckers, useTruckerDocuments, useUploadDocument, useMarkFullyOnboarded, useUpdateTrucker } from "@/lib/hooks";
 import type { Trucker } from "@/types";
+
+const TRUCK_KIND_OPTIONS = [
+  { value: "dry_van", label: "Dry Van" },
+  { value: "reefer", label: "Reefer" },
+  { value: "flatbed", label: "Flatbed" },
+  { value: "box_truck", label: "Box Truck" },
+  { value: "tanker", label: "Tanker" },
+  { value: "other", label: "Other" },
+];
+
+type ProfileForm = {
+  city: string;
+  power_units: string;
+  truck_types: string[];
+  truck_length_ft: string;
+  truck_width_ft: string;
+  truck_height_ft: string;
+  max_payload_lbs: string;
+};
+
+const emptyProfile: ProfileForm = {
+  city: "",
+  power_units: "",
+  truck_types: [],
+  truck_length_ft: "",
+  truck_width_ft: "",
+  truck_height_ft: "",
+  max_payload_lbs: "",
+};
+
+const truckerToProfile = (t: Trucker): ProfileForm => ({
+  city: t.city || "",
+  power_units: t.power_units != null ? String(t.power_units) : "",
+  truck_types: Array.isArray(t.truck_types) ? t.truck_types : [],
+  truck_length_ft: t.truck_length_ft != null ? String(t.truck_length_ft) : "",
+  truck_width_ft: t.truck_width_ft != null ? String(t.truck_width_ft) : "",
+  truck_height_ft: t.truck_height_ft != null ? String(t.truck_height_ft) : "",
+  max_payload_lbs: t.max_payload_lbs != null ? String(t.max_payload_lbs) : "",
+});
 
 export default function OnboardingPage() {
   const [selectedId, setSelectedId] = useState<string>("");
@@ -22,6 +62,47 @@ export default function OnboardingPage() {
   const [flagOverrides, setFlagOverrides] = useState<Record<string, boolean>>({});
   const baseTrucker = truckers.find((t) => t.id === selectedId);
   const selected = baseTrucker ? { ...baseTrucker, ...flagOverrides } as Trucker : undefined;
+
+  const [profile, setProfile] = useState<ProfileForm>(emptyProfile);
+  useEffect(() => {
+    if (baseTrucker) setProfile(truckerToProfile(baseTrucker));
+    else setProfile(emptyProfile);
+  }, [baseTrucker?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggleProfileTruckType = (value: string) => {
+    setProfile((prev) => {
+      const has = prev.truck_types.includes(value);
+      return { ...prev, truck_types: has ? prev.truck_types.filter((t) => t !== value) : [...prev.truck_types, value] };
+    });
+  };
+
+  const profileDirty = (() => {
+    if (!baseTrucker) return false;
+    const original = truckerToProfile(baseTrucker);
+    if (profile.city !== original.city) return true;
+    if (profile.power_units !== original.power_units) return true;
+    if (profile.truck_length_ft !== original.truck_length_ft) return true;
+    if (profile.truck_width_ft !== original.truck_width_ft) return true;
+    if (profile.truck_height_ft !== original.truck_height_ft) return true;
+    if (profile.max_payload_lbs !== original.max_payload_lbs) return true;
+    if (profile.truck_types.length !== original.truck_types.length) return true;
+    if (profile.truck_types.some((v) => !original.truck_types.includes(v))) return true;
+    return false;
+  })();
+
+  const handleSaveProfile = () => {
+    if (!selected) return;
+    updateTrucker.mutate({
+      id: selected.id,
+      city: profile.city || null,
+      power_units: profile.power_units ? parseInt(profile.power_units) || null : null,
+      truck_types: profile.truck_types.length ? profile.truck_types : null,
+      truck_length_ft: profile.truck_length_ft ? parseFloat(profile.truck_length_ft) || null : null,
+      truck_width_ft: profile.truck_width_ft ? parseFloat(profile.truck_width_ft) || null : null,
+      truck_height_ft: profile.truck_height_ft ? parseFloat(profile.truck_height_ft) || null : null,
+      max_payload_lbs: profile.max_payload_lbs ? parseInt(profile.max_payload_lbs) || null : null,
+    } as Partial<Trucker> & { id: string });
+  };
 
   // Calculate onboarding progress from docs
   const docsArr = docs ?? [];
@@ -130,6 +211,106 @@ export default function OnboardingPage() {
                       <span className="text-txt-mid">{label}</span>
                     </label>
                   ))}
+                </div>
+
+                {/* Trucker Profile (city, fleet, truck kinds, dimensions) */}
+                <div className="mb-5 p-4 border border-border rounded-lg">
+                  <h4 className="text-[11px] font-semibold text-txt-mid font-mono uppercase tracking-wide mb-3">
+                    Trucker Profile
+                  </h4>
+                  <div className="grid grid-cols-3 gap-3 mb-3">
+                    <Input
+                      label="City"
+                      value={profile.city}
+                      onChange={(e) => setProfile({ ...profile, city: e.target.value })}
+                    />
+                    <Input
+                      label="State"
+                      value={selected.state || ""}
+                      locked
+                      readOnly
+                    />
+                    <Input
+                      label="Number of Trucks"
+                      type="number"
+                      min="0"
+                      value={profile.power_units}
+                      onChange={(e) => setProfile({ ...profile, power_units: e.target.value })}
+                    />
+                  </div>
+                  <div className="mb-3">
+                    <div className="text-[10px] font-mono text-txt-light uppercase mb-2">Truck Kind(s)</div>
+                    <div className="flex flex-wrap gap-2">
+                      {TRUCK_KIND_OPTIONS.map((opt) => {
+                        const checked = profile.truck_types.includes(opt.value);
+                        return (
+                          <label
+                            key={opt.value}
+                            className={`flex items-center gap-2 px-3 py-1.5 border rounded-md text-xs cursor-pointer transition-colors
+                              ${checked ? "border-blue bg-blue/5 text-blue" : "border-border text-txt-mid hover:bg-surface-mid"}`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleProfileTruckType(opt.value)}
+                              className="accent-blue"
+                            />
+                            {opt.label}
+                          </label>
+                        );
+                      })}
+                    </div>
+                    {selected.truck_type && !profile.truck_types.length && (
+                      <div className="mt-1.5 text-[10px] text-txt-light">Legacy value: {selected.truck_type}</div>
+                    )}
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-mono text-txt-light uppercase mb-2">Truck Dimensions</div>
+                    <div className="grid grid-cols-4 gap-3">
+                      <Input
+                        label="Length (ft)"
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        value={profile.truck_length_ft}
+                        onChange={(e) => setProfile({ ...profile, truck_length_ft: e.target.value })}
+                      />
+                      <Input
+                        label="Width (ft)"
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        value={profile.truck_width_ft}
+                        onChange={(e) => setProfile({ ...profile, truck_width_ft: e.target.value })}
+                      />
+                      <Input
+                        label="Height (ft)"
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        value={profile.truck_height_ft}
+                        onChange={(e) => setProfile({ ...profile, truck_height_ft: e.target.value })}
+                      />
+                      <Input
+                        label="Max Payload (lbs)"
+                        type="number"
+                        min="0"
+                        value={profile.max_payload_lbs}
+                        onChange={(e) => setProfile({ ...profile, max_payload_lbs: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  {profileDirty && (
+                    <div className="mt-3">
+                      <Button
+                        onClick={handleSaveProfile}
+                        disabled={updateTrucker.isPending}
+                        className="w-full"
+                      >
+                        {updateTrucker.isPending ? "Saving..." : "Save Profile"}
+                      </Button>
+                    </div>
+                  )}
                 </div>
 
                 <h4 className="text-[11px] font-semibold text-txt-mid font-mono uppercase tracking-wide mb-3">

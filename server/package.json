@@ -12,6 +12,7 @@
     "db:seed": "ts-node scripts/seed.ts",
     "db:migrate:reset-token": "ts-node scripts/addResetTokenColumns.ts",
     "db:migrate:stripe": "ts-node scripts/migrateStripe.ts",
+    "db:migrate:trucker-onboarding": "ts-node scripts/addTruckerOnboardingFields.ts",
     "test": "jest",
     "test:unit": "jest --testPathPatterns=unit",
     "test:integration": "jest --testPathPatterns=integration"
