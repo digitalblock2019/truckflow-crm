@@ -40,6 +40,13 @@ export interface Employee {
   [key: string]: unknown;
 }
 
+export interface PreferredLane {
+  origin_city: string;
+  origin_state: string;
+  dest_city: string;
+  dest_state: string;
+}
+
 export interface Trucker {
   id: string;
   mc_number: string;
@@ -58,6 +65,11 @@ export interface Trucker {
   truck_width_ft: string | number | null;
   truck_height_ft: string | number | null;
   max_payload_lbs: number | null;
+  operation_type: string | null;
+  preferred_lanes: PreferredLane[] | null;
+  operating_states: string[] | null;
+  avoid_states: string[] | null;
+  preferred_days: string[] | null;
   power_units: number | null;
   driver_count: number | null;
   assigned_agent_id: string | null;

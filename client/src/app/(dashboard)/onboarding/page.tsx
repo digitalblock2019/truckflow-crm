@@ -8,8 +8,9 @@ import Badge from "@/components/ui/Badge";
 import Input from "@/components/ui/Input";
 import DocSlot from "@/components/features/DocSlot";
 import Button from "@/components/ui/Button";
+import Select from "@/components/ui/Select";
 import { useTruckers, useTruckerDocuments, useUploadDocument, useMarkFullyOnboarded, useUpdateTrucker } from "@/lib/hooks";
-import type { Trucker } from "@/types";
+import type { PreferredLane, Trucker } from "@/types";
 
 const TRUCK_KIND_OPTIONS = [
   { value: "dry_van", label: "Dry Van" },
@@ -20,6 +21,43 @@ const TRUCK_KIND_OPTIONS = [
   { value: "other", label: "Other" },
 ];
 
+const OPERATION_TYPE_OPTIONS = [
+  { value: "", label: "Select..." },
+  { value: "local", label: "Local (within ~150 mi)" },
+  { value: "regional", label: "Regional (multi-state)" },
+  { value: "otr", label: "OTR (long-haul, nationwide)" },
+];
+
+const DAY_OPTIONS = [
+  { value: "mon", label: "Mon" },
+  { value: "tue", label: "Tue" },
+  { value: "wed", label: "Wed" },
+  { value: "thu", label: "Thu" },
+  { value: "fri", label: "Fri" },
+  { value: "sat", label: "Sat" },
+  { value: "sun", label: "Sun" },
+];
+
+const US_STATES = [
+  "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA",
+  "HI","ID","IL","IN","IA","KS","KY","LA","ME","MD",
+  "MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ",
+  "NM","NY","NC","ND","OH","OK","OR","PA","RI","SC",
+  "SD","TN","TX","UT","VT","VA","WA","WV","WI","WY",
+];
+
+const arraysEqual = (a: string[], b: string[]) =>
+  a.length === b.length && a.every((v, i) => v === b[i]);
+
+const lanesEqual = (a: PreferredLane[], b: PreferredLane[]) =>
+  a.length === b.length &&
+  a.every((l, i) =>
+    l.origin_city === b[i].origin_city &&
+    l.origin_state === b[i].origin_state &&
+    l.dest_city === b[i].dest_city &&
+    l.dest_state === b[i].dest_state,
+  );
+
 type ProfileForm = {
   city: string;
   power_units: string;
@@ -28,6 +66,11 @@ type ProfileForm = {
   truck_width_ft: string;
   truck_height_ft: string;
   max_payload_lbs: string;
+  operation_type: string;
+  preferred_lanes: PreferredLane[];
+  operating_states: string[];
+  avoid_states: string[];
+  preferred_days: string[];
 };
 
 const emptyProfile: ProfileForm = {
@@ -38,6 +81,11 @@ const emptyProfile: ProfileForm = {
   truck_width_ft: "",
   truck_height_ft: "",
   max_payload_lbs: "",
+  operation_type: "",
+  preferred_lanes: [],
+  operating_states: [],
+  avoid_states: [],
+  preferred_days: [],
 };
 
 const truckerToProfile = (t: Trucker): ProfileForm => ({
@@ -48,6 +96,11 @@ const truckerToProfile = (t: Trucker): ProfileForm => ({
   truck_width_ft: t.truck_width_ft != null ? String(t.truck_width_ft) : "",
   truck_height_ft: t.truck_height_ft != null ? String(t.truck_height_ft) : "",
   max_payload_lbs: t.max_payload_lbs != null ? String(t.max_payload_lbs) : "",
+  operation_type: t.operation_type || "",
+  preferred_lanes: Array.isArray(t.preferred_lanes) ? t.preferred_lanes : [],
+  operating_states: Array.isArray(t.operating_states) ? t.operating_states : [],
+  avoid_states: Array.isArray(t.avoid_states) ? t.avoid_states : [],
+  preferred_days: Array.isArray(t.preferred_days) ? t.preferred_days : [],
 });
 
 export default function OnboardingPage() {
@@ -76,6 +129,48 @@ export default function OnboardingPage() {
     });
   };
 
+  const toggleProfileDay = (value: string) => {
+    setProfile((prev) => {
+      const has = prev.preferred_days.includes(value);
+      return { ...prev, preferred_days: has ? prev.preferred_days.filter((d) => d !== value) : [...prev.preferred_days, value] };
+    });
+  };
+
+  const toggleProfileOperatingState = (value: string) => {
+    setProfile((prev) => {
+      const has = prev.operating_states.includes(value);
+      return { ...prev, operating_states: has ? prev.operating_states.filter((s) => s !== value) : [...prev.operating_states, value] };
+    });
+  };
+
+  const toggleProfileAvoidState = (value: string) => {
+    setProfile((prev) => {
+      const has = prev.avoid_states.includes(value);
+      return { ...prev, avoid_states: has ? prev.avoid_states.filter((s) => s !== value) : [...prev.avoid_states, value] };
+    });
+  };
+
+  const addLane = () => {
+    setProfile((prev) => ({
+      ...prev,
+      preferred_lanes: [...prev.preferred_lanes, { origin_city: "", origin_state: "", dest_city: "", dest_state: "" }],
+    }));
+  };
+
+  const updateLane = (idx: number, field: keyof PreferredLane, value: string) => {
+    setProfile((prev) => ({
+      ...prev,
+      preferred_lanes: prev.preferred_lanes.map((l, i) => (i === idx ? { ...l, [field]: value } : l)),
+    }));
+  };
+
+  const removeLane = (idx: number) => {
+    setProfile((prev) => ({
+      ...prev,
+      preferred_lanes: prev.preferred_lanes.filter((_, i) => i !== idx),
+    }));
+  };
+
   const profileDirty = (() => {
     if (!baseTrucker) return false;
     const original = truckerToProfile(baseTrucker);
@@ -85,13 +180,22 @@ export default function OnboardingPage() {
     if (profile.truck_width_ft !== original.truck_width_ft) return true;
     if (profile.truck_height_ft !== original.truck_height_ft) return true;
     if (profile.max_payload_lbs !== original.max_payload_lbs) return true;
+    if (profile.operation_type !== original.operation_type) return true;
     if (profile.truck_types.length !== original.truck_types.length) return true;
     if (profile.truck_types.some((v) => !original.truck_types.includes(v))) return true;
+    if (!arraysEqual(profile.preferred_days, original.preferred_days)) return true;
+    if (!arraysEqual(profile.operating_states, original.operating_states)) return true;
+    if (!arraysEqual(profile.avoid_states, original.avoid_states)) return true;
+    if (!lanesEqual(profile.preferred_lanes, original.preferred_lanes)) return true;
     return false;
   })();
 
   const handleSaveProfile = () => {
     if (!selected) return;
+    // Drop empty lanes (rows where all fields blank)
+    const cleanLanes = profile.preferred_lanes.filter(
+      (l) => l.origin_city.trim() || l.origin_state.trim() || l.dest_city.trim() || l.dest_state.trim(),
+    );
     updateTrucker.mutate({
       id: selected.id,
       city: profile.city || null,
@@ -101,6 +205,11 @@ export default function OnboardingPage() {
       truck_width_ft: profile.truck_width_ft ? parseFloat(profile.truck_width_ft) || null : null,
       truck_height_ft: profile.truck_height_ft ? parseFloat(profile.truck_height_ft) || null : null,
       max_payload_lbs: profile.max_payload_lbs ? parseInt(profile.max_payload_lbs) || null : null,
+      operation_type: profile.operation_type || null,
+      preferred_lanes: cleanLanes.length ? cleanLanes : null,
+      operating_states: profile.operating_states.length ? profile.operating_states : null,
+      avoid_states: profile.avoid_states.length ? profile.avoid_states : null,
+      preferred_days: profile.preferred_days.length ? profile.preferred_days : null,
     } as Partial<Trucker> & { id: string });
   };
 
@@ -300,6 +409,145 @@ export default function OnboardingPage() {
                       />
                     </div>
                   </div>
+
+                  {/* Routes & Availability */}
+                  <div className="mt-5 pt-4 border-t border-border">
+                    <h5 className="text-[11px] font-semibold text-txt-mid font-mono uppercase tracking-wide mb-3">
+                      Routes &amp; Availability
+                    </h5>
+
+                    <div className="mb-4">
+                      <Select
+                        label="Operation Type"
+                        value={profile.operation_type}
+                        onChange={(e) => setProfile({ ...profile, operation_type: e.target.value })}
+                        options={OPERATION_TYPE_OPTIONS}
+                      />
+                    </div>
+
+                    <div className="mb-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-[10px] font-mono text-txt-light uppercase">Preferred Lanes</div>
+                        <button
+                          type="button"
+                          onClick={addLane}
+                          className="text-[11px] text-blue font-semibold hover:underline"
+                        >
+                          + Add Lane
+                        </button>
+                      </div>
+                      {profile.preferred_lanes.length === 0 ? (
+                        <div className="text-[11px] text-txt-light italic">
+                          No lanes yet. Click &quot;+ Add Lane&quot; to add one.
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-2">
+                          {profile.preferred_lanes.map((lane, idx) => (
+                            <div key={idx} className="grid grid-cols-[1fr_70px_18px_1fr_70px_24px] gap-2 items-end">
+                              <Input
+                                label={idx === 0 ? "Origin City" : undefined}
+                                value={lane.origin_city}
+                                placeholder="Dallas"
+                                onChange={(e) => updateLane(idx, "origin_city", e.target.value)}
+                              />
+                              <Select
+                                label={idx === 0 ? "ST" : undefined}
+                                value={lane.origin_state}
+                                onChange={(e) => updateLane(idx, "origin_state", e.target.value)}
+                                options={[{ value: "", label: "—" }, ...US_STATES.map((s) => ({ value: s, label: s }))]}
+                              />
+                              <div className="text-txt-light text-center pb-2">→</div>
+                              <Input
+                                label={idx === 0 ? "Destination City" : undefined}
+                                value={lane.dest_city}
+                                placeholder="Atlanta"
+                                onChange={(e) => updateLane(idx, "dest_city", e.target.value)}
+                              />
+                              <Select
+                                label={idx === 0 ? "ST" : undefined}
+                                value={lane.dest_state}
+                                onChange={(e) => updateLane(idx, "dest_state", e.target.value)}
+                                options={[{ value: "", label: "—" }, ...US_STATES.map((s) => ({ value: s, label: s }))]}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removeLane(idx)}
+                                className="text-red text-base pb-1.5 hover:opacity-70"
+                                title="Remove lane"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="mb-4">
+                      <div className="text-[10px] font-mono text-txt-light uppercase mb-2">
+                        Operating States <span className="text-txt-light/70 normal-case font-sans">(states they&apos;ll run in)</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {US_STATES.map((s) => {
+                          const checked = profile.operating_states.includes(s);
+                          return (
+                            <button
+                              key={s}
+                              type="button"
+                              onClick={() => toggleProfileOperatingState(s)}
+                              className={`px-2 py-1 border rounded text-[11px] font-mono cursor-pointer transition-colors
+                                ${checked ? "border-blue bg-blue/10 text-blue font-semibold" : "border-border text-txt-mid hover:bg-surface-mid"}`}
+                            >
+                              {s}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="mb-4">
+                      <div className="text-[10px] font-mono text-txt-light uppercase mb-2">
+                        Avoid States <span className="text-txt-light/70 normal-case font-sans">(hard &quot;no&quot;)</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {US_STATES.map((s) => {
+                          const checked = profile.avoid_states.includes(s);
+                          return (
+                            <button
+                              key={s}
+                              type="button"
+                              onClick={() => toggleProfileAvoidState(s)}
+                              className={`px-2 py-1 border rounded text-[11px] font-mono cursor-pointer transition-colors
+                                ${checked ? "border-red bg-red/10 text-red font-semibold" : "border-border text-txt-mid hover:bg-surface-mid"}`}
+                            >
+                              {s}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-[10px] font-mono text-txt-light uppercase mb-2">Preferred Days</div>
+                      <div className="flex flex-wrap gap-2">
+                        {DAY_OPTIONS.map((opt) => {
+                          const checked = profile.preferred_days.includes(opt.value);
+                          return (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => toggleProfileDay(opt.value)}
+                              className={`px-3 py-1.5 border rounded-md text-xs cursor-pointer transition-colors
+                                ${checked ? "border-blue bg-blue/5 text-blue font-semibold" : "border-border text-txt-mid hover:bg-surface-mid"}`}
+                            >
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
                   {profileDirty && (
                     <div className="mt-3">
                       <Button
