@@ -9,6 +9,13 @@ import Badge from "@/components/ui/Badge";
 import Input from "@/components/ui/Input";
 import DocSlot from "@/components/features/DocSlot";
 import Button from "@/components/ui/Button";
+import RoutesAndAvailabilityFields, {
+  type RoutesValue,
+  emptyRoutes,
+  routesValueFromTrucker,
+  routesEqual,
+  serializeRoutes,
+} from "@/components/features/RoutesAndAvailabilityFields";
 import { useTruckers, useTruckerDocuments, useUploadDocument, useMarkFullyOnboarded, useUpdateTrucker } from "@/lib/hooks";
 import type { Trucker } from "@/types";
 
@@ -29,6 +36,7 @@ type ProfileForm = {
   truck_width_ft: string;
   truck_height_ft: string;
   max_payload_lbs: string;
+  routes: RoutesValue;
 };
 
 const emptyProfile: ProfileForm = {
@@ -39,6 +47,7 @@ const emptyProfile: ProfileForm = {
   truck_width_ft: "",
   truck_height_ft: "",
   max_payload_lbs: "",
+  routes: emptyRoutes,
 };
 
 const truckerToProfile = (t: Trucker): ProfileForm => ({
@@ -49,6 +58,7 @@ const truckerToProfile = (t: Trucker): ProfileForm => ({
   truck_width_ft: t.truck_width_ft != null ? String(t.truck_width_ft) : "",
   truck_height_ft: t.truck_height_ft != null ? String(t.truck_height_ft) : "",
   max_payload_lbs: t.max_payload_lbs != null ? String(t.max_payload_lbs) : "",
+  routes: routesValueFromTrucker(t),
 });
 
 export default function OnboardingPage() {
@@ -88,6 +98,7 @@ export default function OnboardingPage() {
     if (profile.max_payload_lbs !== original.max_payload_lbs) return true;
     if (profile.truck_types.length !== original.truck_types.length) return true;
     if (profile.truck_types.some((v) => !original.truck_types.includes(v))) return true;
+    if (!routesEqual(profile.routes, original.routes)) return true;
     return false;
   })();
 
@@ -102,6 +113,7 @@ export default function OnboardingPage() {
       truck_width_ft: profile.truck_width_ft ? parseFloat(profile.truck_width_ft) || null : null,
       truck_height_ft: profile.truck_height_ft ? parseFloat(profile.truck_height_ft) || null : null,
       max_payload_lbs: profile.max_payload_lbs ? parseInt(profile.max_payload_lbs) || null : null,
+      ...serializeRoutes(profile.routes),
     } as Partial<Trucker> & { id: string });
   };
 
@@ -388,6 +400,15 @@ export default function OnboardingPage() {
                       />
                     </div>
                   </div>
+
+                  {/* Routes & Availability — shared component */}
+                  <div className="mt-5 pt-4 border-t border-border">
+                    <RoutesAndAvailabilityFields
+                      value={profile.routes}
+                      onChange={(routes) => setProfile({ ...profile, routes })}
+                    />
+                  </div>
+
                   {profileDirty && (
                     <div className="mt-3">
                       <Button

@@ -13,6 +13,7 @@
     "db:migrate:reset-token": "ts-node scripts/addResetTokenColumns.ts",
     "db:migrate:stripe": "ts-node scripts/migrateStripe.ts",
     "db:migrate:trucker-onboarding": "ts-node scripts/addTruckerOnboardingFields.ts",
+    "db:migrate:trucker-routes": "ts-node scripts/addTruckerRoutesAndAvailability.ts",
     "db:migrate:dispatcher-split": "ts-node scripts/splitDispatcherAssignment.ts",
     "test": "jest",
     "test:unit": "jest --testPathPatterns=unit",

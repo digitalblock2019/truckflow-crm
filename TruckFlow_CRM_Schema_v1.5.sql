@@ -401,6 +401,14 @@ CREATE TABLE truckers (
   truck_width_ft    NUMERIC(6,2),              -- Trailer/cargo width in feet
   truck_height_ft   NUMERIC(6,2),              -- Trailer/cargo interior height in feet
   max_payload_lbs   INTEGER,                   -- Maximum cargo weight in lbs
+
+  -- Routes & availability (collected during onboarding)
+  operation_type    TEXT,                      -- 'local' | 'regional' | 'otr'
+  preferred_lanes   JSONB,                     -- [{origin_city, origin_state, dest_city, dest_state}, ...]
+  operating_states  TEXT[],                    -- USPS state codes the carrier will run in
+  avoid_states      TEXT[],                    -- USPS state codes the carrier refuses
+  preferred_days    TEXT[],                    -- ['mon','tue','wed','thu','fri','sat','sun']
+
   notes             TEXT,
 
   -- Status: either a system enum value OR a custom status id (one must be set)
