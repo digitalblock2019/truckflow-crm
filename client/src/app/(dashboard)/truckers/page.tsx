@@ -16,6 +16,13 @@ import { useAuthStore } from "@/lib/auth";
 import { totalPages, employeeTypeLabel } from "@/lib/utils";
 import ProgressBar from "@/components/ui/ProgressBar";
 import DocSlot from "@/components/features/DocSlot";
+import RoutesAndAvailabilityFields, {
+  type RoutesValue,
+  emptyRoutes,
+  routesValueFromTrucker,
+  routesEqual,
+  serializeRoutes,
+} from "@/components/features/RoutesAndAvailabilityFields";
 import type { Trucker } from "@/types";
 
 const statusColors: Record<string, "green" | "blue" | "orange" | "red" | "gray" | "purple"> = {
@@ -155,6 +162,7 @@ export default function TruckersPage() {
     truck_width_ft: "",
     truck_height_ft: "",
     max_payload_lbs: "",
+    routes: emptyRoutes as RoutesValue,
   });
   const [editForm, setEditForm] = useState({
     phone: "",
@@ -169,6 +177,7 @@ export default function TruckersPage() {
     truck_width_ft: "",
     truck_height_ft: "",
     max_payload_lbs: "",
+    routes: emptyRoutes as RoutesValue,
   });
 
   const rows = data?.data ?? [];
@@ -235,6 +244,7 @@ export default function TruckersPage() {
       truck_width_ft: form.truck_width_ft ? parseFloat(form.truck_width_ft) || null : null,
       truck_height_ft: form.truck_height_ft ? parseFloat(form.truck_height_ft) || null : null,
       max_payload_lbs: form.max_payload_lbs ? parseInt(form.max_payload_lbs) || null : null,
+      ...serializeRoutes(form.routes),
     };
     createTrucker.mutate(payload as Partial<Trucker>, {
       onSuccess: () => {
@@ -242,7 +252,7 @@ export default function TruckersPage() {
         setForm({
           mc_number: "", legal_name: "", phone: "", email: "", city: "", state: "",
           power_units: "", truck_types: [], truck_length_ft: "", truck_width_ft: "",
-          truck_height_ft: "", max_payload_lbs: "",
+          truck_height_ft: "", max_payload_lbs: "", routes: emptyRoutes,
         });
       },
     });
@@ -316,6 +326,7 @@ export default function TruckersPage() {
       truck_width_ft: trucker.truck_width_ft != null ? String(trucker.truck_width_ft) : "",
       truck_height_ft: trucker.truck_height_ft != null ? String(trucker.truck_height_ft) : "",
       max_payload_lbs: trucker.max_payload_lbs != null ? String(trucker.max_payload_lbs) : "",
+      routes: routesValueFromTrucker(trucker),
     });
     setModalTab("details");
   };
@@ -336,6 +347,7 @@ export default function TruckersPage() {
       truck_width_ft: editForm.truck_width_ft ? parseFloat(editForm.truck_width_ft) || null : null,
       truck_height_ft: editForm.truck_height_ft ? parseFloat(editForm.truck_height_ft) || null : null,
       max_payload_lbs: editForm.max_payload_lbs ? parseInt(editForm.max_payload_lbs) || null : null,
+      ...serializeRoutes(editForm.routes),
     };
     updateTrucker.mutate(
       payload as Partial<Trucker> & { id: string },
@@ -367,6 +379,7 @@ export default function TruckersPage() {
     const origTypes = Array.isArray(t.truck_types) ? t.truck_types : [];
     if (editForm.truck_types.length !== origTypes.length) return true;
     if (editForm.truck_types.some((v) => !origTypes.includes(v))) return true;
+    if (!routesEqual(editForm.routes, routesValueFromTrucker(t))) return true;
     return false;
   })();
 
@@ -637,6 +650,14 @@ export default function TruckersPage() {
               </div>
             </div>
 
+            {/* Routes & Availability */}
+            <div className="mb-4 pt-4 border-t border-border">
+              <RoutesAndAvailabilityFields
+                value={editForm.routes}
+                onChange={(routes) => setEditForm({ ...editForm, routes })}
+              />
+            </div>
+
             {/* Save edits button */}
             {detailDirty && (
               <div className="mb-4">
@@ -828,6 +849,13 @@ export default function TruckersPage() {
                 onChange={(e) => setForm({ ...form, max_payload_lbs: e.target.value })}
               />
             </div>
+          </div>
+
+          <div className="mt-5 pt-4 border-t border-border">
+            <RoutesAndAvailabilityFields
+              value={form.routes}
+              onChange={(routes) => setForm({ ...form, routes })}
+            />
           </div>
         </div>
         <div className="flex justify-end gap-2 mt-5">

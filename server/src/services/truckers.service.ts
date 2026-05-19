@@ -97,8 +97,9 @@ export class TruckersService {
       `INSERT INTO truckers (mc_number, dot_number, legal_name, dba_name, owner_driver_name, phone, email,
        truck_type, truck_types, city, state, physical_address,
        truck_length_ft, truck_width_ft, truck_height_ft, max_payload_lbs, power_units,
+       operation_type, preferred_lanes, operating_states, avoid_states, preferred_days,
        notes, status_system, assigned_agent_id, assigned_sales_agent_id, assigned_dispatcher_id, company_commission_pct)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23) RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28) RETURNING *`,
       [data.mc_number, data.dot_number, data.legal_name, data.dba_name, data.owner_driver_name,
        data.phone, data.email, data.truck_type,
        Array.isArray(data.truck_types) && data.truck_types.length ? data.truck_types : null,
@@ -106,6 +107,11 @@ export class TruckersService {
        data.truck_length_ft || null, data.truck_width_ft || null,
        data.truck_height_ft || null, data.max_payload_lbs || null,
        data.power_units ? parseInt(data.power_units) || null : null,
+       data.operation_type || null,
+       Array.isArray(data.preferred_lanes) && data.preferred_lanes.length ? JSON.stringify(data.preferred_lanes) : null,
+       Array.isArray(data.operating_states) && data.operating_states.length ? data.operating_states : null,
+       Array.isArray(data.avoid_states) && data.avoid_states.length ? data.avoid_states : null,
+       Array.isArray(data.preferred_days) && data.preferred_days.length ? data.preferred_days : null,
        data.notes,
        data.status_system || 'called',
        data.assigned_agent_id || data.assigned_sales_agent_id || data.assigned_dispatcher_id || null,
@@ -234,6 +240,13 @@ export class TruckersService {
     const values: any[] = [];
     let idx = 1;
     for (const [key, value] of Object.entries(data)) {
+      // preferred_lanes is JSONB — stringify so node-postgres doesn't try to
+      // bind it as a Postgres array, which would fail for an array of objects.
+      if (key === 'preferred_lanes' && value !== null && value !== undefined) {
+        fields.push(`${key} = $${idx++}`);
+        values.push(JSON.stringify(value));
+        continue;
+      }
       fields.push(`${key} = $${idx++}`);
       values.push(value);
     }
