@@ -27,18 +27,21 @@ async function migrate() {
     await query(`ALTER TABLE truckers ADD COLUMN IF NOT EXISTS assigned_dispatcher_id UUID REFERENCES employees(id)`);
     console.log('Added columns: assigned_sales_agent_id, assigned_dispatcher_id');
 
-    // Backfill: sales_agent / sales_and_dispatcher / admin -> sales slot
+    // Backfill: everyone EXCEPT pure dispatchers -> sales slot.
+    // Using "<> 'dispatcher'" instead of an explicit IN list avoids tripping
+    // over employee_type enum values that may exist in some deployments but
+    // not others (e.g. 'admin' isn't a member of the enum in current prod).
     const salesResult = await query(`
       UPDATE truckers t
          SET assigned_sales_agent_id = t.assigned_agent_id
         FROM employees e
        WHERE t.assigned_agent_id = e.id
          AND t.assigned_sales_agent_id IS NULL
-         AND e.employee_type IN ('sales_agent', 'sales_and_dispatcher', 'admin')
+         AND e.employee_type <> 'dispatcher'
     `);
     console.log(`Backfilled assigned_sales_agent_id: ${salesResult.rowCount} rows`);
 
-    // Backfill: dispatcher -> dispatcher slot
+    // Backfill: pure dispatchers -> dispatcher slot
     const dispatchResult = await query(`
       UPDATE truckers t
          SET assigned_dispatcher_id = t.assigned_agent_id
