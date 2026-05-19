@@ -82,6 +82,9 @@ const tabs = [
   { key: "onboarded", label: "Ready For Onboarding" },
   { key: "fully_onboarded", label: "Fully Onboarded" },
   { key: "not_interested", label: "Not Interested" },
+  // Special tab: uses unassigned_dispatcher filter instead of status. Handled
+  // in queryParams below — the key value is a sentinel.
+  { key: "__unassigned_dispatcher__", label: "Unassigned (no dispatcher)" },
 ];
 
 export default function TruckersPage() {
@@ -94,20 +97,36 @@ export default function TruckersPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [selectedTrucker, setSelectedTrucker] = useState<Trucker | null>(null);
   const [newStatus, setNewStatus] = useState("");
-  const [newAgentId, setNewAgentId] = useState("");
+  const [newSalesAgentId, setNewSalesAgentId] = useState("");
+  const [newDispatcherId, setNewDispatcherId] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [modalTab, setModalTab] = useState<"details" | "documents">("details");
   const isSup = useAuthStore((s) => s.isSupervisorOrAdmin());
 
-  const queryParams: Record<string, string | number> = { status: tab, search, page, limit: 20 };
+  // The Unassigned tab uses a separate query filter, not status.
+  const isUnassignedTab = tab === "__unassigned_dispatcher__";
+  const queryParams: Record<string, string | number | boolean> = {
+    status: isUnassignedTab ? "" : tab,
+    search,
+    page,
+    limit: 20,
+  };
+  if (isUnassignedTab) queryParams.unassigned_dispatcher = true;
   if (batchId) queryParams.batch = batchId;
   const { data, isLoading } = useTruckers(queryParams);
-  // Fetch both sales agents and dispatchers for assignment
+  // Fetch sales agents, dispatchers, and dual-role users. Each role's dropdown
+  // gets the appropriate union (sales_agent ∪ sales_and_dispatcher for the
+  // sales slot, dispatcher ∪ sales_and_dispatcher for the dispatcher slot).
   const { data: agentsData } = useEmployees({ type: "sales_agent", status: "active", limit: 100 });
   const { data: dispatchersData } = useEmployees({ type: "dispatcher", status: "active", limit: 100 });
-  const allAssignees = [
+  const { data: dualData } = useEmployees({ type: "sales_and_dispatcher", status: "active", limit: 100 });
+  const salesAgentOptions = [
     ...(agentsData?.data ?? []).map((e) => ({ value: e.id, label: `${e.full_name} (${employeeTypeLabel(e.employee_type)})` })),
+    ...(dualData?.data ?? []).map((e) => ({ value: e.id, label: `${e.full_name} (${employeeTypeLabel(e.employee_type)})` })),
+  ];
+  const dispatcherOptions = [
     ...(dispatchersData?.data ?? []).map((e) => ({ value: e.id, label: `${e.full_name} (${employeeTypeLabel(e.employee_type)})` })),
+    ...(dualData?.data ?? []).map((e) => ({ value: e.id, label: `${e.full_name} (${employeeTypeLabel(e.employee_type)})` })),
   ];
 
   const createTrucker = useCreateTrucker();
@@ -197,7 +216,8 @@ export default function TruckersPage() {
     { key: "status_system", header: "Status", render: (r) => <Badge color={statusColors[r.status_system ?? ""] ?? "gray"}>{statusLabels[r.status_system ?? ""] ?? (r.status_system ?? "—").replace(/_/g, " ")}</Badge> },
     { key: "email", header: "Email" },
     { key: "phone", header: "Phone" },
-    { key: "agent_name", header: "Agent" },
+    { key: "sales_agent_name", header: "Sales Agent", render: (r) => <span className="text-xs">{r.sales_agent_name || "—"}</span> },
+    { key: "dispatcher_name", header: "Dispatcher", render: (r) => <span className="text-xs">{r.dispatcher_name || "—"}</span> },
   ];
 
   const handleCreate = () => {
@@ -247,13 +267,26 @@ export default function TruckersPage() {
     );
   };
 
-  const handleAssignAgent = () => {
+  const handleAssignAgents = () => {
     if (!selectedTrucker) return;
+    // Mirror to the legacy assigned_agent_id so back-compat readers still work
+    // until PR 3 drops the column. Prefer the sales slot, fall back to dispatcher.
+    const legacyMirror = newSalesAgentId || newDispatcherId || null;
     updateTrucker.mutate(
-      { id: selectedTrucker.id, assigned_agent_id: newAgentId || null } as Partial<Trucker> & { id: string },
-      { onSuccess: () => { setSelectedTrucker(null); setNewAgentId(""); } }
+      {
+        id: selectedTrucker.id,
+        assigned_sales_agent_id: newSalesAgentId || null,
+        assigned_dispatcher_id: newDispatcherId || null,
+        assigned_agent_id: legacyMirror,
+      } as Partial<Trucker> & { id: string },
+      { onSuccess: () => { setSelectedTrucker(null); setNewSalesAgentId(""); setNewDispatcherId(""); } }
     );
   };
+
+  const assignmentsDirty =
+    selectedTrucker !== null &&
+    (newSalesAgentId !== (selectedTrucker.assigned_sales_agent_id || "") ||
+      newDispatcherId !== (selectedTrucker.assigned_dispatcher_id || ""));
 
   const handleBulkDelete = () => {
     if (selectedIds.size === 0) return;
@@ -267,7 +300,8 @@ export default function TruckersPage() {
     const trucker = row as unknown as Trucker;
     setSelectedTrucker(trucker);
     setNewStatus(trucker.status_system || "");
-    setNewAgentId((trucker as any).assigned_agent_id || "");
+    setNewSalesAgentId(trucker.assigned_sales_agent_id || "");
+    setNewDispatcherId(trucker.assigned_dispatcher_id || "");
     setEditForm({
       phone: trucker.phone || "",
       email: trucker.email || "",
@@ -383,7 +417,7 @@ export default function TruckersPage() {
       {/* Trucker Detail Modal */}
       <Modal
         open={!!selectedTrucker}
-        onClose={() => { setSelectedTrucker(null); setNewStatus(""); setNewAgentId(""); setModalTab("details"); }}
+        onClose={() => { setSelectedTrucker(null); setNewStatus(""); setNewSalesAgentId(""); setNewDispatcherId(""); setModalTab("details"); }}
         title={selectedTrucker?.legal_name || "Trucker Details"}
         width="640px"
       >
@@ -526,8 +560,12 @@ export default function TruckersPage() {
                 onChange={(e) => setEditForm({ ...editForm, power_units: e.target.value })}
               />
               <div>
-                <div className="text-[10px] font-mono text-txt-light uppercase">Assigned Agent</div>
-                <div className="mt-0.5 text-txt">{selectedTrucker.agent_name || "—"}</div>
+                <div className="text-[10px] font-mono text-txt-light uppercase">Sales Agent</div>
+                <div className="mt-0.5 text-txt">{selectedTrucker.sales_agent_name || "—"}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-mono text-txt-light uppercase">Dispatcher</div>
+                <div className="mt-0.5 text-txt">{selectedTrucker.dispatcher_name || "—"}</div>
               </div>
             </div>
 
@@ -612,25 +650,33 @@ export default function TruckersPage() {
 
             {isSup && (
               <div className="border-t border-border pt-4 mb-4">
-                <div className="flex items-end gap-3">
-                  <div className="flex-1">
-                    <Select
-                      label="Assign Agent"
-                      value={newAgentId}
-                      onChange={(e) => setNewAgentId(e.target.value)}
-                      options={[
-                        { value: "", label: "Unassigned" },
-                        ...allAssignees,
-                      ]}
-                    />
-                  </div>
-                  <Button
-                    onClick={handleAssignAgent}
-                    disabled={updateTrucker.isPending || newAgentId === ((selectedTrucker as any).assigned_agent_id || "")}
-                  >
-                    {updateTrucker.isPending ? "Saving..." : "Assign"}
-                  </Button>
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <Select
+                    label="Sales Agent"
+                    value={newSalesAgentId}
+                    onChange={(e) => setNewSalesAgentId(e.target.value)}
+                    options={[
+                      { value: "", label: "Unassigned" },
+                      ...salesAgentOptions,
+                    ]}
+                  />
+                  <Select
+                    label="Dispatcher"
+                    value={newDispatcherId}
+                    onChange={(e) => setNewDispatcherId(e.target.value)}
+                    options={[
+                      { value: "", label: "Unassigned" },
+                      ...dispatcherOptions,
+                    ]}
+                  />
                 </div>
+                <Button
+                  onClick={handleAssignAgents}
+                  disabled={updateTrucker.isPending || !assignmentsDirty}
+                  className="w-full"
+                >
+                  {updateTrucker.isPending ? "Saving..." : "Save Assignments"}
+                </Button>
               </div>
             )}
 
