@@ -739,7 +739,15 @@ export default function TruckersPage() {
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Add New Trucker" width="720px">
         <div className="max-h-[70vh] overflow-y-auto pr-1">
           <div className="grid grid-cols-2 gap-4">
-            <Input label="MC Number" value={form.mc_number} onChange={(e) => setForm({ ...form, mc_number: e.target.value })} required />
+            <Input
+              label="MC Number"
+              value={form.mc_number}
+              onChange={(e) => setForm({ ...form, mc_number: e.target.value.replace(/\D/g, "") })}
+              inputMode="numeric"
+              pattern="[0-9]*"
+              placeholder="e.g. 8309847"
+              required
+            />
             <Input label="Legal Name" value={form.legal_name} onChange={(e) => setForm({ ...form, legal_name: e.target.value })} required />
             <Input label="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
             <Input label="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />

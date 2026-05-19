@@ -84,6 +84,11 @@ export class TruckersService {
   }
 
   async create(data: any, userId: string) {
+    // Strip any "MC"/"MC-"/whitespace prefix users sometimes type. Store digits only.
+    if (data.mc_number) data.mc_number = String(data.mc_number).replace(/\D/g, '');
+    if (data.dot_number) data.dot_number = String(data.dot_number).replace(/\D/g, '');
+    if (!data.mc_number) throw new AppError('MC number must contain at least one digit', 400, 'VALIDATION_ERROR');
+
     // Check duplicate MC#
     const dup = await query('SELECT id FROM truckers WHERE mc_number = $1', [data.mc_number]);
     if (dup.rows.length) throw new AppError('Duplicate MC number', 409, 'DUPLICATE');
@@ -283,13 +288,19 @@ export class TruckersService {
     let added = 0, skipped = 0, errored = 0;
     for (const row of rows) {
       try {
-        const dup = await query('SELECT id FROM truckers WHERE mc_number = $1', [row.mc_number]);
+        // Strip "MC"/"MC-" prefixes and any other non-digits from MC/DOT so the
+        // stored value is always normalized digits-only. Matches the Add Trucker
+        // form's input filter and the converter we use for FMCSA exports.
+        const mcNumber = row.mc_number ? String(row.mc_number).replace(/\D/g, '') : '';
+        const dotNumber = row.dot_number ? String(row.dot_number).replace(/\D/g, '') : null;
+        if (!mcNumber) { errored++; continue; }
+        const dup = await query('SELECT id FROM truckers WHERE mc_number = $1', [mcNumber]);
         if (dup.rows.length) { skipped++; continue; }
         await query(
           `INSERT INTO truckers (mc_number, dot_number, legal_name, dba_name, phone, email, state,
            physical_address, power_units, status_system, upload_batch_id)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'imported',$10)`,
-          [row.mc_number, row.dot_number, row.legal_name, row.dba_name, row.phone, row.email,
+          [mcNumber, dotNumber, row.legal_name, row.dba_name, row.phone, row.email,
            row.state, row.physical_address,
            row.power_units ? parseInt(row.power_units) || null : null,
            batchId]
