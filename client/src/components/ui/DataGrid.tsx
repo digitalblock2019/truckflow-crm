@@ -34,10 +34,14 @@ interface DataGridProps<T> {
   totalPages?: number;
   total?: number;
   pageSize?: number;
+  pageSizeOptions?: number[];
+  onPageSizeChange?: (size: number) => void;
   onPageChange?: (page: number) => void;
   onRowClick?: (row: T) => void;
   emptyMessage?: string;
 }
+
+const DEFAULT_PAGE_SIZE_OPTIONS = [20, 50, 100, 250, 500];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export default function DataGrid<T extends Record<string, any>>({
@@ -50,12 +54,15 @@ export default function DataGrid<T extends Record<string, any>>({
   totalPages = 1,
   total,
   pageSize,
+  pageSizeOptions = DEFAULT_PAGE_SIZE_OPTIONS,
+  onPageSizeChange,
   onPageChange,
   onRowClick,
   emptyMessage = "No records found",
 }: DataGridProps<T>) {
   const hasPaging = totalPages > 1 && !!onPageChange;
-  const showFooter = hasPaging || total !== undefined;
+  const hasPageSizePicker = !!onPageSizeChange && pageSize !== undefined;
+  const showFooter = hasPaging || hasPageSizePicker || total !== undefined;
   const effectivePageSize = pageSize ?? data.length;
   const rangeStart = total === 0 ? 0 : (page - 1) * effectivePageSize + 1;
   const rangeEnd = total !== undefined
@@ -120,21 +127,38 @@ export default function DataGrid<T extends Record<string, any>>({
       </div>
       {showFooter && (
         <div className="px-4 py-2.5 border-t border-border flex items-center justify-between gap-3 text-xs text-txt-mid bg-[#fafbfc] flex-wrap">
-          <span>
-            {total !== undefined ? (
-              hasPaging ? (
-                <>
-                  Page {page} of {totalPages}
-                  <span className="text-txt-light"> · </span>
-                  Showing {rangeStart}–{rangeEnd} of {total}
-                </>
+          <div className="flex items-center gap-3 flex-wrap">
+            <span>
+              {total !== undefined ? (
+                hasPaging ? (
+                  <>
+                    Page {page} of {totalPages}
+                    <span className="text-txt-light"> · </span>
+                    Showing {rangeStart}–{rangeEnd} of {total}
+                  </>
+                ) : (
+                  <>{total} {total === 1 ? "record" : "records"}</>
+                )
               ) : (
-                <>{total} {total === 1 ? "record" : "records"}</>
-              )
-            ) : (
-              <>Page {page} of {totalPages}</>
+                <>Page {page} of {totalPages}</>
+              )}
+            </span>
+            {hasPageSizePicker && (
+              <label className="flex items-center gap-1.5 text-txt-light">
+                <span>Per page:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => onPageSizeChange!(parseInt(e.target.value, 10))}
+                  className="h-[26px] px-1.5 border border-border rounded bg-white text-xs text-txt cursor-pointer focus:outline-none focus:border-blue-light focus:ring-[3px] focus:ring-blue-light/10"
+                  aria-label="Records per page"
+                >
+                  {pageSizeOptions.map((opt) => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+              </label>
             )}
-          </span>
+          </div>
           {hasPaging && (
             <Pager page={page} totalPages={totalPages} onPageChange={onPageChange!} />
           )}
