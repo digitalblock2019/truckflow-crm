@@ -112,24 +112,16 @@ export default function OnboardingPage() {
   // Require at least one configured doc type; an empty list otherwise passes vacuously.
   const allRequiredUploaded = docsArr.length > 0 && docsArr.filter((d) => d.required).every((d) => d.uploaded);
 
-  // Toast state. We capture the trucker name into `pendingOnboardName` as soon
-  // as the button is clicked, then a useEffect promotes it to the visible toast
-  // once the mutation reports success — more reliable than .mutate(onSuccess),
-  // which can be swallowed by query-invalidation timing if `selected` becomes
-  // undefined before the callback fires.
-  const [onboardedToast, setOnboardedToast] = useState<string | null>(null);
-  const [pendingOnboardName, setPendingOnboardName] = useState<string | null>(null);
-  useEffect(() => {
-    if (markOnboarded.isSuccess && pendingOnboardName) {
-      setOnboardedToast(`${pendingOnboardName} marked as fully onboarded`);
-      setPendingOnboardName(null);
-      setSelectedId("");
-      markOnboarded.reset();
-    }
-  }, [markOnboarded.isSuccess, pendingOnboardName, markOnboarded]);
+  // Toast state — optimistic. Set immediately on click so feedback is always
+  // visible. If the mutation later fails, we replace the success toast with a
+  // red error toast that surfaces the server error message verbatim.
+  type Toast = { kind: "success" | "error"; text: string };
+  const [onboardedToast, setOnboardedToast] = useState<Toast | null>(null);
   useEffect(() => {
     if (!onboardedToast) return;
-    const t = setTimeout(() => setOnboardedToast(null), 4000);
+    // Errors stay visible longer (6s) so the user has time to read the message.
+    const ms = onboardedToast.kind === "error" ? 6000 : 4000;
+    const t = setTimeout(() => setOnboardedToast(null), ms);
     return () => clearTimeout(t);
   }, [onboardedToast]);
 
@@ -138,64 +130,71 @@ export default function OnboardingPage() {
   // Every visual property is inline so a missing Tailwind utility cannot hide it.
   const toastNode =
     typeof document !== "undefined" && onboardedToast
-      ? createPortal(
-          <div
-            role="status"
-            aria-live="polite"
-            style={{
-              position: "fixed",
-              top: 24,
-              right: 24,
-              zIndex: 2147483647,
-              maxWidth: 420,
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              padding: "12px 16px",
-              borderRadius: 10,
-              boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
-              backgroundColor: "#ffffff",
-              borderLeft: "4px solid #16a34a",
-              fontFamily: "system-ui, -apple-system, sans-serif",
-            }}
-          >
-            <span
+      ? (() => {
+          const isError = onboardedToast.kind === "error";
+          const accent = isError ? "#dc2626" : "#16a34a";
+          const icon = isError ? "!" : "✓";
+          return createPortal(
+            <div
+              role={isError ? "alert" : "status"}
+              aria-live={isError ? "assertive" : "polite"}
               style={{
-                flexShrink: 0,
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 24,
-                height: 24,
-                borderRadius: "50%",
-                backgroundColor: "#16a34a",
-                color: "#ffffff",
-                fontSize: 14,
-                fontWeight: 700,
+                position: "fixed",
+                top: 24,
+                right: 24,
+                zIndex: 2147483647,
+                maxWidth: 480,
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 12,
+                padding: "12px 16px",
+                borderRadius: 10,
+                boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
+                backgroundColor: "#ffffff",
+                borderLeft: `4px solid ${accent}`,
+                fontFamily: "system-ui, -apple-system, sans-serif",
               }}
             >
-              ✓
-            </span>
-            <span style={{ fontSize: 14, color: "#0f172a", fontWeight: 500 }}>{onboardedToast}</span>
-            <button
-              type="button"
-              onClick={() => setOnboardedToast(null)}
-              aria-label="Dismiss"
-              style={{
-                marginLeft: 8,
-                background: "transparent",
-                border: "none",
-                color: "#64748b",
-                fontSize: 18,
-                lineHeight: 1,
-                cursor: "pointer",
-              }}
-            >
-              ×
-            </button>
-          </div>,
-          document.body,
-        )
+              <span
+                style={{
+                  flexShrink: 0,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 24,
+                  height: 24,
+                  borderRadius: "50%",
+                  backgroundColor: accent,
+                  color: "#ffffff",
+                  fontSize: 14,
+                  fontWeight: 700,
+                }}
+              >
+                {icon}
+              </span>
+              <span style={{ fontSize: 14, color: "#0f172a", fontWeight: 500, lineHeight: 1.5 }}>
+                {onboardedToast.text}
+              </span>
+              <button
+                type="button"
+                onClick={() => setOnboardedToast(null)}
+                aria-label="Dismiss"
+                style={{
+                  marginLeft: 8,
+                  background: "transparent",
+                  border: "none",
+                  color: "#64748b",
+                  fontSize: 18,
+                  lineHeight: 1,
+                  cursor: "pointer",
+                }}
+              >
+                ×
+              </button>
+            </div>,
+            document.body,
+          );
+        })()
       : null;
 
   return (
@@ -431,8 +430,28 @@ export default function OnboardingPage() {
                 <div className="mt-5 pt-4 border-t border-border">
                   <Button
                     onClick={() => {
-                      setPendingOnboardName(selected.legal_name);
-                      markOnboarded.mutate(selected.id);
+                      const name = selected.legal_name;
+                      const id = selected.id;
+                      // Optimistic: show success toast immediately. The user
+                      // always sees feedback, even if state churn from query
+                      // invalidation would otherwise hide the callback path.
+                      setOnboardedToast({
+                        kind: "success",
+                        text: `${name} marked as fully onboarded`,
+                      });
+                      markOnboarded.mutate(id, {
+                        onSuccess: () => {
+                          setSelectedId("");
+                        },
+                        onError: (err) => {
+                          // Replace optimistic success with the actual error so
+                          // the user sees what went wrong (and we can debug).
+                          setOnboardedToast({
+                            kind: "error",
+                            text: (err as Error)?.message || "Failed to mark fully onboarded",
+                          });
+                        },
+                      });
                     }}
                     disabled={markOnboarded.isPending || !allRequiredUploaded}
                     className={`w-full ${allRequiredUploaded ? "!bg-green !border-green hover:!bg-green/90" : "!bg-green/50 !border-green/50 !cursor-not-allowed"}`}

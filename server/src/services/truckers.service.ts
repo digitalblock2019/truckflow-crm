@@ -116,16 +116,24 @@ export class TruckersService {
     if (!flagRow.rows.length) throw new AppError('Trucker not found', 404, 'NOT_FOUND');
     const flags = flagRow.rows[0];
 
-    const requiredRes = await query(
-      `SELECT id, label
-         FROM trucker_document_types
-        WHERE (condition_flag IS NULL AND is_required = TRUE)
-           OR (condition_flag = 'uses_factoring'   AND $1::boolean = TRUE)
-           OR (condition_flag = 'is_new_authority' AND $2::boolean = TRUE)
-           OR (condition_flag = 'uses_quick_pay'   AND $3::boolean = TRUE)`,
-      [flags.uses_factoring, flags.is_new_authority, flags.uses_quick_pay]
+    // Pull every doc type and filter in JS — same logic as getChecklist, so the
+    // "required" set the server enforces matches what the user sees in the UI.
+    // (Earlier version did this in SQL with `$N::boolean = TRUE`, which 500s on
+    // some pg driver versions when the parameter is already a JS boolean.)
+    const typesRes = await query(
+      'SELECT id, label, is_required, condition_flag FROM trucker_document_types'
     );
-    const required = requiredRes.rows as { id: string; label: string }[];
+    const allTypes = typesRes.rows as {
+      id: string;
+      label: string;
+      is_required: boolean;
+      condition_flag: string | null;
+    }[];
+
+    const required = allTypes.filter((t) => {
+      if (t.condition_flag) return !!(flags as Record<string, unknown>)[t.condition_flag];
+      return t.is_required;
+    });
 
     if (required.length === 0) {
       throw new AppError(
@@ -364,22 +372,42 @@ export class TruckersService {
 
     await this.assertReadyForFullyOnboarded(id);
 
-    await query(
-      `UPDATE truckers SET status_system='fully_onboarded', fully_onboarded_at=NOW(), updated_at=NOW() WHERE id=$1`,
-      [id]
-    );
+    // The UPDATE commits independently from the two follow-up INSERTs. If we
+    // let history/audit errors bubble up as 500s, we'd be in a bad state:
+    // status is flipped in the DB but the caller sees failure and has no idea
+    // why. Wrap each side effect with named logging and swallow non-fatal
+    // failures (the audit_log row is nice-to-have, not load-bearing).
+    try {
+      await query(
+        `UPDATE truckers SET status_system='fully_onboarded', fully_onboarded_at=NOW(), updated_at=NOW() WHERE id=$1`,
+        [id]
+      );
+    } catch (err: any) {
+      console.error('[markFullyOnboarded] UPDATE truckers failed:', err?.message, err?.code);
+      throw err;
+    }
 
-    await query(
-      `INSERT INTO trucker_status_history (trucker_id, old_status_system, old_status_custom_id, new_status_system, new_status_custom_id, changed_by)
-       VALUES ($1,$2,$3,'fully_onboarded',NULL,$4)`,
-      [id, old.status_system, old.status_custom_id, userId]
-    );
+    try {
+      await query(
+        `INSERT INTO trucker_status_history (trucker_id, old_status_system, old_status_custom_id, new_status_system, new_status_custom_id, changed_by)
+         VALUES ($1,$2,$3,'fully_onboarded',NULL,$4)`,
+        [id, old.status_system, old.status_custom_id, userId]
+      );
+    } catch (err: any) {
+      // Status already flipped successfully — don't fail the request just because
+      // history logging blew up. Log loudly so we can fix it.
+      console.error('[markFullyOnboarded] INSERT trucker_status_history failed:', err?.message, err?.code, err?.detail);
+    }
 
-    await query(
-      `INSERT INTO audit_log (user_id, user_role, action, entity_type, entity_id, description)
-       VALUES ($1, (SELECT role FROM users WHERE id=$1), 'fully_onboarded', 'trucker', $2, $3)`,
-      [userId, id, `Marked trucker as fully onboarded: ${old.legal_name} (MC# ${old.mc_number})`]
-    );
+    try {
+      await query(
+        `INSERT INTO audit_log (user_id, user_role, action, entity_type, entity_id, description)
+         VALUES ($1, (SELECT role FROM users WHERE id=$1), 'fully_onboarded', 'trucker', $2, $3)`,
+        [userId, id, `Marked trucker as fully onboarded: ${old.legal_name} (MC# ${old.mc_number})`]
+      );
+    } catch (err: any) {
+      console.error('[markFullyOnboarded] INSERT audit_log failed:', err?.message, err?.code, err?.detail);
+    }
 
     return { message: 'Trucker marked as fully onboarded' };
   }
