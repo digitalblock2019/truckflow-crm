@@ -60,8 +60,12 @@ export interface Trucker {
   max_payload_lbs: number | null;
   power_units: number | null;
   driver_count: number | null;
-  assigned_agent_id: string | null;
-  agent_name: string | null;
+  assigned_agent_id: string | null;           // legacy single-slot, kept until PR 3
+  agent_name: string | null;                   // legacy join, kept until PR 3
+  assigned_sales_agent_id: string | null;
+  sales_agent_name: string | null;
+  assigned_dispatcher_id: string | null;
+  dispatcher_name: string | null;
   company_commission_pct: string | null;
   onboarding_initiated_at: string | null;
   fully_onboarded_at: string | null;

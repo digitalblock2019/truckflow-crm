@@ -408,7 +408,9 @@ CREATE TABLE truckers (
   status_custom_id  UUID REFERENCES trucker_custom_statuses(id),
 
   -- Assignment
-  assigned_agent_id UUID REFERENCES employees(id),  -- Sales Agent assigned
+  assigned_agent_id UUID REFERENCES employees(id),       -- LEGACY single-slot, kept for back-compat — to be dropped after readers migrate
+  assigned_sales_agent_id UUID REFERENCES employees(id), -- Sales agent responsible for this trucker
+  assigned_dispatcher_id  UUID REFERENCES employees(id), -- Dispatcher responsible for this trucker (commissions tracked separately at load level)
 
   -- Commission % negotiated with this trucker
   company_commission_pct  NUMERIC(5,4) NOT NULL DEFAULT 0.08,  -- e.g. 0.08 = 8%
