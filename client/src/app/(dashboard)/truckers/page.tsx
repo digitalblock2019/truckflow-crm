@@ -94,6 +94,7 @@ export default function TruckersPage() {
   const [tab, setTab] = useState(initialTab);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [showCreate, setShowCreate] = useState(false);
   const [selectedTrucker, setSelectedTrucker] = useState<Trucker | null>(null);
   const [newStatus, setNewStatus] = useState("");
@@ -109,7 +110,7 @@ export default function TruckersPage() {
     status: isUnassignedTab ? "" : tab,
     search,
     page,
-    limit: 20,
+    limit: pageSize,
   };
   if (isUnassignedTab) queryParams.unassigned_dispatcher = true;
   if (batchId) queryParams.batch = batchId;
@@ -405,7 +406,8 @@ export default function TruckersPage() {
           page={page}
           totalPages={totalPages(data)}
           total={data?.total}
-          pageSize={20}
+          pageSize={pageSize}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(1); setSelectedIds(new Set()); }}
           onPageChange={(p) => { setPage(p); setSelectedIds(new Set()); }}
           onRowClick={openDetail}
           toolbar={
