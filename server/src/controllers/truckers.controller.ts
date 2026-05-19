@@ -8,6 +8,10 @@ export class TruckersController {
   async list(req: Request, res: Response) {
     const result = await svc.list({
       status: req.query.status, assigned_to: req.query.assigned_to,
+      assigned_sales_agent_to: req.query.assigned_sales_agent_to,
+      assigned_dispatcher_to: req.query.assigned_dispatcher_to,
+      unassigned_sales_agent: req.query.unassigned_sales_agent === 'true',
+      unassigned_dispatcher: req.query.unassigned_dispatcher === 'true',
       state: req.query.state, fmcsa_status: req.query.fmcsa_status,
       search: req.query.search, batch: req.query.batch,
       page: Number(req.query.page) || 1, limit: Number(req.query.limit) || 50,

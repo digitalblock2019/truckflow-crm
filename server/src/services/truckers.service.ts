@@ -19,7 +19,13 @@ export class TruckersService {
         conditions.push(`t.status_system IN (${placeholders})`); params.push(...statuses);
       }
     }
+    // Legacy single-slot filter — kept until PR 2 swaps callers over to the two new fields.
     if (filters.assigned_to) { conditions.push(`t.assigned_agent_id = $${idx++}`); params.push(filters.assigned_to); }
+    // New dual-slot filters (post-dispatcher-split). Used by "My Truckers", "Unassigned" tab, etc.
+    if (filters.assigned_sales_agent_to) { conditions.push(`t.assigned_sales_agent_id = $${idx++}`); params.push(filters.assigned_sales_agent_to); }
+    if (filters.assigned_dispatcher_to)  { conditions.push(`t.assigned_dispatcher_id  = $${idx++}`); params.push(filters.assigned_dispatcher_to); }
+    if (filters.unassigned_sales_agent) { conditions.push(`t.assigned_sales_agent_id IS NULL`); }
+    if (filters.unassigned_dispatcher)  { conditions.push(`t.assigned_dispatcher_id  IS NULL`); }
     if (filters.state) { conditions.push(`t.state ILIKE $${idx++}`); params.push(`%${filters.state}%`); }
     if (filters.fmcsa_status) { conditions.push(`t.fmcsa_operating_status = $${idx++}`); params.push(filters.fmcsa_status); }
     if (filters.batch) { conditions.push(`t.upload_batch_id = $${idx++}`); params.push(filters.batch); }
@@ -34,9 +40,15 @@ export class TruckersService {
 
     const countResult = await query(`SELECT count(*) FROM truckers t ${where}`, params);
     const data = await query(
-      `SELECT t.*, e.full_name as agent_name
-       FROM truckers t LEFT JOIN employees e ON e.id = t.assigned_agent_id
-       ${where} ORDER BY t.created_at DESC LIMIT $${idx++} OFFSET $${idx++}`,
+      `SELECT t.*,
+              e.full_name  as agent_name,
+              sa.full_name as sales_agent_name,
+              dp.full_name as dispatcher_name
+         FROM truckers t
+         LEFT JOIN employees e  ON e.id  = t.assigned_agent_id
+         LEFT JOIN employees sa ON sa.id = t.assigned_sales_agent_id
+         LEFT JOIN employees dp ON dp.id = t.assigned_dispatcher_id
+        ${where} ORDER BY t.created_at DESC LIMIT $${idx++} OFFSET $${idx++}`,
       [...params, limit, offset]
     );
 
@@ -45,12 +57,17 @@ export class TruckersService {
 
   async getById(id: string) {
     const result = await query(
-      `SELECT t.*, e.full_name as agent_name,
+      `SELECT t.*,
+              e.full_name  as agent_name,
+              sa.full_name as sales_agent_name,
+              dp.full_name as dispatcher_name,
               op.docs_uploaded, op.docs_required, op.is_fully_onboarded
-       FROM truckers t
-       LEFT JOIN employees e ON e.id = t.assigned_agent_id
-       LEFT JOIN v_onboarding_progress op ON op.id = t.id
-       WHERE t.id = $1`, [id]
+         FROM truckers t
+         LEFT JOIN employees e  ON e.id  = t.assigned_agent_id
+         LEFT JOIN employees sa ON sa.id = t.assigned_sales_agent_id
+         LEFT JOIN employees dp ON dp.id = t.assigned_dispatcher_id
+         LEFT JOIN v_onboarding_progress op ON op.id = t.id
+        WHERE t.id = $1`, [id]
     );
     if (!result.rows.length) throw new AppError('Trucker not found', 404, 'NOT_FOUND');
 
@@ -75,8 +92,8 @@ export class TruckersService {
       `INSERT INTO truckers (mc_number, dot_number, legal_name, dba_name, owner_driver_name, phone, email,
        truck_type, truck_types, city, state, physical_address,
        truck_length_ft, truck_width_ft, truck_height_ft, max_payload_lbs, power_units,
-       notes, status_system, assigned_agent_id, company_commission_pct)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING *`,
+       notes, status_system, assigned_agent_id, assigned_sales_agent_id, assigned_dispatcher_id, company_commission_pct)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23) RETURNING *`,
       [data.mc_number, data.dot_number, data.legal_name, data.dba_name, data.owner_driver_name,
        data.phone, data.email, data.truck_type,
        Array.isArray(data.truck_types) && data.truck_types.length ? data.truck_types : null,
@@ -85,18 +102,34 @@ export class TruckersService {
        data.truck_height_ft || null, data.max_payload_lbs || null,
        data.power_units ? parseInt(data.power_units) || null : null,
        data.notes,
-       data.status_system || 'called', data.assigned_agent_id, data.company_commission_pct || 0.08]
+       data.status_system || 'called',
+       data.assigned_agent_id || data.assigned_sales_agent_id || data.assigned_dispatcher_id || null,
+       data.assigned_sales_agent_id || null,
+       data.assigned_dispatcher_id  || null,
+       data.company_commission_pct || 0.08]
     );
 
-    // Create threshold if agent assigned
-    if (data.assigned_agent_id) {
+    // Seed a commission threshold for every assignee. With the split, a trucker
+    // can have a sales agent AND a dispatcher (potentially the same employee).
+    // The threshold table is keyed on (trucker_id, agent_employee_id), so the
+    // same person filling both roles gets ONE row — that's fine, commission
+    // math splits per-role at the load level, not here.
+    const assigneeIds = Array.from(new Set([
+      data.assigned_agent_id,
+      data.assigned_sales_agent_id,
+      data.assigned_dispatcher_id,
+    ].filter(Boolean) as string[]));
+    if (assigneeIds.length) {
       const defaultThreshold = await query("SELECT value FROM system_settings WHERE key = 'agent_commission_threshold_default'");
       const thresholdLoads = parseInt(defaultThreshold.rows[0]?.value || '1');
-      await query(
-        `INSERT INTO agent_commission_thresholds (trucker_id, agent_employee_id, threshold_loads, set_by)
-         VALUES ($1, $2, $3, $4)`,
-        [result.rows[0].id, data.assigned_agent_id, thresholdLoads, userId]
-      );
+      for (const employeeId of assigneeIds) {
+        await query(
+          `INSERT INTO agent_commission_thresholds (trucker_id, agent_employee_id, threshold_loads, set_by)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (trucker_id, agent_employee_id) DO NOTHING`,
+          [result.rows[0].id, employeeId, thresholdLoads, userId]
+        );
+      }
     }
 
     return result.rows[0];
@@ -171,7 +204,9 @@ export class TruckersService {
       await this.assertReadyForFullyOnboarded(id);
     }
 
-    // Track status changes and auto-assign agent
+    // Track status changes and auto-assign the acting user as sales agent
+    // if nothing is set yet. (Auto-assign only fills the sales slot; the
+    // dispatcher slot is always set explicitly.)
     if (data.status_system && data.status_system !== old.status_system) {
       await query(
         `INSERT INTO trucker_status_history (trucker_id, old_status_system, old_status_custom_id, new_status_system, new_status_custom_id, changed_by)
@@ -179,11 +214,13 @@ export class TruckersService {
         [id, old.status_system, old.status_custom_id, data.status_system, data.status_custom_id || null, userId]
       );
 
-      // Auto-assign agent if not already assigned
-      if (!old.assigned_agent_id) {
+      if (!old.assigned_sales_agent_id && !old.assigned_agent_id && data.assigned_sales_agent_id === undefined) {
         const userEmployee = await query('SELECT id FROM employees WHERE crm_user_id = $1', [userId]);
         if (userEmployee.rows.length) {
-          data.assigned_agent_id = userEmployee.rows[0].id;
+          data.assigned_sales_agent_id = userEmployee.rows[0].id;
+          // Mirror to the legacy column too so back-compat readers keep working
+          // until PR 2 (frontend) lands.
+          if (data.assigned_agent_id === undefined) data.assigned_agent_id = userEmployee.rows[0].id;
         }
       }
     }
@@ -201,10 +238,22 @@ export class TruckersService {
 
     await query(`UPDATE truckers SET ${fields.join(', ')} WHERE id = $${idx}`, values);
 
-    // Notify agent if newly assigned
+    // Notify any newly-assigned employees. We fire for each slot independently
+    // so if a sales_and_dispatcher user is set as BOTH slots in one update,
+    // they still only get a single notification (de-duped via the Set).
+    const newlyAssigned = new Set<string>();
+    if (data.assigned_sales_agent_id && data.assigned_sales_agent_id !== old.assigned_sales_agent_id) {
+      newlyAssigned.add(data.assigned_sales_agent_id);
+    }
+    if (data.assigned_dispatcher_id && data.assigned_dispatcher_id !== old.assigned_dispatcher_id) {
+      newlyAssigned.add(data.assigned_dispatcher_id);
+    }
     if (data.assigned_agent_id && data.assigned_agent_id !== old.assigned_agent_id) {
+      newlyAssigned.add(data.assigned_agent_id);
+    }
+    for (const employeeId of newlyAssigned) {
       try {
-        const agentUser = await query('SELECT crm_user_id FROM employees WHERE id = $1', [data.assigned_agent_id]);
+        const agentUser = await query('SELECT crm_user_id FROM employees WHERE id = $1', [employeeId]);
         if (agentUser.rows[0]?.crm_user_id) {
           await notifications.create(agentUser.rows[0].crm_user_id, 'Trucker assigned to you', `${old.legal_name} (MC# ${old.mc_number}) has been assigned to you`, 'trucker', id);
         }
