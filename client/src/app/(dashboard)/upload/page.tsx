@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
 import Topbar from "@/components/layout/Topbar";
@@ -49,28 +49,62 @@ function parseXlsx(buffer: ArrayBuffer): { headers: string[]; rows: ParsedRow[] 
   return { headers, rows };
 }
 
-// Map file columns to API field names
-const columnMap: Record<string, string> = {
-  MC: "mc_number",
-  USDOT: "dot_number",
-  LegalName: "legal_name",
-  DBA: "dba_name",
-  Phone: "phone",
-  Email: "email",
-  PhysicalAddress: "physical_address",
-  PowerUnits: "power_units",
-  Drivers: "drivers",
-  EntityType: "entity_type",
-  OperationClass: "operation_class",
-  OperatingStatus: "operating_status",
-  mc_number: "mc_number",
-  dot_number: "dot_number",
-  legal_name: "legal_name",
-  dba_name: "dba_name",
+// Normalize a header for lookup: lowercase + drop non-alphanumeric. Lets us
+// match "Phone No.", "phone_number", "Phone#" etc. all to the same canonical key.
+const normalizeHeader = (s: string): string =>
+  String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+// Multiple normalized aliases can map to one API field. The first column in the
+// file whose normalized form matches any entry here wins for that API field.
+const HEADER_ALIASES: Record<string, string> = {
+  // mc_number
+  mc: "mc_number",
+  mcnumber: "mc_number",
+  mcmxff: "mc_number",
+  mcmxffnumber: "mc_number",
+  motorcarrier: "mc_number",
+  // dot_number
+  usdot: "dot_number",
+  usdotnumber: "dot_number",
+  dot: "dot_number",
+  dotnumber: "dot_number",
+  // legal_name
+  legalname: "legal_name",
+  companyname: "legal_name",
+  carrier: "legal_name",
+  carriername: "legal_name",
+  // dba_name
+  dba: "dba_name",
+  dbaname: "dba_name",
+  doingbusinessas: "dba_name",
+  // phone
   phone: "phone",
+  phoneno: "phone",
+  phonenumber: "phone",
+  mobile: "phone",
+  contact: "phone",
+  // email
   email: "email",
-  physical_address: "physical_address",
+  emailaddress: "email",
+  // physical_address
+  physicaladdress: "physical_address",
+  address: "physical_address",
+  // power_units
+  powerunits: "power_units",
+  trucks: "power_units",
+  units: "power_units",
+  // drivers
+  drivers: "drivers",
+  drivercount: "drivers",
+  // FMCSA enums (entity_type, operation_class, operating_status)
+  entitytype: "entity_type",
+  operationclass: "operation_class",
+  operatingstatus: "operating_status",
+  operatingauthoritystatus: "operating_status",
 };
+
+const apiFieldForHeader = (header: string): string | null =>
+  HEADER_ALIASES[normalizeHeader(header)] ?? null;
 
 export default function UploadPage() {
   const router = useRouter();
@@ -104,12 +138,26 @@ export default function UploadPage() {
     setRows(result.rows);
   };
 
+  // Build the file-header -> api-field mapping once per file so we can both
+  // (a) preview it to the user before they hit Import, and (b) reuse it inside
+  // the per-row mapper. Phone is digit-only-cleaned so dup checks line up with
+  // scraper output regardless of whether the source had (123) 456-7890 or 1234567890.
+  const fileFieldMapping = useMemo<{ file: string; api: string | null }[]>(
+    () => headers.map((h) => ({ file: h, api: apiFieldForHeader(h) })),
+    [headers],
+  );
+  const cleanPhone = (v: string): string => String(v ?? "").replace(/\D/g, "");
+
   const handleImport = async () => {
     const mapped = rows.map((row) => {
       const out: ParsedRow = {};
       for (const [fileCol, val] of Object.entries(row)) {
-        const apiField = columnMap[fileCol] || columnMap[fileCol.trim()];
-        if (apiField) out[apiField] = val;
+        const apiField = apiFieldForHeader(fileCol);
+        if (!apiField) continue;
+        // Don't clobber a real value with a blank from a later alias collision.
+        const cleaned = apiField === "phone" ? cleanPhone(String(val)) : String(val ?? "").trim();
+        if (cleaned === "" && out[apiField]) continue;
+        out[apiField] = cleaned;
       }
       if (!out.state && out.physical_address) {
         const parts = out.physical_address.split(",").map((s) => s.trim());
@@ -340,6 +388,57 @@ export default function UploadPage() {
                 </div>
               )}
             </Card>
+
+            {/* Field Mapping preview — tells the user exactly which file columns
+                will get imported and which will be silently dropped. Drives the
+                fix where uploads "worked" but mc_number / phone / email were
+                blank because the header didn't match the (previously) exact
+                lookup table. */}
+            <Card>
+              <CardHeader
+                title="Field Mapping"
+                subtitle={(() => {
+                  const matched = fileFieldMapping.filter((m) => m.api).length;
+                  const total = fileFieldMapping.length;
+                  return `${matched} of ${total} columns matched — unmatched columns will be ignored`;
+                })()}
+              />
+              {!fileFieldMapping.some((m) => m.api === "mc_number") && (
+                <div className="mb-3 px-3 py-2 bg-red-bg border border-red/30 rounded-md text-xs text-red">
+                  ⚠ No column matched <span className="font-mono">mc_number</span>. The import will fail
+                  for every row because MC# is required. Expected one of: MC, MC#, MC/MX/FF #, MC Number, mc_number.
+                </div>
+              )}
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-xs">
+                  <thead className="bg-[#f8f9fb]">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-[11px] font-semibold text-txt-mid font-mono uppercase tracking-wide border-b border-border">
+                        File Column
+                      </th>
+                      <th className="px-3 py-2 text-left text-[11px] font-semibold text-txt-mid font-mono uppercase tracking-wide border-b border-border">
+                        →
+                      </th>
+                      <th className="px-3 py-2 text-left text-[11px] font-semibold text-txt-mid font-mono uppercase tracking-wide border-b border-border">
+                        DB Field
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {fileFieldMapping.map(({ file, api }) => (
+                      <tr key={file}>
+                        <td className="px-3 py-2 border-b border-[#f0f2f5] font-mono text-txt">{file}</td>
+                        <td className="px-3 py-2 border-b border-[#f0f2f5] text-txt-light">→</td>
+                        <td className={`px-3 py-2 border-b border-[#f0f2f5] font-mono ${api ? "text-green" : "text-txt-light italic"}`}>
+                          {api ?? "(ignored)"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+
             <Card>
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse text-xs">
