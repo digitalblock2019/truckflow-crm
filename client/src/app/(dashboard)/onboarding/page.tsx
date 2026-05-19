@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import Topbar from "@/components/layout/Topbar";
 import Card, { CardHeader } from "@/components/ui/Card";
 import ProgressBar from "@/components/ui/ProgressBar";
@@ -220,29 +221,95 @@ export default function OnboardingPage() {
   // Require at least one configured doc type; an empty list otherwise passes vacuously.
   const allRequiredUploaded = docsArr.length > 0 && docsArr.filter((d) => d.required).every((d) => d.uploaded);
 
-  const [onboardedToast, setOnboardedToast] = useState<string | null>(null);
+  // Toast state — optimistic. Set immediately on click so feedback is always
+  // visible. If the mutation later fails, we replace the success toast with a
+  // red error toast that surfaces the server error message verbatim.
+  type Toast = { kind: "success" | "error"; text: string };
+  const [onboardedToast, setOnboardedToast] = useState<Toast | null>(null);
   useEffect(() => {
     if (!onboardedToast) return;
-    const t = setTimeout(() => setOnboardedToast(null), 4000);
+    // Errors stay visible longer (6s) so the user has time to read the message.
+    const ms = onboardedToast.kind === "error" ? 6000 : 4000;
+    const t = setTimeout(() => setOnboardedToast(null), ms);
     return () => clearTimeout(t);
   }, [onboardedToast]);
 
+  // Render toast via portal directly onto document.body so it can't be clipped
+  // or repositioned by any ancestor with transform/overflow/contain.
+  // Every visual property is inline so a missing Tailwind utility cannot hide it.
+  const toastNode =
+    typeof document !== "undefined" && onboardedToast
+      ? (() => {
+          const isError = onboardedToast.kind === "error";
+          const accent = isError ? "#dc2626" : "#16a34a";
+          const icon = isError ? "!" : "✓";
+          return createPortal(
+            <div
+              role={isError ? "alert" : "status"}
+              aria-live={isError ? "assertive" : "polite"}
+              style={{
+                position: "fixed",
+                top: 24,
+                right: 24,
+                zIndex: 2147483647,
+                maxWidth: 480,
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 12,
+                padding: "12px 16px",
+                borderRadius: 10,
+                boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
+                backgroundColor: "#ffffff",
+                borderLeft: `4px solid ${accent}`,
+                fontFamily: "system-ui, -apple-system, sans-serif",
+              }}
+            >
+              <span
+                style={{
+                  flexShrink: 0,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 24,
+                  height: 24,
+                  borderRadius: "50%",
+                  backgroundColor: accent,
+                  color: "#ffffff",
+                  fontSize: 14,
+                  fontWeight: 700,
+                }}
+              >
+                {icon}
+              </span>
+              <span style={{ fontSize: 14, color: "#0f172a", fontWeight: 500, lineHeight: 1.5 }}>
+                {onboardedToast.text}
+              </span>
+              <button
+                type="button"
+                onClick={() => setOnboardedToast(null)}
+                aria-label="Dismiss"
+                style={{
+                  marginLeft: 8,
+                  background: "transparent",
+                  border: "none",
+                  color: "#64748b",
+                  fontSize: 18,
+                  lineHeight: 1,
+                  cursor: "pointer",
+                }}
+              >
+                ×
+              </button>
+            </div>,
+            document.body,
+          );
+        })()
+      : null;
+
   return (
     <>
+      {toastNode}
       <Topbar title="Onboarding" subtitle="Track trucker onboarding progress and documents" />
-      {onboardedToast && (
-        <div className="mx-6 mt-3 px-4 py-2.5 bg-green/10 border border-green/30 rounded-md text-xs text-green flex items-center justify-between">
-          <span className="font-semibold">✓ {onboardedToast}</span>
-          <button
-            type="button"
-            onClick={() => setOnboardedToast(null)}
-            className="text-green hover:opacity-70 text-base leading-none"
-            aria-label="Dismiss"
-          >
-            ×
-          </button>
-        </div>
-      )}
       <div className="flex-1 min-h-0 overflow-y-auto p-6 bg-surface">
         <div className="grid grid-cols-[340px_1fr] gap-4">
           <Card className="!p-0 max-h-[calc(100vh-140px)] overflow-y-auto">
@@ -612,10 +679,25 @@ export default function OnboardingPage() {
                   <Button
                     onClick={() => {
                       const name = selected.legal_name;
-                      markOnboarded.mutate(selected.id, {
+                      const id = selected.id;
+                      // Optimistic: show success toast immediately. The user
+                      // always sees feedback, even if state churn from query
+                      // invalidation would otherwise hide the callback path.
+                      setOnboardedToast({
+                        kind: "success",
+                        text: `${name} marked as fully onboarded`,
+                      });
+                      markOnboarded.mutate(id, {
                         onSuccess: () => {
-                          setOnboardedToast(`${name} marked as fully onboarded`);
                           setSelectedId("");
+                        },
+                        onError: (err) => {
+                          // Replace optimistic success with the actual error so
+                          // the user sees what went wrong (and we can debug).
+                          setOnboardedToast({
+                            kind: "error",
+                            text: (err as Error)?.message || "Failed to mark fully onboarded",
+                          });
                         },
                       });
                     }}
