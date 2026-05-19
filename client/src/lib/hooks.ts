@@ -88,10 +88,10 @@ export function useResetPassword() {
 }
 
 // Truckers
-export function useTruckers(params: Record<string, string | number> = {}) {
+export function useTruckers(params: Record<string, string | number | boolean> = {}) {
   const qs = new URLSearchParams(
     Object.entries(params)
-      .filter(([, v]) => v !== "" && v !== undefined)
+      .filter(([, v]) => v !== "" && v !== undefined && v !== false)
       .map(([k, v]) => [k, String(v)])
   ).toString();
   return useQuery({
