@@ -634,6 +634,46 @@ CREATE TABLE load_orders (
 
   shipper_id              UUID REFERENCES shippers(id),  -- Optional. Broker/shipper who provided this load.
   shipper_email_override  CITEXT,                         -- If entered ad-hoc instead of selecting a saved shipper
+
+  -- Broker (free-text, captured on the expanded Create Load form)
+  broker_name             TEXT,
+  broker_mc_number        TEXT,
+
+  -- Structured route (load_origin / load_destination kept above as composite display strings)
+  origin_city             TEXT,
+  origin_state            TEXT,
+  origin_zip              TEXT,
+  dest_city               TEXT,
+  dest_state              TEXT,
+  dest_zip                TEXT,
+  loaded_miles            INTEGER,
+  deadhead_miles          INTEGER,
+
+  -- Schedule
+  pickup_at               TIMESTAMPTZ,
+  delivery_at             TIMESTAMPTZ,
+
+  -- Freight spec
+  equipment_type          TEXT,     -- Dry van | Reefer | Flatbed | Step deck | Power only | Hotshot
+  trailer_length_ft       INTEGER,  -- 53 | 48
+  load_type               TEXT,     -- full | partial
+  commodity               TEXT,
+  weight_lbs              INTEGER,
+  is_hazmat               BOOLEAN NOT NULL DEFAULT FALSE,
+  tarps_required          BOOLEAN NOT NULL DEFAULT FALSE,
+  team_drivers            BOOLEAN NOT NULL DEFAULT FALSE,
+  liftgate_required       BOOLEAN NOT NULL DEFAULT FALSE,
+
+  -- Pay breakdown. gross_load_amount_cents above stays the stored total and is
+  -- recomputed at the app layer as linehaul + fuel_surcharge + accessorials.
+  linehaul_amount_cents   INTEGER,
+  fuel_surcharge_cents    INTEGER,
+  accessorials_cents      INTEGER,
+
+  -- References
+  broker_load_number      TEXT,
+  bol_number              TEXT,
+
   notes                   TEXT,
   created_by              UUID NOT NULL REFERENCES users(id),
   created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),

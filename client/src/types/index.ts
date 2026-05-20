@@ -110,6 +110,42 @@ export interface Load {
   exclude_from_commission: boolean;
   exclusion_reason: string | null;
   created_at: string;
+
+  // Broker (free-text)
+  broker_name: string | null;
+  broker_mc_number: string | null;
+  // Structured route
+  origin_city: string | null;
+  origin_state: string | null;
+  origin_zip: string | null;
+  dest_city: string | null;
+  dest_state: string | null;
+  dest_zip: string | null;
+  loaded_miles: number | null;
+  deadhead_miles: number | null;
+  // Schedule
+  pickup_at: string | null;
+  delivery_at: string | null;
+  // Freight
+  equipment_type: string | null;
+  trailer_length_ft: number | null;
+  load_type: string | null;
+  commodity: string | null;
+  weight_lbs: number | null;
+  is_hazmat: boolean;
+  tarps_required: boolean;
+  team_drivers: boolean;
+  liftgate_required: boolean;
+  // Pay breakdown
+  linehaul_amount_cents: number | null;
+  fuel_surcharge_cents: number | null;
+  accessorials_cents: number | null;
+  dispatcher_commission_pct: string | number | null;
+  // References
+  broker_load_number: string | null;
+  bol_number: string | null;
+  notes: string | null;
+
   [key: string]: unknown;
 }
 

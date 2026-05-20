@@ -49,13 +49,37 @@ export class LoadsService {
     if (!trucker.rows.length) throw new AppError('Trucker not found', 404, 'NOT_FOUND');
 
     const companyPct = trucker.rows[0].company_commission_pct;
-    const grossCents = data.gross_load_amount_cents;
+
+    // Gross is the DERIVED total: linehaul + fuel surcharge + accessorials.
+    // gross_load_amount_cents stays the stored gross — company_gross_cents (a
+    // GENERATED column) and all commission math read it, so it must be set.
+    // Legacy callers that still pass gross_load_amount_cents directly (and no
+    // component fields) keep working via the fallback.
+    const intOrZero = (v: any) => Math.round(Number(v) || 0);
+    const linehaulCents = intOrZero(data.linehaul_amount_cents);
+    const fscCents = intOrZero(data.fuel_surcharge_cents);
+    const accessorialsCents = intOrZero(data.accessorials_cents);
+    const hasPayComponents =
+      data.linehaul_amount_cents != null ||
+      data.fuel_surcharge_cents != null ||
+      data.accessorials_cents != null;
+    const grossCents = hasPayComponents
+      ? linehaulCents + fscCents + accessorialsCents
+      : intOrZero(data.gross_load_amount_cents);
     const companyGross = Math.round(grossCents * companyPct);
 
-    // Get dispatcher commission
+    // Get dispatcher commission. The expanded Create Load form can pass an
+    // explicit dispatcher_commission_pct (a fraction, e.g. 0.10); when absent
+    // we fall back to the dispatcher employee's default commission_value.
     const dispatcher = await query('SELECT commission_value FROM employees WHERE id = $1', [data.dispatcher_id]);
     if (!dispatcher.rows.length) throw new AppError('Dispatcher not found', 404, 'NOT_FOUND');
-    const dispatcherPct = parseFloat(dispatcher.rows[0].commission_value || '0');
+    const formDispatcherPct =
+      data.dispatcher_commission_pct != null && data.dispatcher_commission_pct !== ''
+        ? parseFloat(String(data.dispatcher_commission_pct))
+        : NaN;
+    const dispatcherPct = Number.isFinite(formDispatcherPct)
+      ? formDispatcherPct
+      : parseFloat(dispatcher.rows[0].commission_value || '0');
     const dispatcherComm = Math.round(companyGross * dispatcherPct);
 
     // Get agent commission + threshold
@@ -91,16 +115,54 @@ export class LoadsService {
 
     const companyNet = companyGross - agentComm - dispatcherComm;
 
+    // Compose display strings so the list grid + detail modal (which read the
+    // flat load_origin / load_destination) keep working unchanged.
+    const composeLocation = (city?: string, state?: string, zip?: string): string | null => {
+      const c = (city || '').trim();
+      const sz = [state, zip].map((x) => (x || '').trim()).filter(Boolean).join(' ');
+      if (c && sz) return `${c}, ${sz}`;
+      return (c || sz) || null;
+    };
+    const loadOrigin =
+      composeLocation(data.origin_city, data.origin_state, data.origin_zip) || data.load_origin || null;
+    const loadDestination =
+      composeLocation(data.dest_city, data.dest_state, data.dest_zip) || data.load_destination || null;
+    const intOrNull = (v: any) => (v != null && v !== '' ? parseInt(String(v), 10) || null : null);
+
     const result = await query(
-      `INSERT INTO load_orders (trucker_id, load_origin, load_destination, gross_load_amount_cents,
-       company_commission_pct, sales_agent_id, agent_commission_pct, agent_commission_cents,
-       agent_eligibility, agent_threshold_load_num, dispatcher_id, dispatcher_commission_pct,
-       dispatcher_commission_cents, company_net_cents, shipper_id, shipper_email_override, notes, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
-      [data.trucker_id, data.load_origin, data.load_destination, grossCents, companyPct,
+      `INSERT INTO load_orders (
+         trucker_id, load_origin, load_destination, gross_load_amount_cents,
+         company_commission_pct, sales_agent_id, agent_commission_pct, agent_commission_cents,
+         agent_eligibility, agent_threshold_load_num, dispatcher_id, dispatcher_commission_pct,
+         dispatcher_commission_cents, company_net_cents, shipper_id, shipper_email_override, notes, created_by,
+         broker_name, broker_mc_number,
+         origin_city, origin_state, origin_zip, dest_city, dest_state, dest_zip,
+         loaded_miles, deadhead_miles,
+         pickup_at, delivery_at,
+         equipment_type, trailer_length_ft, load_type, commodity, weight_lbs,
+         is_hazmat, tarps_required, team_drivers, liftgate_required,
+         linehaul_amount_cents, fuel_surcharge_cents, accessorials_cents,
+         broker_load_number, bol_number
+       )
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,
+               $19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,
+               $36,$37,$38,$39,$40,$41,$42,$43,$44) RETURNING *`,
+      [data.trucker_id, loadOrigin, loadDestination, grossCents, companyPct,
        agentId, agentPct, agentComm, agentEligibility, agentLoadNum,
        data.dispatcher_id, dispatcherPct, dispatcherComm, companyNet,
-       data.shipper_id, data.shipper_email_override, data.notes, userId]
+       data.shipper_id, data.shipper_email_override, data.notes, userId,
+       data.broker_name || null, data.broker_mc_number || null,
+       data.origin_city || null, data.origin_state || null, data.origin_zip || null,
+       data.dest_city || null, data.dest_state || null, data.dest_zip || null,
+       intOrNull(data.loaded_miles), intOrNull(data.deadhead_miles),
+       data.pickup_at || null, data.delivery_at || null,
+       data.equipment_type || null, intOrNull(data.trailer_length_ft),
+       data.load_type || null, data.commodity || null, intOrNull(data.weight_lbs),
+       !!data.is_hazmat, !!data.tarps_required, !!data.team_drivers, !!data.liftgate_required,
+       hasPayComponents ? linehaulCents : null,
+       hasPayComponents ? fscCents : null,
+       hasPayComponents ? accessorialsCents : null,
+       data.broker_load_number || null, data.bol_number || null]
     );
 
     const loadId = result.rows[0].id;

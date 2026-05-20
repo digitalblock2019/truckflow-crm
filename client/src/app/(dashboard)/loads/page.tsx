@@ -7,10 +7,9 @@ import Tabs from "@/components/ui/Tabs";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
-import Input from "@/components/ui/Input";
-import Select from "@/components/ui/Select";
 import LoadPipeline from "@/components/features/LoadPipeline";
-import { useLoads, useCreateLoad, useUpdateLoadStatus, useLoadDocuments, useUploadLoadDocument, useTruckers, useEmployees } from "@/lib/hooks";
+import CreateLoadModal from "@/components/features/CreateLoadModal";
+import { useLoads, useUpdateLoadStatus, useLoadDocuments, useUploadLoadDocument } from "@/lib/hooks";
 import { useAuthStore } from "@/lib/auth";
 import { totalPages, fmt } from "@/lib/utils";
 import type { Load, LoadDocument } from "@/types";
@@ -64,20 +63,9 @@ export default function LoadsPage() {
   const canCreate = useAuthStore((s) => s.canCreateLoad());
 
   const { data, isLoading } = useLoads({ status: tab, page, limit: 20 });
-  const createLoad = useCreateLoad();
   const updateStatus = useUpdateLoadStatus();
   const { data: loadDocs } = useLoadDocuments(selectedLoad?.id ?? "");
   const uploadLoadDoc = useUploadLoadDocument();
-  const { data: truckersData } = useTruckers({ status: "fully_onboarded", limit: 100 });
-  const { data: employeesData } = useEmployees({ type: "dispatcher", status: "active", limit: 100 });
-
-  const [form, setForm] = useState({
-    trucker_id: "",
-    dispatcher_id: "",
-    gross_load_amount_cents: "",
-    load_origin: "",
-    load_destination: "",
-  });
 
   const columns: Column<Load>[] = [
     { key: "order_number", header: "Order#", render: (r) => <span className="font-mono font-semibold">{r.order_number}</span> },
@@ -89,24 +77,6 @@ export default function LoadsPage() {
     { key: "dispatcher_name", header: "Dispatcher" },
     { key: "created_at", header: "Created", render: (r) => new Date(r.created_at).toLocaleDateString() },
   ];
-
-  const handleCreate = () => {
-    createLoad.mutate(
-      {
-        trucker_id: form.trucker_id,
-        dispatcher_id: form.dispatcher_id,
-        gross_load_amount_cents: parseInt(form.gross_load_amount_cents) * 100,
-        load_origin: form.load_origin,
-        load_destination: form.load_destination,
-      } as unknown as Partial<Load>,
-      {
-        onSuccess: () => {
-          setShowCreate(false);
-          setForm({ trucker_id: "", dispatcher_id: "", gross_load_amount_cents: "", load_origin: "", load_destination: "" });
-        },
-      }
-    );
-  };
 
   return (
     <>
@@ -233,42 +203,7 @@ export default function LoadsPage() {
         )}
       </Modal>
 
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create New Load" width="560px">
-        <div className="grid grid-cols-2 gap-4">
-          <Select
-            label="Trucker"
-            value={form.trucker_id}
-            onChange={(e) => setForm({ ...form, trucker_id: e.target.value })}
-            options={[
-              { value: "", label: "Select trucker..." },
-              ...(truckersData?.data ?? []).map((t) => ({ value: t.id, label: t.legal_name })),
-            ]}
-          />
-          <Select
-            label="Dispatcher"
-            value={form.dispatcher_id}
-            onChange={(e) => setForm({ ...form, dispatcher_id: e.target.value })}
-            options={[
-              { value: "", label: "Select dispatcher..." },
-              ...(employeesData?.data ?? []).map((e) => ({ value: e.id, label: e.full_name })),
-            ]}
-          />
-          <Input
-            label="Gross Amount ($)"
-            type="number"
-            value={form.gross_load_amount_cents}
-            onChange={(e) => setForm({ ...form, gross_load_amount_cents: e.target.value })}
-          />
-          <Input label="Origin" value={form.load_origin} onChange={(e) => setForm({ ...form, load_origin: e.target.value })} />
-          <Input label="Destination" value={form.load_destination} onChange={(e) => setForm({ ...form, load_destination: e.target.value })} />
-        </div>
-        <div className="flex justify-end gap-2 mt-5">
-          <Button variant="secondary" onClick={() => setShowCreate(false)}>Cancel</Button>
-          <Button onClick={handleCreate} disabled={createLoad.isPending}>
-            {createLoad.isPending ? "Creating..." : "Create Load"}
-          </Button>
-        </div>
-      </Modal>
+      <CreateLoadModal open={showCreate} onClose={() => setShowCreate(false)} />
     </>
   );
 }
