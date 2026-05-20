@@ -49,30 +49,51 @@ export class LoadDocumentsService {
     const load = await query('SELECT id FROM load_orders WHERE id = $1', [loadOrderId]);
     if (!load.rows.length) throw new AppError('Load not found', 404, 'NOT_FOUND');
 
-    const ext = path.extname(file.originalname);
-    const storagePath = `${loadOrderId}/${docType}/${Date.now()}${ext}`;
+    // Storage upload + DB writes are wrapped so a raw failure becomes a
+    // descriptive error (logged server-side, message surfaced to the UI)
+    // instead of a bare 500 with no detail.
+    try {
+      const ext = path.extname(file.originalname);
+      const storagePath = `${loadOrderId}/${docType}/${Date.now()}${ext}`;
 
-    await uploadFile(storagePath, file.buffer, file.mimetype, BUCKET);
+      await uploadFile(storagePath, file.buffer, file.mimetype, BUCKET);
 
-    // Upsert — delete existing then insert (handles UNIQUE constraint)
-    await query(
-      'DELETE FROM load_documents WHERE load_order_id = $1 AND doc_type = $2',
-      [loadOrderId, docType]
-    );
+      // Upsert — delete existing then insert (handles UNIQUE constraint)
+      await query(
+        'DELETE FROM load_documents WHERE load_order_id = $1 AND doc_type = $2',
+        [loadOrderId, docType]
+      );
 
-    const result = await query(
-      `INSERT INTO load_documents (load_order_id, doc_type, file_name, file_path, file_size_bytes, mime_type, uploaded_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [loadOrderId, docType, file.originalname, storagePath, file.size, file.mimetype, userId]
-    );
+      const result = await query(
+        `INSERT INTO load_documents (load_order_id, doc_type, file_name, file_path, file_size_bytes, mime_type, uploaded_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+        [loadOrderId, docType, file.originalname, storagePath, file.size, file.mimetype, userId]
+      );
 
-    await query(
-      `INSERT INTO audit_log (user_id, user_role, action, entity_type, entity_id, description)
-       VALUES ($1, (SELECT role FROM users WHERE id=$1), 'upload', 'load_document', $2, $3)`,
-      [userId, result.rows[0].id, `Uploaded ${docType} for load ${loadOrderId}`]
-    );
+      // Audit logging is nice-to-have — never let it fail the upload.
+      try {
+        await query(
+          `INSERT INTO audit_log (user_id, user_role, action, entity_type, entity_id, description)
+           VALUES ($1, (SELECT role FROM users WHERE id=$1), 'upload', 'load_document', $2, $3)`,
+          [userId, result.rows[0].id, `Uploaded ${docType} for load ${loadOrderId}`]
+        );
+      } catch (auditErr: any) {
+        console.error('[LoadDocumentsService.upload] audit_log insert failed:', auditErr?.message, auditErr?.code);
+      }
 
-    return result.rows[0];
+      return result.rows[0];
+    } catch (err: any) {
+      if (err instanceof AppError) throw err;
+      console.error(
+        '[LoadDocumentsService.upload] failed:', docType, 'load', loadOrderId,
+        '-', err?.message, err?.code, err?.detail,
+      );
+      throw new AppError(
+        `Failed to upload ${TYPE_LABELS[docType] || docType}: ${err?.message || 'storage/database error'}`,
+        500,
+        'UPLOAD_FAILED',
+      );
+    }
   }
 
   async getDownloadUrl(loadOrderId: string, docType: string): Promise<string> {
