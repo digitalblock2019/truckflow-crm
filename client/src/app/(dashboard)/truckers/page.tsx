@@ -56,7 +56,9 @@ const allStatuses = [
   { value: "interested", label: "Interested" },
   { value: "not_interested", label: "Not Interested" },
   { value: "onboarded", label: "Start Onboarding" },
-  { value: "fully_onboarded", label: "Fully Onboarded" },
+  // Not manually selectable — fully_onboarded is set from the Onboarding page
+  // once all required documents are uploaded (enforced server-side too).
+  { value: "fully_onboarded", label: "Fully Onboarded (set on Onboarding page)", disabled: true },
 ];
 
 const statusLabels: Record<string, string> = {
@@ -727,6 +729,10 @@ export default function TruckersPage() {
                   {updateTrucker.isPending ? "Updating..." : "Update Status"}
                 </Button>
               </div>
+              <p className="mt-1.5 text-[10px] text-txt-light">
+                To fully onboard a trucker: set status to <span className="font-semibold">Start Onboarding</span>,
+                then upload the required documents on the Onboarding page and click Mark Fully Onboarded.
+              </p>
               {statusError && (
                 <div className="mt-2 px-3 py-2 bg-red/5 border border-red/30 rounded-md text-xs text-red">
                   {statusError}
