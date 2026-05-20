@@ -66,12 +66,12 @@ const emptyForm = {
   tarps_required: false,
   team_drivers: false,
   liftgate_required: false,
-  // Pay (dollar amounts as typed; pct as a whole number like "10")
+  // Pay (dollar amounts as typed; pct as a whole number like "8")
   linehaul: "",
   rate_per_mile: "",
   fuel_surcharge: "",
   accessorials: "",
-  dispatcher_commission_pct: "",
+  company_commission_pct: "",
   // References
   broker_load_number: "",
   bol_number: "",
@@ -168,26 +168,21 @@ export default function CreateLoadModal({ open, onClose }: Props) {
       };
     });
 
-  // Commission chain:
-  //   Company Commission = Load Total × trucker's company_commission_pct (~8%)
-  //   Dispatch Agent Commission = Company Commission × dispatcher pct (~10%)
-  // i.e. the agent earns a slice OF the company's cut, not of the load total.
-  const selectedTrucker = useMemo(
-    () => (truckersData?.data ?? []).find((t) => t.id === form.trucker_id),
-    [truckersData, form.trucker_id],
-  );
-  const selectedDispatcher = useMemo(
-    () => (dispatchersData?.data ?? []).find((d) => d.id === form.dispatcher_id),
-    [dispatchersData, form.dispatcher_id],
-  );
-  const companyPct = selectedTrucker
-    ? parseFloat(String(selectedTrucker.company_commission_pct ?? "0")) || 0
-    : 0;
-  // Dispatch-agent pct: the form field overrides (whole number, e.g. 10 -> 0.10);
-  // blank falls back to the selected dispatcher employee's default rate.
-  const dispatcherPct = form.dispatcher_commission_pct.trim()
-    ? (parseFloat(form.dispatcher_commission_pct) || 0) / 100
-    : parseFloat(String(selectedDispatcher?.commission_value ?? "0")) || 0;
+  // Company Commission = Load Total × company_commission_pct. The % field is
+  // pre-filled from the selected trucker's negotiated rate but stays editable.
+  const companyPct = (parseFloat(form.company_commission_pct) || 0) / 100;
+
+  // Picking a trucker pre-fills the company commission % with that trucker's
+  // negotiated rate (still editable afterward).
+  const handleTruckerChange = (truckerId: string) => {
+    const trucker = (truckersData?.data ?? []).find((t) => t.id === truckerId);
+    const pct = trucker ? parseFloat(String(trucker.company_commission_pct ?? "0")) || 0 : 0;
+    setForm((prev) => ({
+      ...prev,
+      trucker_id: truckerId,
+      company_commission_pct: pct ? String(+(pct * 100).toFixed(2)) : "",
+    }));
+  };
 
   // ---- Live pay summary ----
   const pay = useMemo(() => {
@@ -195,14 +190,12 @@ export default function CreateLoadModal({ open, onClose }: Props) {
     const gross = dollars(form.linehaul) + dollars(form.fuel_surcharge) + dollars(form.accessorials);
     const miles = parseInt(form.loaded_miles, 10);
     const hasMiles = Number.isFinite(miles) && miles > 0;
-    const companyCommission = gross * companyPct;
     return {
       gross,
       allInPerMile: hasMiles ? gross / miles : null,
-      companyCommission,
-      dispatchAgentCommission: companyCommission * dispatcherPct,
+      companyCommission: gross * companyPct,
     };
-  }, [form.linehaul, form.fuel_surcharge, form.accessorials, form.loaded_miles, companyPct, dispatcherPct]);
+  }, [form.linehaul, form.fuel_surcharge, form.accessorials, form.loaded_miles, companyPct]);
 
   // ---- Validation ----
   const missing: string[] = [];
@@ -261,9 +254,10 @@ export default function CreateLoadModal({ open, onClose }: Props) {
       linehaul_amount_cents: dollarsToCents(form.linehaul),
       fuel_surcharge_cents: dollarsToCents(form.fuel_surcharge),
       accessorials_cents: dollarsToCents(form.accessorials),
-      // Form shows a whole-number percent; DB stores a fraction (10 -> 0.10).
-      dispatcher_commission_pct: form.dispatcher_commission_pct.trim()
-        ? (parseFloat(form.dispatcher_commission_pct) || 0) / 100
+      // Form shows a whole-number percent; DB stores a fraction (8 -> 0.08).
+      // Blank lets the backend fall back to the trucker's negotiated rate.
+      company_commission_pct: form.company_commission_pct.trim()
+        ? (parseFloat(form.company_commission_pct) || 0) / 100
         : null,
       broker_load_number: form.broker_load_number.trim() || null,
       bol_number: form.bol_number.trim() || null,
@@ -293,7 +287,7 @@ export default function CreateLoadModal({ open, onClose }: Props) {
             <Select
               label="Trucker"
               value={form.trucker_id}
-              onChange={(e) => set("trucker_id", e.target.value)}
+              onChange={(e) => handleTruckerChange(e.target.value)}
               options={[
                 { value: "", label: "Select trucker..." },
                 ...(truckersData?.data ?? []).map((t) => ({ value: t.id, label: t.legal_name })),
@@ -402,15 +396,15 @@ export default function CreateLoadModal({ open, onClose }: Props) {
               onChange={(e) => set("accessorials", e.target.value)}
             />
             <Input
-              label="Dispatch Agent Comm. (%)"
-              tooltip="The dispatch agent's cut, taken as a percentage OF the company commission (not the load total). Usually ~10%. Leave blank to use the selected agent's default rate."
+              label="Company Commission (%)"
+              tooltip="Your dispatching company's cut of the load, as a percentage of the Load Total. Pre-filled from the selected trucker's negotiated rate (usually 8%) — editable per load."
               type="number" min="0" step="0.1"
-              value={form.dispatcher_commission_pct}
-              onChange={(e) => set("dispatcher_commission_pct", e.target.value)}
+              value={form.company_commission_pct}
+              onChange={(e) => set("company_commission_pct", e.target.value)}
             />
           </div>
-          {/* Live summary — the commission chain, top to bottom */}
-          <div className="mt-3 bg-surface-mid rounded-lg px-4 py-3 grid grid-cols-4 gap-3">
+          {/* Live summary */}
+          <div className="mt-3 bg-surface-mid rounded-lg px-4 py-3 grid grid-cols-3 gap-3">
             <div>
               <div className="text-[10px] font-mono text-txt-light uppercase">Load Total</div>
               <div className="mt-0.5 text-sm font-mono font-semibold text-txt">{money(Math.round(pay.gross * 100))}</div>
@@ -423,28 +417,17 @@ export default function CreateLoadModal({ open, onClose }: Props) {
             </div>
             <div>
               <div className="text-[10px] font-mono text-txt-light uppercase flex items-center">
-                Company Comm.{selectedTrucker ? ` (${+(companyPct * 100).toFixed(2)}%)` : ""}
-                <InfoTip text="Your dispatching company's cut of the load — Load Total × the trucker's negotiated rate (usually 8%)." />
+                Company Comm.{companyPct > 0 ? ` (${+(companyPct * 100).toFixed(2)}%)` : ""}
+                <InfoTip text="Your dispatching company's cut of the load — Load Total × the company commission rate (usually 8%, negotiated per trucker)." />
               </div>
               <div className="mt-0.5 text-sm font-mono font-semibold text-txt">
-                {selectedTrucker ? money(Math.round(pay.companyCommission * 100)) : "–"}
-              </div>
-            </div>
-            <div>
-              <div className="text-[10px] font-mono text-txt-light uppercase flex items-center">
-                Dispatch Agent{dispatcherPct > 0 ? ` (${+(dispatcherPct * 100).toFixed(2)}%)` : ""}
-                <InfoTip text="The dispatch agent's earnings on this load — Company Commission × the agent's rate (usually 10%). A slice of the company's cut, not the load total." />
-              </div>
-              <div className="mt-0.5 text-sm font-mono font-semibold text-txt">
-                {selectedTrucker && dispatcherPct > 0
-                  ? money(Math.round(pay.dispatchAgentCommission * 100))
-                  : "–"}
+                {companyPct > 0 ? money(Math.round(pay.companyCommission * 100)) : "–"}
               </div>
             </div>
           </div>
-          {!selectedTrucker && (
+          {companyPct <= 0 && (
             <p className="mt-1.5 text-[10px] text-txt-light">
-              Select a trucker to see the company commission (uses that trucker&apos;s negotiated rate).
+              Pick a trucker to auto-fill the company commission %, or enter it manually above.
             </p>
           )}
         </FormSection>
