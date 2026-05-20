@@ -5,6 +5,7 @@ import Modal from "@/components/ui/Modal";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import Button from "@/components/ui/Button";
+import InfoTip from "@/components/ui/InfoTip";
 import { useCreateLoad, useUploadLoadDocument, useTruckers, useEmployees } from "@/lib/hooks";
 import type { Load } from "@/types";
 
@@ -167,14 +168,26 @@ export default function CreateLoadModal({ open, onClose }: Props) {
       };
     });
 
-  // Selected trucker drives the company-commission preview.
+  // Commission chain:
+  //   Company Commission = Load Total × trucker's company_commission_pct (~8%)
+  //   Dispatch Agent Commission = Company Commission × dispatcher pct (~10%)
+  // i.e. the agent earns a slice OF the company's cut, not of the load total.
   const selectedTrucker = useMemo(
     () => (truckersData?.data ?? []).find((t) => t.id === form.trucker_id),
     [truckersData, form.trucker_id],
   );
+  const selectedDispatcher = useMemo(
+    () => (dispatchersData?.data ?? []).find((d) => d.id === form.dispatcher_id),
+    [dispatchersData, form.dispatcher_id],
+  );
   const companyPct = selectedTrucker
     ? parseFloat(String(selectedTrucker.company_commission_pct ?? "0")) || 0
     : 0;
+  // Dispatch-agent pct: the form field overrides (whole number, e.g. 10 -> 0.10);
+  // blank falls back to the selected dispatcher employee's default rate.
+  const dispatcherPct = form.dispatcher_commission_pct.trim()
+    ? (parseFloat(form.dispatcher_commission_pct) || 0) / 100
+    : parseFloat(String(selectedDispatcher?.commission_value ?? "0")) || 0;
 
   // ---- Live pay summary ----
   const pay = useMemo(() => {
@@ -182,12 +195,14 @@ export default function CreateLoadModal({ open, onClose }: Props) {
     const gross = dollars(form.linehaul) + dollars(form.fuel_surcharge) + dollars(form.accessorials);
     const miles = parseInt(form.loaded_miles, 10);
     const hasMiles = Number.isFinite(miles) && miles > 0;
+    const companyCommission = gross * companyPct;
     return {
       gross,
       allInPerMile: hasMiles ? gross / miles : null,
-      companyCommission: gross * companyPct,
+      companyCommission,
+      dispatchAgentCommission: companyCommission * dispatcherPct,
     };
-  }, [form.linehaul, form.fuel_surcharge, form.accessorials, form.loaded_miles, companyPct]);
+  }, [form.linehaul, form.fuel_surcharge, form.accessorials, form.loaded_miles, companyPct, dispatcherPct]);
 
   // ---- Validation ----
   const missing: string[] = [];
@@ -387,15 +402,15 @@ export default function CreateLoadModal({ open, onClose }: Props) {
               onChange={(e) => set("accessorials", e.target.value)}
             />
             <Input
-              label="Dispatcher Comm. (%)"
-              tooltip="Dispatcher's commission percentage for this load. Leave blank to use the dispatcher's default rate."
+              label="Dispatch Agent Comm. (%)"
+              tooltip="The dispatch agent's cut, taken as a percentage OF the company commission (not the load total). Usually ~10%. Leave blank to use the selected agent's default rate."
               type="number" min="0" step="0.1"
               value={form.dispatcher_commission_pct}
               onChange={(e) => set("dispatcher_commission_pct", e.target.value)}
             />
           </div>
-          {/* Live summary */}
-          <div className="mt-3 bg-surface-mid rounded-lg px-4 py-3 grid grid-cols-3 gap-3">
+          {/* Live summary — the commission chain, top to bottom */}
+          <div className="mt-3 bg-surface-mid rounded-lg px-4 py-3 grid grid-cols-4 gap-3">
             <div>
               <div className="text-[10px] font-mono text-txt-light uppercase">Load Total</div>
               <div className="mt-0.5 text-sm font-mono font-semibold text-txt">{money(Math.round(pay.gross * 100))}</div>
@@ -407,11 +422,23 @@ export default function CreateLoadModal({ open, onClose }: Props) {
               </div>
             </div>
             <div>
-              <div className="text-[10px] font-mono text-txt-light uppercase">
-                Company Commission{selectedTrucker ? ` (${+(companyPct * 100).toFixed(2)}%)` : ""}
+              <div className="text-[10px] font-mono text-txt-light uppercase flex items-center">
+                Company Comm.{selectedTrucker ? ` (${+(companyPct * 100).toFixed(2)}%)` : ""}
+                <InfoTip text="Your dispatching company's cut of the load — Load Total × the trucker's negotiated rate (usually 8%)." />
               </div>
               <div className="mt-0.5 text-sm font-mono font-semibold text-txt">
                 {selectedTrucker ? money(Math.round(pay.companyCommission * 100)) : "–"}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] font-mono text-txt-light uppercase flex items-center">
+                Dispatch Agent{dispatcherPct > 0 ? ` (${+(dispatcherPct * 100).toFixed(2)}%)` : ""}
+                <InfoTip text="The dispatch agent's earnings on this load — Company Commission × the agent's rate (usually 10%). A slice of the company's cut, not the load total." />
+              </div>
+              <div className="mt-0.5 text-sm font-mono font-semibold text-txt">
+                {selectedTrucker && dispatcherPct > 0
+                  ? money(Math.round(pay.dispatchAgentCommission * 100))
+                  : "–"}
               </div>
             </div>
           </div>
