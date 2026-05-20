@@ -175,21 +175,10 @@ export class LoadsService {
 
     const loadId = result.rows[0].id;
 
-    // Create commission records
-    if (dispatcherComm > 0) {
-      await query(
-        `INSERT INTO commissions (load_order_id, employee_id, employee_type, amount_cents)
-         VALUES ($1, $2, 'dispatcher', $3)`,
-        [loadId, data.dispatcher_id, dispatcherComm]
-      );
-    }
-    if (agentComm > 0 && agentId) {
-      await query(
-        `INSERT INTO commissions (load_order_id, employee_id, employee_type, amount_cents)
-         VALUES ($1, $2, 'sales_agent', $3)`,
-        [loadId, agentId, agentComm]
-      );
-    }
+    // No `commissions` rows are created here. A commission is only earned once
+    // the broker actually pays — updateStatus() inserts the sales-agent and
+    // dispatcher rows when the load advances to payment_received. The projected
+    // amounts live on the load_orders row (agent/dispatcher_commission_cents).
 
     // Notify assigned agent & dispatcher
     const orderNum = result.rows[0].order_number || loadId;
@@ -258,12 +247,36 @@ export class LoadsService {
     params.push(id);
     await query(`UPDATE load_orders SET ${updates.join(', ')} WHERE id = $${idx}`, params);
 
-    // When a load is paid, stamp the USD/PKR rate onto its commission rows.
-    // This is reporting-only — a failure here must NOT block the status change
-    // (the load IS paid), so it's isolated and logged rather than thrown.
-    // (Previously this ran before the load UPDATE, so any error here 500'd the
-    // whole advance-to-paid and the status never moved.)
+    // Commissions are earned only once the broker pays. The sales-agent and
+    // dispatcher commission rows are created when the load advances INTO
+    // payment_received (not at load creation), and still-pending rows are
+    // removed if a load is mistakenly moved back out.
     if (newStatus === 'payment_received') {
+      const lo = load.rows[0];
+      if (!lo.exclude_from_commission) {
+        // ON CONFLICT guards against re-entry (e.g. moved back then forward
+        // again) and against legacy loads whose rows predate this change.
+        if (lo.dispatcher_id && lo.dispatcher_commission_cents > 0) {
+          await query(
+            `INSERT INTO commissions (load_order_id, employee_id, employee_type, amount_cents)
+             VALUES ($1, $2, 'dispatcher', $3)
+             ON CONFLICT (load_order_id, employee_id) DO NOTHING`,
+            [id, lo.dispatcher_id, lo.dispatcher_commission_cents]
+          );
+        }
+        if (lo.sales_agent_id && lo.agent_commission_cents > 0) {
+          await query(
+            `INSERT INTO commissions (load_order_id, employee_id, employee_type, amount_cents)
+             VALUES ($1, $2, 'sales_agent', $3)
+             ON CONFLICT (load_order_id, employee_id) DO NOTHING`,
+            [id, lo.sales_agent_id, lo.agent_commission_cents]
+          );
+        }
+      }
+
+      // Stamp the USD/PKR rate onto the load's commission rows. Reporting-only
+      // — a failure here must NOT block the status change (the load IS paid),
+      // so it's isolated and logged rather than thrown.
       try {
         const rateSetting = await query("SELECT value FROM system_settings WHERE key = 'exchange_rate_manual_fallback'");
         const rate = parseFloat(rateSetting.rows[0]?.value || '280');
@@ -280,6 +293,24 @@ export class LoadsService {
           err?.message, err?.code, err?.detail,
         );
       }
+    } else if (current === 'payment_received') {
+      // Load moved backward out of payment_received — drop still-pending
+      // commission rows so an unpaid load doesn't carry a live commission.
+      // Approved/paid rows are left in place and flagged for manual review.
+      const locked = await query(
+        `SELECT count(*)::int AS n FROM commissions
+         WHERE load_order_id = $1 AND status IN ('approved', 'paid')`,
+        [id]
+      );
+      if (locked.rows[0].n > 0) {
+        console.warn(
+          `[LoadsService.updateStatus] load ${id} moved back from payment_received with ${locked.rows[0].n} approved/paid commission(s) — left in place for manual review`,
+        );
+      }
+      await query(
+        `DELETE FROM commissions WHERE load_order_id = $1 AND status = 'pending' AND excluded = FALSE`,
+        [id]
+      );
     }
 
     await query(
