@@ -15,9 +15,16 @@ export class LoadsController {
   }
 
   async create(req: Request, res: Response) {
-    const { trucker_id, gross_load_amount_cents, dispatcher_id } = req.body;
-    if (!trucker_id || !gross_load_amount_cents || !dispatcher_id) {
-      throw new AppError('trucker_id, gross_load_amount_cents, and dispatcher_id required', 400, 'VALIDATION_ERROR');
+    const { trucker_id, dispatcher_id, gross_load_amount_cents, linehaul_amount_cents } = req.body;
+    // The expanded Create Load form sends linehaul_amount_cents and the service
+    // derives gross from it; legacy callers still send gross_load_amount_cents
+    // directly. Accept either. Report each missing field by its human label.
+    const missing: string[] = [];
+    if (!trucker_id) missing.push('Trucker');
+    if (!dispatcher_id) missing.push('Dispatcher');
+    if (!gross_load_amount_cents && !linehaul_amount_cents) missing.push('Linehaul amount');
+    if (missing.length) {
+      throw new AppError(`Missing required field(s): ${missing.join(', ')}`, 400, 'VALIDATION_ERROR');
     }
     const result = await svc.create(req.body, req.user!.id);
     res.status(201).json(result);
