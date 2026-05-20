@@ -55,7 +55,6 @@ function fmtDateOnly(dateStr: string) {
 const commissionTypes = [
   { value: "", label: "None" },
   { value: "percentage", label: "Percentage" },
-  { value: "flat", label: "Flat" },
 ];
 
 const emptyForm = {
@@ -135,7 +134,9 @@ export default function PeoplePage() {
       pay_type: form.pay_type,
       base_salary_pkr_paisa: form.base_salary_pkr_paisa ? Math.round(parseFloat(form.base_salary_pkr_paisa) * 100) : undefined,
       commission_type: form.commission_type || undefined,
-      commission_value: form.commission_value ? parseFloat(form.commission_value) : undefined,
+      // Stored as a fraction (user types 8 → 0.08) to match company_commission_pct
+      // and what the load commission math expects.
+      commission_value: form.commission_value ? +(parseFloat(form.commission_value) / 100).toFixed(4) : undefined,
     };
     if (form.crm_email) {
       payload.crm_email = form.crm_email;
@@ -165,7 +166,11 @@ export default function PeoplePage() {
       pay_type: (selectedEmployee as any).pay_type || "salary_only",
       base_salary_pkr_paisa: (selectedEmployee as any).base_salary_pkr_paisa ? ((selectedEmployee as any).base_salary_pkr_paisa / 100).toString() : "",
       commission_type: selectedEmployee.commission_type || "",
-      commission_value: selectedEmployee.commission_value?.toString() || "",
+      // commission_value is stored as a fraction — show it as a percentage.
+      commission_value:
+        selectedEmployee.commission_value != null
+          ? String(+(Number(selectedEmployee.commission_value) * 100).toFixed(2))
+          : "",
       crm_email: selectedEmployee.crm_email ?? "",
       crm_password: "",
     });
@@ -187,8 +192,9 @@ export default function PeoplePage() {
     if (newSalaryPaisa !== ((selectedEmployee as any).base_salary_pkr_paisa || null)) updates.base_salary_pkr_paisa = newSalaryPaisa;
     const newCommType = form.commission_type || null;
     if (newCommType !== (selectedEmployee.commission_type || null)) updates.commission_type = newCommType;
-    const newCommVal = form.commission_value ? parseFloat(form.commission_value) : null;
-    if (newCommVal !== (selectedEmployee.commission_value || null)) updates.commission_value = newCommVal;
+    const newCommVal = form.commission_value ? +(parseFloat(form.commission_value) / 100).toFixed(4) : null;
+    const existingCommVal = selectedEmployee.commission_value != null ? Number(selectedEmployee.commission_value) : null;
+    if (newCommVal !== existingCommVal) updates.commission_value = newCommVal;
 
     // CRM account changes (handled separately)
     const crmUpdates: Record<string, string> = {};
@@ -311,8 +317,10 @@ export default function PeoplePage() {
               <div>
                 <div className="text-[10px] font-mono text-txt-light uppercase">Commission</div>
                 <div className="mt-0.5 text-txt">
-                  {selectedEmployee.commission_type
-                    ? `${selectedEmployee.commission_value}${selectedEmployee.commission_type === "percentage" ? "%" : " flat"}`
+                  {selectedEmployee.commission_type === "percentage"
+                    ? `${+(Number(selectedEmployee.commission_value) * 100).toFixed(2)}%`
+                    : selectedEmployee.commission_type === "flat"
+                    ? `${selectedEmployee.commission_value} flat`
                     : "—"}
                 </div>
               </div>
@@ -399,7 +407,7 @@ export default function PeoplePage() {
               <Input label="Base Salary (PKR)" type="number" value={form.base_salary_pkr_paisa} onChange={(e) => setForm({ ...form, base_salary_pkr_paisa: e.target.value })} />
               <Select label="Commission Type" value={form.commission_type} onChange={(e) => setForm({ ...form, commission_type: e.target.value })} options={commissionTypes} />
               {form.commission_type && (
-                <Input label={form.commission_type === "percentage" ? "Commission %" : "Commission Amount"} type="number" step="0.01" value={form.commission_value} onChange={(e) => setForm({ ...form, commission_value: e.target.value })} />
+                <Input label="Commission %" type="number" step="0.01" value={form.commission_value} onChange={(e) => setForm({ ...form, commission_value: e.target.value })} />
               )}
             </div>
 
