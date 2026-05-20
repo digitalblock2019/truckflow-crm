@@ -13,7 +13,7 @@ export interface DashboardStats {
     total_gross_cents: number;
     total_net_cents: number;
     this_month_gross_cents: number;
-  };
+  } | null;
   commissions: {
     total_pending_cents: number;
     total_approved_cents: number;
@@ -38,7 +38,14 @@ export interface DashboardStats {
 }
 
 export class DashboardService {
-  async getStats(): Promise<DashboardStats> {
+  async getStats(opts: { scoped: boolean; employeeId?: string }): Promise<DashboardStats> {
+    const { scoped, employeeId } = opts;
+    // Non-privileged callers (sales agent / dispatcher) see only their own
+    // commission totals and no company revenue; privileged callers get
+    // company-wide figures.
+    const commFilter = scoped ? 'AND employee_id = $1' : '';
+    const params = scoped ? [employeeId ?? null] : [];
+
     const result = await query(`
       SELECT
         -- Loads
@@ -55,9 +62,9 @@ export class DashboardService {
         COALESCE((SELECT sum(gross_pay_cents) FROM loads WHERE created_at >= date_trunc('month', now())), 0)::bigint AS revenue_this_month_gross_cents,
 
         -- Commissions
-        COALESCE((SELECT sum(amount_cents) FROM commissions WHERE status = 'pending'), 0)::bigint AS comm_pending_cents,
-        COALESCE((SELECT sum(amount_cents) FROM commissions WHERE status = 'approved'), 0)::bigint AS comm_approved_cents,
-        COALESCE((SELECT sum(amount_cents) FROM commissions WHERE status = 'paid'), 0)::bigint AS comm_paid_cents,
+        COALESCE((SELECT sum(amount_cents) FROM commissions WHERE status = 'pending' ${commFilter}), 0)::bigint AS comm_pending_cents,
+        COALESCE((SELECT sum(amount_cents) FROM commissions WHERE status = 'approved' ${commFilter}), 0)::bigint AS comm_approved_cents,
+        COALESCE((SELECT sum(amount_cents) FROM commissions WHERE status = 'paid' ${commFilter}), 0)::bigint AS comm_paid_cents,
 
         -- Invoices
         (SELECT count(*) FROM invoices)::int AS invoices_total,
@@ -74,7 +81,7 @@ export class DashboardService {
 
         -- Employees
         (SELECT count(*) FROM employees WHERE status = 'active')::int AS employees_active
-    `);
+    `, params);
 
     const r = result.rows[0];
 
@@ -87,7 +94,7 @@ export class DashboardService {
         delivered: r.loads_delivered,
         payment_received: r.loads_payment_received,
       },
-      revenue: {
+      revenue: scoped ? null : {
         total_gross_cents: Number(r.revenue_total_gross_cents),
         total_net_cents: Number(r.revenue_total_net_cents),
         this_month_gross_cents: Number(r.revenue_this_month_gross_cents),

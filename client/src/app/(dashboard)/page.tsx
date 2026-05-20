@@ -41,10 +41,13 @@ export default function DashboardPage() {
     <>
       <Topbar title="Dashboard" subtitle="Overview of your operations" />
       <div className="flex-1 min-h-0 overflow-y-auto p-6 bg-surface space-y-4">
-        {/* Row 1: Key Stats */}
-        <div className="grid grid-cols-4 gap-4">
+        {/* Row 1: Key Stats. Net Revenue is company-wide — only privileged
+            users get a non-null `revenue` from the API. */}
+        <div className={`grid ${revenue ? "grid-cols-4" : "grid-cols-3"} gap-4`}>
           <StatCard label="Total Loads" value={loads.total} />
-          <StatCard label="Net Revenue" value={fmt(revenue.total_net_cents)} delta={`${fmt(revenue.this_month_gross_cents)} gross this month`} />
+          {revenue && (
+            <StatCard label="Net Revenue" value={fmt(revenue.total_net_cents)} delta={`${fmt(revenue.this_month_gross_cents)} gross this month`} />
+          )}
           <StatCard label="Active Truckers" value={truckers.total} />
           <StatCard label="Outstanding Invoices" value={fmt(invoices.total_outstanding_cents)} />
         </div>

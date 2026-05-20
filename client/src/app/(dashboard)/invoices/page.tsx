@@ -8,8 +8,9 @@ import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import Input from "@/components/ui/Input";
+import Select from "@/components/ui/Select";
 import StatCard from "@/components/ui/StatCard";
-import { useInvoices, useCreateInvoice, useInvoiceAction, useInvoice, useUpdateInvoice } from "@/lib/hooks";
+import { useInvoices, useCreateInvoice, useInvoiceAction, useInvoice, useUpdateInvoice, useInvoiceableLoads } from "@/lib/hooks";
 import { useAuthStore } from "@/lib/auth";
 import { totalPages, fmt } from "@/lib/utils";
 import type { Invoice } from "@/types";
@@ -58,8 +59,11 @@ export default function InvoicesPage() {
   const invoiceAction = useInvoiceAction();
   const { data: invoiceDetail, isLoading: detailLoading } = useInvoice(selectedId);
   const updateInvoice = useUpdateInvoice();
+  const { data: invoiceableData } = useInvoiceableLoads();
+  const invoiceableLoads = invoiceableData ?? [];
 
   const [form, setForm] = useState({
+    load_order_id: "",
     recipient_email: "",
     recipient_name: "",
     due_date: "",
@@ -132,6 +136,7 @@ export default function InvoicesPage() {
 
     createInvoice.mutate(
       {
+        load_order_id: form.load_order_id || undefined,
         recipient_email: form.recipient_email,
         recipient_name: form.recipient_name || undefined,
         due_date: form.due_date,
@@ -141,12 +146,43 @@ export default function InvoicesPage() {
       {
         onSuccess: (created: any) => {
           setShowCreate(false);
-          setForm({ recipient_email: "", recipient_name: "", due_date: "", notes: "", line_items: [{ description: "", quantity: "1", unit_price: "" }] });
+          setForm({ load_order_id: "", recipient_email: "", recipient_name: "", due_date: "", notes: "", line_items: [{ description: "", quantity: "1", unit_price: "" }] });
           // Show "Send now?" prompt
           setSendPrompt({ id: created.id, number: created.invoice_number });
         },
       }
     );
+  };
+
+  // Picking a delivered load auto-fills the recipient (trucker) and a line item
+  // for the company commission. Every field stays editable afterwards.
+  const handlePickLoad = (loadId: string) => {
+    if (!loadId) {
+      setForm((f) => ({ ...f, load_order_id: "" }));
+      return;
+    }
+    const load = invoiceableLoads.find((l) => l.id === loadId);
+    if (!load) return;
+    const origin =
+      [load.origin_city, load.origin_state].filter(Boolean).join(", ") || load.load_origin || "Origin";
+    const dest =
+      [load.dest_city, load.dest_state].filter(Boolean).join(", ") || load.load_destination || "Destination";
+    const parts = [`Dispatch service: ${origin} → ${dest}`];
+    if (load.weight_lbs) parts.push(`${load.weight_lbs.toLocaleString()} lbs`);
+    if (load.loaded_miles) parts.push(`${load.loaded_miles.toLocaleString()} mi`);
+    setForm((f) => ({
+      ...f,
+      load_order_id: loadId,
+      recipient_email: load.trucker_email || f.recipient_email,
+      recipient_name: load.trucker_name || f.recipient_name,
+      line_items: [
+        {
+          description: parts.join(" · "),
+          quantity: "1",
+          unit_price: (load.company_gross_cents / 100).toFixed(2),
+        },
+      ],
+    }));
   };
 
   const handleSaveEdit = () => {
@@ -381,6 +417,25 @@ export default function InvoicesPage() {
 
       {/* Create Invoice Modal */}
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Invoice" width="600px">
+        <div className="mb-4">
+          <Select
+            label="Link to Load (optional)"
+            value={form.load_order_id}
+            onChange={(e) => handlePickLoad(e.target.value)}
+            options={[
+              { value: "", label: "— Standalone invoice (no load) —" },
+              ...invoiceableLoads.map((l) => ({
+                value: l.id,
+                label: `${l.order_number} — ${l.trucker_name ?? "Unknown trucker"} · ${fmtCurrency(l.company_gross_cents)}`,
+              })),
+            ]}
+          />
+          {form.load_order_id && (
+            <p className="text-[10px] text-txt-light mt-1">
+              Recipient and line item auto-filled from the load. Edit any field as needed.
+            </p>
+          )}
+        </div>
         <div className="grid grid-cols-2 gap-4 mb-4">
           <Input
             label="Recipient Email"
