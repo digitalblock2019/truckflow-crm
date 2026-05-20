@@ -253,20 +253,34 @@ export class LoadsService {
     if (newStatus === 'payment_received') {
       updates.push(`payment_received_date = $${idx++}`, `payment_received_by = $${idx++}`);
       params.push(new Date(), userId);
-
-      // Fetch exchange rate and update commissions
-      const rateSetting = await query("SELECT value FROM system_settings WHERE key = 'exchange_rate_manual_fallback'");
-      const rate = parseFloat(rateSetting.rows[0]?.value || '280');
-      await query(
-        `UPDATE commissions SET usd_pkr_rate_at_payment = $1::numeric,
-         amount_pkr_paisa = ROUND(amount_cents * $1::numeric * 100), updated_at = NOW()
-         WHERE load_order_id = $2`,
-        [rate, id]
-      );
     }
 
     params.push(id);
     await query(`UPDATE load_orders SET ${updates.join(', ')} WHERE id = $${idx}`, params);
+
+    // When a load is paid, stamp the USD/PKR rate onto its commission rows.
+    // This is reporting-only — a failure here must NOT block the status change
+    // (the load IS paid), so it's isolated and logged rather than thrown.
+    // (Previously this ran before the load UPDATE, so any error here 500'd the
+    // whole advance-to-paid and the status never moved.)
+    if (newStatus === 'payment_received') {
+      try {
+        const rateSetting = await query("SELECT value FROM system_settings WHERE key = 'exchange_rate_manual_fallback'");
+        const rate = parseFloat(rateSetting.rows[0]?.value || '280');
+        // paisa = USD-cents × rate  (cents→USD ÷100, USD→PKR ×rate, PKR→paisa ×100 ⇒ ×rate)
+        await query(
+          `UPDATE commissions SET usd_pkr_rate_at_payment = $1::numeric,
+           amount_pkr_paisa = ROUND(amount_cents * $1::numeric), updated_at = NOW()
+           WHERE load_order_id = $2`,
+          [rate, id]
+        );
+      } catch (err: any) {
+        console.error(
+          '[LoadsService.updateStatus] commission PKR-rate stamp failed (status change still applied):',
+          err?.message, err?.code, err?.detail,
+        );
+      }
+    }
 
     await query(
       `INSERT INTO audit_log (user_id, user_role, action, entity_type, entity_id, description)
