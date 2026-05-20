@@ -67,6 +67,7 @@ const emptyForm = {
   liftgate_required: false,
   // Pay (dollar amounts as typed; pct as a whole number like "10")
   linehaul: "",
+  rate_per_mile: "",
   fuel_surcharge: "",
   accessorials: "",
   dispatcher_commission_pct: "",
@@ -132,21 +133,61 @@ export default function CreateLoadModal({ open, onClose }: Props) {
   const set = <K extends keyof LoadForm>(key: K, value: LoadForm[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
 
+  // ---- Two-way pay binding: linehaul = rate_per_mile × loaded_miles ----
+  // Editing any of the three keeps the trio consistent. Linehaul is the anchor
+  // (it's what gets stored); rate_per_mile is a convenience for dispatchers who
+  // negotiate by per-mile rate.
+  const milesNum = (v: string) => parseInt(v, 10) || 0;
+  const setLinehaul = (v: string) =>
+    setForm((prev) => {
+      const m = milesNum(prev.loaded_miles);
+      return {
+        ...prev,
+        linehaul: v,
+        rate_per_mile: m > 0 ? ((parseFloat(v) || 0) / m).toFixed(2) : prev.rate_per_mile,
+      };
+    });
+  const setRatePerMile = (v: string) =>
+    setForm((prev) => {
+      const m = milesNum(prev.loaded_miles);
+      return {
+        ...prev,
+        rate_per_mile: v,
+        linehaul: m > 0 ? ((parseFloat(v) || 0) * m).toFixed(2) : prev.linehaul,
+      };
+    });
+  const setLoadedMiles = (v: string) =>
+    setForm((prev) => {
+      const m = milesNum(v);
+      return {
+        ...prev,
+        loaded_miles: v,
+        rate_per_mile:
+          m > 0 && prev.linehaul ? ((parseFloat(prev.linehaul) || 0) / m).toFixed(2) : prev.rate_per_mile,
+      };
+    });
+
+  // Selected trucker drives the company-commission preview.
+  const selectedTrucker = useMemo(
+    () => (truckersData?.data ?? []).find((t) => t.id === form.trucker_id),
+    [truckersData, form.trucker_id],
+  );
+  const companyPct = selectedTrucker
+    ? parseFloat(String(selectedTrucker.company_commission_pct ?? "0")) || 0
+    : 0;
+
   // ---- Live pay summary ----
   const pay = useMemo(() => {
     const dollars = (s: string) => parseFloat(s) || 0;
-    const linehaul = dollars(form.linehaul);
-    const fsc = dollars(form.fuel_surcharge);
-    const acc = dollars(form.accessorials);
-    const gross = linehaul + fsc + acc;
+    const gross = dollars(form.linehaul) + dollars(form.fuel_surcharge) + dollars(form.accessorials);
     const miles = parseInt(form.loaded_miles, 10);
     const hasMiles = Number.isFinite(miles) && miles > 0;
     return {
       gross,
-      ratePerMile: hasMiles ? linehaul / miles : null,
       allInPerMile: hasMiles ? gross / miles : null,
+      companyCommission: gross * companyPct,
     };
-  }, [form.linehaul, form.fuel_surcharge, form.accessorials, form.loaded_miles]);
+  }, [form.linehaul, form.fuel_surcharge, form.accessorials, form.loaded_miles, companyPct]);
 
   // ---- Validation ----
   const missing: string[] = [];
@@ -254,11 +295,13 @@ export default function CreateLoadModal({ open, onClose }: Props) {
             />
             <Input
               label="Broker / Shipper Company"
+              tooltip="The broker or shipping company that posted this load."
               value={form.broker_name}
               onChange={(e) => set("broker_name", e.target.value)}
             />
             <Input
               label="Broker MC Number"
+              tooltip="The broker's MC (motor carrier) number."
               value={form.broker_mc_number}
               onChange={(e) => set("broker_mc_number", e.target.value)}
             />
@@ -278,8 +321,8 @@ export default function CreateLoadModal({ open, onClose }: Props) {
             <Input label="ZIP" value={form.dest_zip} onChange={(e) => set("dest_zip", e.target.value)} />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Input label="Loaded Miles" type="number" min="0" value={form.loaded_miles} onChange={(e) => set("loaded_miles", e.target.value)} />
-            <Input label="Deadhead Miles (optional)" type="number" min="0" value={form.deadhead_miles} onChange={(e) => set("deadhead_miles", e.target.value)} />
+            <Input label="Loaded Miles" tooltip="Miles driven with the load on board — pickup to delivery." type="number" min="0" value={form.loaded_miles} onChange={(e) => setLoadedMiles(e.target.value)} />
+            <Input label="Deadhead Miles (optional)" tooltip="Empty miles driven to reach the pickup. No cargo, no pay." type="number" min="0" value={form.deadhead_miles} onChange={(e) => set("deadhead_miles", e.target.value)} />
           </div>
         </FormSection>
 
@@ -294,13 +337,13 @@ export default function CreateLoadModal({ open, onClose }: Props) {
         {/* 4. Freight */}
         <FormSection title="Freight">
           <div className="grid grid-cols-3 gap-3 mb-3">
-            <Select label="Equipment Type" value={form.equipment_type} onChange={(e) => set("equipment_type", e.target.value)} options={EQUIPMENT_OPTIONS} />
-            <Select label="Trailer Length" value={form.trailer_length_ft} onChange={(e) => set("trailer_length_ft", e.target.value)} options={TRAILER_LENGTH_OPTIONS} />
-            <Select label="Load Type" value={form.load_type} onChange={(e) => set("load_type", e.target.value)} options={LOAD_TYPE_OPTIONS} />
+            <Select label="Equipment Type" tooltip="The trailer type this load requires." value={form.equipment_type} onChange={(e) => set("equipment_type", e.target.value)} options={EQUIPMENT_OPTIONS} />
+            <Select label="Trailer Length" tooltip="Trailer length the load requires." value={form.trailer_length_ft} onChange={(e) => set("trailer_length_ft", e.target.value)} options={TRAILER_LENGTH_OPTIONS} />
+            <Select label="Load Type" tooltip="Full (FTL) uses the whole trailer for one load. Partial shares trailer space with other freight." value={form.load_type} onChange={(e) => set("load_type", e.target.value)} options={LOAD_TYPE_OPTIONS} />
           </div>
           <div className="grid grid-cols-2 gap-3 mb-3">
-            <Input label="Commodity" value={form.commodity} onChange={(e) => set("commodity", e.target.value)} />
-            <Input label="Weight (lbs)" type="number" min="0" value={form.weight_lbs} onChange={(e) => set("weight_lbs", e.target.value)} />
+            <Input label="Commodity" tooltip="What is being hauled — e.g. steel coils, frozen produce, auto parts, general freight." value={form.commodity} onChange={(e) => set("commodity", e.target.value)} />
+            <Input label="Weight (lbs)" tooltip="Total cargo weight in pounds." type="number" min="0" value={form.weight_lbs} onChange={(e) => set("weight_lbs", e.target.value)} />
           </div>
           <div className="flex flex-wrap gap-5 pt-1">
             <FlagCheckbox label="Hazmat" checked={form.is_hazmat} onChange={(v) => set("is_hazmat", v)} />
@@ -312,23 +355,50 @@ export default function CreateLoadModal({ open, onClose }: Props) {
 
         {/* 5. Pay */}
         <FormSection title="Pay">
-          <div className="grid grid-cols-4 gap-3">
-            <Input label="Linehaul ($)" type="number" min="0" step="0.01" value={form.linehaul} onChange={(e) => set("linehaul", e.target.value)} />
-            <Input label="Fuel Surcharge ($)" type="number" min="0" step="0.01" value={form.fuel_surcharge} onChange={(e) => set("fuel_surcharge", e.target.value)} />
-            <Input label="Accessorials ($)" type="number" min="0" step="0.01" value={form.accessorials} onChange={(e) => set("accessorials", e.target.value)} />
-            <Input label="Dispatcher Comm. (%)" type="number" min="0" step="0.1" value={form.dispatcher_commission_pct} onChange={(e) => set("dispatcher_commission_pct", e.target.value)} />
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <Input
+              label="Linehaul ($)"
+              tooltip="Base freight charge — the core negotiated rate, before fuel and extras."
+              type="number" min="0" step="0.01"
+              value={form.linehaul}
+              onChange={(e) => setLinehaul(e.target.value)}
+            />
+            <Input
+              label="Rate / Mile ($)"
+              tooltip="Linehaul divided by loaded miles. Enter this OR linehaul — the other fills in automatically (needs loaded miles)."
+              type="number" min="0" step="0.01"
+              value={form.rate_per_mile}
+              onChange={(e) => setRatePerMile(e.target.value)}
+            />
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <Input
+              label="Fuel Surcharge ($)"
+              tooltip="Separate line item to offset fuel cost."
+              type="number" min="0" step="0.01"
+              value={form.fuel_surcharge}
+              onChange={(e) => set("fuel_surcharge", e.target.value)}
+            />
+            <Input
+              label="Accessorials ($)"
+              tooltip="Extra fees — detention, lumper, layover, tarping, etc."
+              type="number" min="0" step="0.01"
+              value={form.accessorials}
+              onChange={(e) => set("accessorials", e.target.value)}
+            />
+            <Input
+              label="Dispatcher Comm. (%)"
+              tooltip="Dispatcher's commission percentage for this load. Leave blank to use the dispatcher's default rate."
+              type="number" min="0" step="0.1"
+              value={form.dispatcher_commission_pct}
+              onChange={(e) => set("dispatcher_commission_pct", e.target.value)}
+            />
           </div>
           {/* Live summary */}
           <div className="mt-3 bg-surface-mid rounded-lg px-4 py-3 grid grid-cols-3 gap-3">
             <div>
-              <div className="text-[10px] font-mono text-txt-light uppercase">Gross Total</div>
+              <div className="text-[10px] font-mono text-txt-light uppercase">Load Total</div>
               <div className="mt-0.5 text-sm font-mono font-semibold text-txt">{money(Math.round(pay.gross * 100))}</div>
-            </div>
-            <div>
-              <div className="text-[10px] font-mono text-txt-light uppercase">Rate / Mile</div>
-              <div className="mt-0.5 text-sm font-mono font-semibold text-txt">
-                {pay.ratePerMile != null ? `$${pay.ratePerMile.toFixed(2)}` : "–"}
-              </div>
             </div>
             <div>
               <div className="text-[10px] font-mono text-txt-light uppercase">All-in / Mile</div>
@@ -336,14 +406,27 @@ export default function CreateLoadModal({ open, onClose }: Props) {
                 {pay.allInPerMile != null ? `$${pay.allInPerMile.toFixed(2)}` : "–"}
               </div>
             </div>
+            <div>
+              <div className="text-[10px] font-mono text-txt-light uppercase">
+                Company Commission{selectedTrucker ? ` (${+(companyPct * 100).toFixed(2)}%)` : ""}
+              </div>
+              <div className="mt-0.5 text-sm font-mono font-semibold text-txt">
+                {selectedTrucker ? money(Math.round(pay.companyCommission * 100)) : "–"}
+              </div>
+            </div>
           </div>
+          {!selectedTrucker && (
+            <p className="mt-1.5 text-[10px] text-txt-light">
+              Select a trucker to see the company commission (uses that trucker&apos;s negotiated rate).
+            </p>
+          )}
         </FormSection>
 
         {/* 6. References & Docs */}
         <FormSection title="References & Docs">
           <div className="grid grid-cols-2 gap-3 mb-3">
-            <Input label="Broker Load #" value={form.broker_load_number} onChange={(e) => set("broker_load_number", e.target.value)} />
-            <Input label="BOL # (optional)" value={form.bol_number} onChange={(e) => set("bol_number", e.target.value)} />
+            <Input label="Broker Load #" tooltip="The broker's reference number for this load." value={form.broker_load_number} onChange={(e) => set("broker_load_number", e.target.value)} />
+            <Input label="BOL # (optional)" tooltip="Bill of Lading number — the shipping document signed at pickup/delivery." value={form.bol_number} onChange={(e) => set("bol_number", e.target.value)} />
           </div>
           <div className="mb-3">
             <div className="text-[11px] font-semibold text-txt-mid font-mono uppercase tracking-wide mb-1">

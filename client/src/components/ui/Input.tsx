@@ -1,18 +1,21 @@
 "use client";
 
 import { InputHTMLAttributes, forwardRef } from "react";
+import InfoTip from "./InfoTip";
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   locked?: boolean;
+  tooltip?: string;
 }
 
 const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ label, locked, className = "", ...props }, ref) => (
+  ({ label, locked, tooltip, className = "", ...props }, ref) => (
     <div className="flex flex-col gap-[5px]">
       {label && (
         <label className="text-[11px] font-semibold text-txt-mid font-mono uppercase tracking-wide">
           {label}
+          {tooltip && <InfoTip text={tooltip} />}
         </label>
       )}
       <input
