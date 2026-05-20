@@ -99,7 +99,7 @@ export default function MessageBubble({ message: m, isOwn, userId, conversationI
 
         {/* Content */}
         <div
-          className={`px-3.5 py-2.5 text-[13px] leading-relaxed ${
+          className={`px-3.5 py-2.5 text-[13px] leading-relaxed whitespace-pre-wrap break-words ${
             isOwn
               ? "bg-blue text-white rounded-[16px_4px_16px_16px]"
               : "bg-white border border-border text-txt rounded-[4px_16px_16px_16px]"
