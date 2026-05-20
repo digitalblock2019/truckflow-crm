@@ -43,6 +43,27 @@ export class LoadsService {
     return { data: data.rows, total: parseInt(countResult.rows[0].count), page: filters.page || 1, limit };
   }
 
+  // Loads that are delivered (pending payment) and not yet invoiced — feeds
+  // the "Link to Load" picker on the Create Invoice form.
+  async listInvoiceable() {
+    const result = await query(
+      `SELECT lo.id, lo.order_number, lo.company_gross_cents,
+              lo.origin_city, lo.origin_state, lo.dest_city, lo.dest_state,
+              lo.load_origin, lo.load_destination,
+              lo.weight_lbs, lo.loaded_miles,
+              t.legal_name AS trucker_name, t.email AS trucker_email
+       FROM load_orders lo
+       LEFT JOIN truckers t ON t.id = lo.trucker_id
+       WHERE lo.load_status = 'delivered'
+         AND NOT EXISTS (
+           SELECT 1 FROM invoices i
+           WHERE i.load_order_id = lo.id AND i.status <> 'cancelled'
+         )
+       ORDER BY lo.created_at DESC`
+    );
+    return result.rows;
+  }
+
   async create(data: any, userId: string) {
     // Get trucker commission pct
     const trucker = await query('SELECT company_commission_pct, assigned_agent_id FROM truckers WHERE id = $1', [data.trucker_id]);
@@ -354,5 +375,49 @@ export class LoadsService {
       [reason, id]
     );
     return { message: 'Load excluded from commission' };
+  }
+
+  async delete(id: string, userId: string) {
+    const load = await query(
+      'SELECT order_number, load_status FROM load_orders WHERE id = $1',
+      [id]
+    );
+    if (!load.rows.length) throw new AppError('Load not found', 404, 'NOT_FOUND');
+
+    // Financial records must not be silently destroyed. invoices and emails
+    // reference load_orders WITHOUT ON DELETE CASCADE; load_documents and
+    // commissions DO cascade. Block on records that carry real money.
+    const invoice = await query('SELECT id FROM invoices WHERE load_order_id = $1 LIMIT 1', [id]);
+    if (invoice.rows.length) {
+      throw new AppError(
+        'This load has an invoice attached. Delete or detach the invoice before deleting the load.',
+        409,
+        'LOAD_HAS_INVOICE'
+      );
+    }
+    const paidComm = await query(
+      "SELECT id FROM commissions WHERE load_order_id = $1 AND status IN ('approved', 'paid') LIMIT 1",
+      [id]
+    );
+    if (paidComm.rows.length) {
+      throw new AppError(
+        'This load has approved or paid commissions. Resolve those before the load can be deleted.',
+        409,
+        'LOAD_HAS_COMMISSION'
+      );
+    }
+
+    // Detach emails (kept as a comms log) so their FK doesn't block the delete.
+    await query('UPDATE emails SET load_order_id = NULL WHERE load_order_id = $1', [id]);
+    // load_documents + any still-pending commissions cascade via ON DELETE CASCADE.
+    await query('DELETE FROM load_orders WHERE id = $1', [id]);
+
+    await query(
+      `INSERT INTO audit_log (user_id, user_role, action, entity_type, entity_id, description)
+       VALUES ($1, (SELECT role FROM users WHERE id=$1), 'delete', 'load_order', $2, $3)`,
+      [userId, id, `Deleted load ${load.rows[0].order_number || id} (was ${load.rows[0].load_status})`]
+    );
+
+    return { message: 'Load deleted' };
   }
 }

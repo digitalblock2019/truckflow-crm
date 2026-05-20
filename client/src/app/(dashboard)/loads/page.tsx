@@ -9,7 +9,7 @@ import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import LoadPipeline from "@/components/features/LoadPipeline";
 import CreateLoadModal from "@/components/features/CreateLoadModal";
-import { useLoads, useUpdateLoadStatus, useLoadDocuments, useUploadLoadDocument } from "@/lib/hooks";
+import { useLoads, useUpdateLoadStatus, useDeleteLoad, useLoadDocuments, useUploadLoadDocument } from "@/lib/hooks";
 import { useAuthStore } from "@/lib/auth";
 import { totalPages, fmt } from "@/lib/utils";
 import type { Load, LoadDocument } from "@/types";
@@ -60,10 +60,12 @@ export default function LoadsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [selectedLoad, setSelectedLoad] = useState<Load | null>(null);
   const isSup = useAuthStore((s) => s.isSupervisorOrAdmin());
+  const isAdmin = useAuthStore((s) => s.isAdmin());
   const canCreate = useAuthStore((s) => s.canCreateLoad());
 
   const { data, isLoading } = useLoads({ status: tab, page, limit: 20 });
   const updateStatus = useUpdateLoadStatus();
+  const deleteLoad = useDeleteLoad();
   const { data: loadDocs } = useLoadDocuments(selectedLoad?.id ?? "");
   const uploadLoadDoc = useUploadLoadDocument();
 
@@ -199,6 +201,30 @@ export default function LoadsPage() {
                 </div>
               ) : null;
             })()}
+
+            {isAdmin && (
+              <div className="flex justify-end pt-3 mt-3 border-t border-border">
+                <Button
+                  variant="danger"
+                  onClick={() => {
+                    if (
+                      confirm(
+                        `Delete load ${selectedLoad.order_number}? This permanently removes the load and its documents and cannot be undone.`
+                      )
+                    ) {
+                      deleteLoad.mutate(selectedLoad.id, {
+                        onSuccess: () => setSelectedLoad(null),
+                        onError: (err) =>
+                          alert(err instanceof Error ? err.message : "Could not delete load"),
+                      });
+                    }
+                  }}
+                  disabled={deleteLoad.isPending}
+                >
+                  Delete Load
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </Modal>

@@ -344,6 +344,41 @@ export function useUpdateLoadStatus() {
   });
 }
 
+export function useDeleteLoad() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiFetch(`/api/loads/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["loads"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
+export interface InvoiceableLoad {
+  id: string;
+  order_number: string;
+  company_gross_cents: number;
+  origin_city: string | null;
+  origin_state: string | null;
+  dest_city: string | null;
+  dest_state: string | null;
+  load_origin: string | null;
+  load_destination: string | null;
+  weight_lbs: number | null;
+  loaded_miles: number | null;
+  trucker_name: string | null;
+  trucker_email: string | null;
+}
+
+// Delivered loads pending payment, not yet invoiced — for the invoice load picker.
+export function useInvoiceableLoads() {
+  return useQuery({
+    queryKey: ["invoiceable-loads"],
+    queryFn: () => apiFetch<InvoiceableLoad[]>("/api/loads/invoiceable"),
+  });
+}
+
 // Load Documents
 export function useLoadDocuments(loadId: string) {
   return useQuery({
@@ -878,7 +913,7 @@ export function useDashboard() {
     queryKey: ["dashboard"],
     queryFn: () => apiFetch<{
       loads: { total: number; pending: number; dispatched: number; in_transit: number; delivered: number; payment_received: number };
-      revenue: { total_gross_cents: number; total_net_cents: number; this_month_gross_cents: number };
+      revenue: { total_gross_cents: number; total_net_cents: number; this_month_gross_cents: number } | null;
       commissions: { total_pending_cents: number; total_approved_cents: number; total_paid_cents: number };
       invoices: { total: number; draft: number; sent: number; overdue: number; paid: number; total_outstanding_cents: number };
       truckers: { total: number; onboarding: number; fully_onboarded: number };

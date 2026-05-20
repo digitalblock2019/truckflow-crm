@@ -14,6 +14,11 @@ export class LoadsController {
     res.json(result);
   }
 
+  async invoiceable(_req: Request, res: Response) {
+    const result = await svc.listInvoiceable();
+    res.json(result);
+  }
+
   async create(req: Request, res: Response) {
     const { trucker_id, dispatcher_id, gross_load_amount_cents, linehaul_amount_cents } = req.body;
     // The expanded Create Load form sends linehaul_amount_cents and the service
@@ -41,6 +46,11 @@ export class LoadsController {
     const { reason } = req.body;
     if (!reason) throw new AppError('reason required', 400, 'VALIDATION_ERROR');
     const result = await svc.excludeFromCommission(req.params.id as string, reason, req.user!.id);
+    res.json(result);
+  }
+
+  async delete(req: Request, res: Response) {
+    const result = await svc.delete(req.params.id as string, req.user!.id);
     res.json(result);
   }
 }
