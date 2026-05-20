@@ -15,6 +15,7 @@
     "db:migrate:trucker-onboarding": "ts-node scripts/addTruckerOnboardingFields.ts",
     "db:migrate:trucker-routes": "ts-node scripts/addTruckerRoutesAndAvailability.ts",
     "db:migrate:dispatcher-split": "ts-node scripts/splitDispatcherAssignment.ts",
+    "db:migrate:load-fields": "ts-node scripts/expandLoadFields.ts",
     "test": "jest",
     "test:unit": "jest --testPathPatterns=unit",
     "test:integration": "jest --testPathPatterns=integration"
