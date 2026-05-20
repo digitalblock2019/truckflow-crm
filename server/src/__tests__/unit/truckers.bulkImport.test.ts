@@ -65,8 +65,10 @@ describe('TruckersService.bulkImport — chunked-upload support', () => {
       .mockResolvedValueOnce(ok([{ id: 'existing-trucker' }]))                             // dup check — found, skipped
       .mockResolvedValueOnce(ok([{ rows_added: 100, rows_skipped: 1, rows_errored: 0 }])); // UPDATE cumulative
 
+    // Note: MC# is now normalized to digits-only, so the fake MC must contain
+    // digits — "MC-999" stores as "999" and still exercises the dup-skip path.
     const result = await svc.bulkImport(
-      [ROW('MC-DUP')],
+      [ROW('MC-999')],
       'user-1',
       'file.xlsx',
       'batch-existing',
