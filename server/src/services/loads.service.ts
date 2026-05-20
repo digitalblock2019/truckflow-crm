@@ -48,7 +48,15 @@ export class LoadsService {
     const trucker = await query('SELECT company_commission_pct, assigned_agent_id FROM truckers WHERE id = $1', [data.trucker_id]);
     if (!trucker.rows.length) throw new AppError('Trucker not found', 404, 'NOT_FOUND');
 
-    const companyPct = trucker.rows[0].company_commission_pct;
+    // The Create Load form can pass a per-load company_commission_pct override
+    // (a fraction, e.g. 0.08). Blank falls back to the trucker's negotiated rate.
+    const formCompanyPct =
+      data.company_commission_pct != null && data.company_commission_pct !== ''
+        ? parseFloat(String(data.company_commission_pct))
+        : NaN;
+    const companyPct = Number.isFinite(formCompanyPct)
+      ? formCompanyPct
+      : trucker.rows[0].company_commission_pct;
 
     // Gross is the DERIVED total: linehaul + fuel surcharge + accessorials.
     // gross_load_amount_cents stays the stored gross — company_gross_cents (a
