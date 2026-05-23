@@ -276,6 +276,17 @@ export default function PublicInvoiceView() {
                   Pay Now with Stripe
                 </a>
               )}
+              {b?.wise_email && (
+                <a
+                  href="https://wise.com/send"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex flex-col items-start justify-center px-6 py-3 bg-[#9FE870] text-[#163300] rounded-lg hover:bg-[#8FD860] transition-colors"
+                >
+                  <span className="text-sm font-semibold">Pay with Wise</span>
+                  <span className="text-[11px] opacity-80 font-mono">{b.wise_email}</span>
+                </a>
+              )}
             </div>
           </div>
         )}
