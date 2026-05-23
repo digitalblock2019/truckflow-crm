@@ -138,6 +138,28 @@ export default function TruckersPage() {
     ...(dispatchersData?.data ?? []).map((e) => ({ value: e.id, label: `${e.full_name} (${employeeTypeLabel(e.employee_type)})` })),
     ...(dualData?.data ?? []).map((e) => ({ value: e.id, label: `${e.full_name} (${employeeTypeLabel(e.employee_type)})` })),
   ];
+  // A trucker can be assigned to an admin/supervisor who isn't in the
+  // sales-agent / dispatcher employee filters above. Without this, the
+  // select can't match the stored ID and silently shows "Unassigned"
+  // even though the value is set, which makes the list and modal disagree.
+  if (
+    selectedTrucker?.assigned_sales_agent_id &&
+    !salesAgentOptions.some((o) => o.value === selectedTrucker.assigned_sales_agent_id)
+  ) {
+    salesAgentOptions.push({
+      value: selectedTrucker.assigned_sales_agent_id,
+      label: selectedTrucker.sales_agent_name || "Currently assigned",
+    });
+  }
+  if (
+    selectedTrucker?.assigned_dispatcher_id &&
+    !dispatcherOptions.some((o) => o.value === selectedTrucker.assigned_dispatcher_id)
+  ) {
+    dispatcherOptions.push({
+      value: selectedTrucker.assigned_dispatcher_id,
+      label: selectedTrucker.dispatcher_name || "Currently assigned",
+    });
+  }
 
   const createTrucker = useCreateTrucker();
   const updateTrucker = useUpdateTrucker();
