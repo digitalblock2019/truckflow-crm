@@ -127,17 +127,19 @@ export default function TruckersPage() {
   // Fetch sales agents, dispatchers, and dual-role users. Each role's dropdown
   // gets the appropriate union (sales_agent ∪ sales_and_dispatcher for the
   // sales slot, dispatcher ∪ sales_and_dispatcher for the dispatcher slot).
+  // The /api/employees filter already unions sales_and_dispatcher into both
+  // 'sales_agent' and 'dispatcher' queries, so a separate dual fetch would
+  // double-list those employees in the dropdowns.
   const { data: agentsData } = useEmployees({ type: "sales_agent", status: "active", limit: 100 });
   const { data: dispatchersData } = useEmployees({ type: "dispatcher", status: "active", limit: 100 });
-  const { data: dualData } = useEmployees({ type: "sales_and_dispatcher", status: "active", limit: 100 });
-  const salesAgentOptions = [
-    ...(agentsData?.data ?? []).map((e) => ({ value: e.id, label: `${e.full_name} (${employeeTypeLabel(e.employee_type)})` })),
-    ...(dualData?.data ?? []).map((e) => ({ value: e.id, label: `${e.full_name} (${employeeTypeLabel(e.employee_type)})` })),
-  ];
-  const dispatcherOptions = [
-    ...(dispatchersData?.data ?? []).map((e) => ({ value: e.id, label: `${e.full_name} (${employeeTypeLabel(e.employee_type)})` })),
-    ...(dualData?.data ?? []).map((e) => ({ value: e.id, label: `${e.full_name} (${employeeTypeLabel(e.employee_type)})` })),
-  ];
+  const salesAgentOptions = (agentsData?.data ?? []).map((e) => ({
+    value: e.id,
+    label: `${e.full_name} (${employeeTypeLabel(e.employee_type)})`,
+  }));
+  const dispatcherOptions = (dispatchersData?.data ?? []).map((e) => ({
+    value: e.id,
+    label: `${e.full_name} (${employeeTypeLabel(e.employee_type)})`,
+  }));
   // A trucker can be assigned to an admin/supervisor who isn't in the
   // sales-agent / dispatcher employee filters above. Without this, the
   // select can't match the stored ID and silently shows "Unassigned"
