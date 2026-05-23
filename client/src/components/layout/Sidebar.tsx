@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Receipt, ArrowUpRight } from "lucide-react";
 import { useAuthStore } from "@/lib/auth";
 import { useMe } from "@/lib/hooks";
 import { useChatStore } from "@/lib/chatStore";
@@ -122,6 +123,23 @@ export default function Sidebar() {
           );
         })}
       </nav>
+
+      {/* Cross-app CTA — sits between nav and user footer */}
+      <a
+        href="https://www.expensedeck.com/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="group mx-3 mb-2 flex items-center gap-2.5 rounded-md border border-white/10 bg-white/[0.03] px-2.5 py-2 transition-all duration-100 hover:border-accent/60 hover:bg-accent/10"
+      >
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white/[0.06] text-white/70 transition-colors group-hover:bg-accent/20 group-hover:text-accent">
+          <Receipt className="h-4 w-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-[12px] font-medium leading-tight text-white/80">ExpenseDeck</div>
+          <div className="mt-0.5 text-[10px] font-mono leading-tight text-white/40">Expense tracking</div>
+        </div>
+        <ArrowUpRight className="h-4 w-4 shrink-0 text-white/30 transition-colors group-hover:text-accent" />
+      </a>
 
       {/* User footer — links to profile */}
       {user && (
