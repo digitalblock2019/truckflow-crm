@@ -8,6 +8,10 @@ import { errorHandler } from './middleware/errorHandler';
 
 const app = express();
 
+// Render terminates TLS at its load balancer and forwards via X-Forwarded-For.
+// Trusting one proxy hop makes req.ip the real client IP (used by the audit log).
+app.set('trust proxy', 1);
+
 app.use(helmet());
 app.use(cors({
   origin: process.env.APP_URL || 'http://localhost:3001',
