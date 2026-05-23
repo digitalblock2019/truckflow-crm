@@ -15,7 +15,13 @@ const actionColors: Record<string, "green" | "blue" | "orange" | "red" | "gray">
   update: "blue",
   delete: "red",
   login: "blue",
-  view: "gray",
+  logout: "gray",
+  upload: "green",
+  status_change: "blue",
+  termination: "red",
+  bank_detail_change: "orange",
+  bank_detail_reveal: "orange",
+  email_forward: "blue",
 };
 
 export default function AuditLogPage() {
@@ -80,11 +86,17 @@ export default function AuditLogPage() {
                 onChange={(e) => setFilters({ ...filters, action: e.target.value })}
                 options={[
                   { value: "", label: "All Actions" },
+                  { value: "login", label: "Login" },
+                  { value: "logout", label: "Logout" },
                   { value: "create", label: "Create" },
                   { value: "update", label: "Update" },
                   { value: "delete", label: "Delete" },
-                  { value: "login", label: "Login" },
-                  { value: "view", label: "View" },
+                  { value: "upload", label: "Upload" },
+                  { value: "status_change", label: "Status Change" },
+                  { value: "termination", label: "Termination" },
+                  { value: "email_forward", label: "Email Forward" },
+                  { value: "bank_detail_change", label: "Bank Detail Change" },
+                  { value: "bank_detail_reveal", label: "Bank Detail Reveal" },
                 ]}
               />
               <Select
