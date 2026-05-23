@@ -268,7 +268,8 @@ export class InvoicesService {
           stripeUrl || undefined,
           logoUrl,
           companyName,
-          pdfBuffer
+          pdfBuffer,
+          branding?.wise_email || undefined,
         );
       } catch (err) {
         console.error('[SendInvoice] Email send failed:', err);

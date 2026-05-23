@@ -105,7 +105,8 @@ export class EmailService {
     _payLink?: string,
     logoUrl?: string,
     companyName?: string,
-    pdfBuffer?: Buffer
+    pdfBuffer?: Buffer,
+    wiseEmail?: string,
   ) {
     const formattedTotal = new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -167,6 +168,12 @@ export class EmailService {
             View Invoice
           </a>
         </div>
+        ${wiseEmail ? `
+        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 16px; margin: 16px 0;">
+          <div style="color: #15803d; font-size: 11px; text-transform: uppercase; font-family: monospace; letter-spacing: 1px; margin-bottom: 6px;">Pay with Wise</div>
+          <div style="color: #166534; font-size: 14px; font-weight: 600; font-family: monospace;">${wiseEmail}</div>
+          <div style="color: #16a34a; font-size: 11px; margin-top: 4px;">Send the total to this Wise email address.</div>
+        </div>` : ''}
         <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
         <p style="color: #94a3b8; font-size: 11px; text-align: center;">
           TruckFlow CRM &mdash; Operations Management Platform
