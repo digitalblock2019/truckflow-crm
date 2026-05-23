@@ -161,6 +161,10 @@ export default function LoadsPage() {
                   <div className="flex justify-between pl-3 text-txt-light">
                     <span>
                       − Sales agent ({pctLabel(selectedLoad.agent_commission_pct)}) · {selectedLoad.agent_name}
+                      {selectedLoad.agent_eligibility === "eligible" &&
+                        selectedLoad.agent_threshold_load_num &&
+                        selectedLoad.agent_threshold_loads &&
+                        ` — load ${selectedLoad.agent_threshold_load_num} of ${selectedLoad.agent_threshold_loads}`}
                       {selectedLoad.agent_eligibility &&
                         selectedLoad.agent_eligibility !== "eligible" &&
                         selectedLoad.agent_eligibility !== "not_applicable" &&
