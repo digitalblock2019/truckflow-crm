@@ -145,6 +145,8 @@ export interface Load {
   agent_commission_pct: string | number | null;
   dispatcher_commission_pct: string | number | null;
   agent_eligibility: string | null;
+  agent_threshold_load_num: number | null;
+  agent_threshold_loads: number | null;
   // References
   broker_load_number: string | null;
   bol_number: string | null;

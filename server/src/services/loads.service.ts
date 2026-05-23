@@ -32,11 +32,14 @@ export class LoadsService {
     const countResult = await query(`SELECT count(*) FROM load_orders lo ${where}`, params);
     const data = await query(
       `SELECT lo.*, t.legal_name as trucker_name, t.mc_number,
-              sa.full_name as agent_name, d.full_name as dispatcher_name
+              sa.full_name as agent_name, d.full_name as dispatcher_name,
+              act.threshold_loads as agent_threshold_loads
        FROM load_orders lo
        LEFT JOIN truckers t ON t.id = lo.trucker_id
        LEFT JOIN employees sa ON sa.id = lo.sales_agent_id
        LEFT JOIN employees d ON d.id = lo.dispatcher_id
+       LEFT JOIN agent_commission_thresholds act
+         ON act.trucker_id = lo.trucker_id AND act.agent_employee_id = lo.sales_agent_id
        ${where} ORDER BY lo.created_at DESC LIMIT $${idx++} OFFSET $${idx++}`,
       [...params, limit, offset]
     );
