@@ -85,6 +85,13 @@ router.post('/webhook/stripe', express.raw({ type: 'application/json' }), async 
              VALUES ($1, 'paid_stripe', 'Payment received via Stripe')`,
             [invoice.id]
           );
+          try {
+            await query(
+              `INSERT INTO audit_log (user_id, action, entity_type, entity_id, description)
+               VALUES (NULL, 'status_change', 'invoice', $1, $2)`,
+              [invoice.id, `Invoice ${invoice.invoice_number} paid via Stripe`],
+            );
+          } catch (err: any) { console.error('[audit] stripe paid:', err?.message); }
 
           // Send paid notification emails
           try {

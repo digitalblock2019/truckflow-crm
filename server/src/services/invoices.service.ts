@@ -161,6 +161,14 @@ export class InvoicesService {
       `INSERT INTO invoice_activity (invoice_id, event_type, description, actor_id)
        VALUES ($1, 'created', 'Invoice created', $2)`, [invoiceId, userId]
     );
+    // Global audit log (best-effort)
+    try {
+      await query(
+        `INSERT INTO audit_log (user_id, user_role, action, entity_type, entity_id, description)
+         VALUES ($1, (SELECT role FROM users WHERE id=$1), 'create', 'invoice', $2, $3)`,
+        [userId, invoiceId, `Invoice ${result.rows[0].invoice_number} created`],
+      );
+    } catch (err: any) { console.error('[audit] invoice create:', err?.message); }
 
     return result.rows[0];
   }
@@ -232,6 +240,13 @@ export class InvoicesService {
 
     await query(`UPDATE invoices SET status='sent', sent_at=NOW(), updated_at=NOW() WHERE id=$1`, [id]);
     await query(`INSERT INTO invoice_activity (invoice_id, event_type, description, actor_id) VALUES ($1, 'sent', 'Invoice sent', $2)`, [id, userId]);
+    try {
+      await query(
+        `INSERT INTO audit_log (user_id, user_role, action, entity_type, entity_id, description)
+         VALUES ($1, (SELECT role FROM users WHERE id=$1), 'status_change', 'invoice', $2, $3)`,
+        [userId, id, `Invoice ${invoice.invoice_number} sent${invoice.recipient_email ? ' to ' + invoice.recipient_email : ''}`],
+      );
+    } catch (err: any) { console.error('[audit] invoice send:', err?.message); }
 
     // Send email to recipient with PDF attachment
     if (invoice.recipient_email) {
@@ -289,6 +304,13 @@ export class InvoicesService {
       [userId, data.payment_reference, id]
     );
     await query(`INSERT INTO invoice_activity (invoice_id, event_type, description, actor_id) VALUES ($1, 'marked_paid', 'Marked as paid', $2)`, [id, userId]);
+    try {
+      await query(
+        `INSERT INTO audit_log (user_id, user_role, action, entity_type, entity_id, description)
+         VALUES ($1, (SELECT role FROM users WHERE id=$1), 'status_change', 'invoice', $2, $3)`,
+        [userId, id, `Invoice ${invoice.invoice_number} marked as paid${data.payment_reference ? ' (' + data.payment_reference + ')' : ''}`],
+      );
+    } catch (err: any) { console.error('[audit] invoice mark-paid:', err?.message); }
 
     // Generate PDF and send paid confirmation emails
     try {
@@ -357,11 +379,19 @@ export class InvoicesService {
   }
 
   async cancelInvoice(id: string, reason: string, userId: string) {
-    await query(
-      `UPDATE invoices SET status='cancelled', cancelled_at=NOW(), cancelled_by=$1, cancellation_reason=$2, updated_at=NOW() WHERE id=$3`,
+    const upd = await query(
+      `UPDATE invoices SET status='cancelled', cancelled_at=NOW(), cancelled_by=$1, cancellation_reason=$2, updated_at=NOW() WHERE id=$3 RETURNING invoice_number`,
       [userId, reason, id]
     );
+    const invNum = upd.rows[0]?.invoice_number;
     await query(`INSERT INTO invoice_activity (invoice_id, event_type, description, actor_id) VALUES ($1, 'cancelled', $2, $3)`, [id, reason, userId]);
+    try {
+      await query(
+        `INSERT INTO audit_log (user_id, user_role, action, entity_type, entity_id, description)
+         VALUES ($1, (SELECT role FROM users WHERE id=$1), 'status_change', 'invoice', $2, $3)`,
+        [userId, id, `Invoice ${invNum ?? id} cancelled${reason ? ': ' + reason : ''}`],
+      );
+    } catch (err: any) { console.error('[audit] invoice cancel:', err?.message); }
     return { message: 'Invoice cancelled' };
   }
 
