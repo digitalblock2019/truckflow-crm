@@ -140,7 +140,11 @@ export interface Load {
   linehaul_amount_cents: number | null;
   fuel_surcharge_cents: number | null;
   accessorials_cents: number | null;
+  // Commission snapshots (Postgres NUMERIC arrives as string).
+  company_commission_pct: string | number | null;
+  agent_commission_pct: string | number | null;
   dispatcher_commission_pct: string | number | null;
+  agent_eligibility: string | null;
   // References
   broker_load_number: string | null;
   bol_number: string | null;

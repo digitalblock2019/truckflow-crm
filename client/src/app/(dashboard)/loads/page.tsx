@@ -54,6 +54,14 @@ const statusLabel: Record<string, string> = {
   payment_received: "Paid",
 };
 
+// Commission percentages are stored as fractions (0.08 = 8%); format for display.
+function pctLabel(pct: string | number | null | undefined): string {
+  if (pct == null) return "—";
+  const n = Number(pct) * 100;
+  if (!Number.isFinite(n)) return "—";
+  return `${+n.toFixed(2)}%`;
+}
+
 export default function LoadsPage() {
   const [tab, setTab] = useState("");
   const [page, setPage] = useState(1);
@@ -113,7 +121,7 @@ export default function LoadsPage() {
         {selectedLoad && (
           <div>
             {/* Compact order details */}
-            <div className="grid grid-cols-3 gap-3 text-xs mb-4 pb-4 border-b border-border">
+            <div className="grid grid-cols-3 gap-3 text-xs mb-4">
               <div>
                 <div className="text-[10px] font-mono text-txt-light uppercase">Trucker</div>
                 <div className="mt-0.5 text-txt font-medium">{selectedLoad.trucker_name ?? "—"}</div>
@@ -126,13 +134,45 @@ export default function LoadsPage() {
                 <div className="text-[10px] font-mono text-txt-light uppercase">Route</div>
                 <div className="mt-0.5 text-txt font-medium">{selectedLoad.load_origin ?? "—"} → {selectedLoad.load_destination ?? "—"}</div>
               </div>
-              <div>
-                <div className="text-[10px] font-mono text-txt-light uppercase">Gross</div>
-                <div className="mt-0.5 text-txt font-mono font-semibold">{fmt(selectedLoad.gross_load_amount_cents)}</div>
-              </div>
-              <div>
-                <div className="text-[10px] font-mono text-txt-light uppercase">Company Net</div>
-                <div className="mt-0.5 text-txt font-mono">{fmt(selectedLoad.company_net_cents)}</div>
+            </div>
+
+            {/* Earnings breakdown */}
+            <div className="bg-surface rounded-md border border-border p-3 mb-4 text-xs">
+              <div className="text-[10px] font-mono text-txt-light uppercase tracking-wide mb-2">Earnings Breakdown</div>
+              <div className="space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-txt">Gross</span>
+                  <span className="font-mono font-semibold text-txt">{fmt(selectedLoad.gross_load_amount_cents)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-txt">
+                    Company commission <span className="text-txt-light">({pctLabel(selectedLoad.company_commission_pct)})</span>
+                  </span>
+                  <span className="font-mono text-txt">{fmt(selectedLoad.company_gross_cents ?? 0)}</span>
+                </div>
+                <div className="flex justify-between pl-3 text-txt-light">
+                  <span>
+                    − Dispatcher ({pctLabel(selectedLoad.dispatcher_commission_pct)})
+                    {selectedLoad.dispatcher_name ? ` · ${selectedLoad.dispatcher_name}` : ""}
+                  </span>
+                  <span className="font-mono">-{fmt(selectedLoad.dispatcher_commission_cents ?? 0)}</span>
+                </div>
+                {selectedLoad.agent_name && (
+                  <div className="flex justify-between pl-3 text-txt-light">
+                    <span>
+                      − Sales agent ({pctLabel(selectedLoad.agent_commission_pct)}) · {selectedLoad.agent_name}
+                      {selectedLoad.agent_eligibility &&
+                        selectedLoad.agent_eligibility !== "eligible" &&
+                        selectedLoad.agent_eligibility !== "not_applicable" &&
+                        ` — ${selectedLoad.agent_eligibility.replace(/_/g, " ")}`}
+                    </span>
+                    <span className="font-mono">-{fmt(selectedLoad.agent_commission_cents ?? 0)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between border-t border-border pt-1.5 mt-1">
+                  <span className="font-semibold text-txt">Company net</span>
+                  <span className="font-mono font-bold text-navy">{fmt(selectedLoad.company_net_cents ?? 0)}</span>
+                </div>
               </div>
             </div>
 
