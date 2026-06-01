@@ -54,7 +54,7 @@ export default function InvoicesPage() {
   const [paidPrompt, setPaidPrompt] = useState<{ id: string; number: string; amount: string; client: string } | null>(null);
   const canCreate = useAuthStore((s) => s.canCreateInvoice());
 
-  const { data, isLoading } = useInvoices({ status: tab, page, limit: 20 });
+  const { data, isLoading } = useInvoices({ status: tab, page, limit: 100 });
   const createInvoice = useCreateInvoice();
   const invoiceAction = useInvoiceAction();
   const { data: invoiceDetail, isLoading: detailLoading } = useInvoice(selectedId);
@@ -225,7 +225,7 @@ export default function InvoicesPage() {
             page={page}
             totalPages={totalPages(data)}
             total={data?.total}
-            pageSize={20}
+            pageSize={100}
             onPageChange={setPage}
             onRowClick={(row) => { setSelectedId(row.id); setEditMode(false); }}
           />

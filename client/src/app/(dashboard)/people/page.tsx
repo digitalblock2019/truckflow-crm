@@ -84,7 +84,7 @@ export default function PeoplePage() {
   const isAdmin = useAuthStore((s) => s.isAdmin());
   const isSup = useAuthStore((s) => s.isSupervisorOrAdmin());
 
-  const { data, isLoading } = useEmployees({ status: tab, search, page, limit: 20 });
+  const { data, isLoading } = useEmployees({ status: tab, search, page, limit: 100 });
   const createEmp = useCreateEmployee();
   const updateEmp = useUpdateEmployee();
   const updateCrm = useUpdateCrmAccount();
@@ -255,7 +255,7 @@ export default function PeoplePage() {
           page={page}
           totalPages={totalPages(data)}
           total={data?.total}
-          pageSize={20}
+          pageSize={100}
           onPageChange={setPage}
           onRowClick={(row) => { setSelectedEmployee(row as unknown as Employee); setEditing(false); setResetMsg(null); }}
           toolbar={

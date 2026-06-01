@@ -103,7 +103,7 @@ export default function TruckersPage() {
   const [tab, setTab] = useState(initialTab);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [pageSize, setPageSize] = useState(100);
   const [showCreate, setShowCreate] = useState(false);
   const [selectedTrucker, setSelectedTrucker] = useState<Trucker | null>(null);
   const [newStatus, setNewStatus] = useState("");
@@ -146,7 +146,11 @@ export default function TruckersPage() {
   };
   if (isUnassignedTab) queryParams.unassigned_dispatcher = true;
   if (batchId) queryParams.batch = batchId;
-  if (filterSalesAgentId) queryParams.assigned_sales_agent_to = filterSalesAgentId;
+  if (filterSalesAgentId === "__unassigned__") {
+    queryParams.unassigned_sales_agent = true;
+  } else if (filterSalesAgentId) {
+    queryParams.assigned_sales_agent_to = filterSalesAgentId;
+  }
   const { data, isLoading } = useTruckers(queryParams);
   // Fetch sales agents, dispatchers, and dual-role users. Each role's dropdown
   // gets the appropriate union (sales_agent ∪ sales_and_dispatcher for the
@@ -526,6 +530,7 @@ export default function TruckersPage() {
                 onChange={(e) => { setFilterSalesAgentId(e.target.value); setPage(1); setSelectedIds(new Set()); }}
                 options={[
                   { value: "", label: "All sales reps" },
+                  { value: "__unassigned__", label: "Unassigned" },
                   ...salesAgentOptions,
                 ]}
               />
