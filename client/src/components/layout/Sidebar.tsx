@@ -69,16 +69,33 @@ export default function Sidebar() {
 
   return (
     <aside className="w-[220px] bg-navy flex flex-col shrink-0 h-screen sticky top-0">
-      {/* Logo */}
-      <div className="px-5 py-4">
+      {/* Logo — clickable, routes home to the dashboard */}
+      <Link href="/" className="block px-5 py-4 hover:opacity-80 transition-opacity">
         <span className="font-mono text-[13px] font-semibold text-white tracking-wide">
           TRUCKFLOW
         </span>
         <span className="text-accent text-[10px] font-mono ml-1">CRM</span>
-      </div>
+      </Link>
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-2">
+        {/* Dashboard — pinned to the top, outside the grouped sections */}
+        {(() => {
+          const active = pathname === "/";
+          return (
+            <Link
+              href="/"
+              className={`flex items-center gap-2.5 px-[18px] py-[9px] text-[13px] border-l-[3px] transition-all duration-100 mb-3
+                ${active
+                  ? "border-accent bg-blue/30 text-white"
+                  : "border-transparent text-white/55 hover:bg-white/[0.06] hover:text-white/80"
+                }`}
+            >
+              <span className="w-[18px] text-center text-[15px]" dangerouslySetInnerHTML={{ __html: "&#x1F4CA;" }} />
+              <span className="font-medium">Dashboard</span>
+            </Link>
+          );
+        })()}
         {dynamicSections.map((section) => {
           const visibleItems = section.items.filter((item) => {
             if (item.adminOnly && role !== "admin") return false;
