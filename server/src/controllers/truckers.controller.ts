@@ -52,6 +52,14 @@ export class TruckersController {
     res.json(result);
   }
 
+  async bulkAssign(req: Request, res: Response) {
+    const { ids, batch_id, sales_agent_id, dispatcher_id } = req.body;
+    const sales = sales_agent_id !== undefined ? (sales_agent_id || null) : undefined;
+    const disp = dispatcher_id !== undefined ? (dispatcher_id || null) : undefined;
+    const result = await svc.bulkAssign({ ids, batchId: batch_id }, sales, disp, req.user!.id);
+    res.json(result);
+  }
+
   async bulkDelete(req: Request, res: Response) {
     // Support batch_id to delete entire batch, or ids array for individual truckers
     if (req.body.batch_id) {

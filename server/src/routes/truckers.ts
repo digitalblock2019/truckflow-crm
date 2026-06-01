@@ -15,6 +15,7 @@ router.post('/', (req, res) => ctrl.create(req, res));
 router.patch('/:id', (req, res) => ctrl.update(req, res));
 router.post('/import', authorize('admin', 'supervisor'), (req, res) => ctrl.bulkImport(req, res));
 router.post('/bulk-delete', authorize('admin', 'supervisor'), (req, res) => ctrl.bulkDelete(req, res));
+router.post('/bulk-assign', authorize('admin', 'supervisor'), (req, res) => ctrl.bulkAssign(req, res));
 router.post('/:id/initiate-onboarding', authorize('admin', 'supervisor'), (req, res) => ctrl.initiateOnboarding(req, res));
 router.post('/:id/fully-onboarded', (req, res) => ctrl.markFullyOnboarded(req, res));
 router.delete('/:id', authorize('admin', 'supervisor'), (req, res) => ctrl.delete(req, res));
