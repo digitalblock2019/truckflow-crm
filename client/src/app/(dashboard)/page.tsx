@@ -3,7 +3,7 @@
 import Topbar from "@/components/layout/Topbar";
 import Card, { CardHeader } from "@/components/ui/Card";
 import StatCard from "@/components/ui/StatCard";
-import { useDashboard } from "@/lib/hooks";
+import { useDashboard, useTruckerActivityToday } from "@/lib/hooks";
 
 function fmt(cents: number): string {
   return "$" + (cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -23,6 +23,7 @@ function StatusRow({ label, count, color }: { label: string; count: number; colo
 
 export default function DashboardPage() {
   const { data, isLoading } = useDashboard();
+  const { data: activity } = useTruckerActivityToday();
 
   if (isLoading || !data) {
     return (
@@ -51,6 +52,38 @@ export default function DashboardPage() {
           <StatCard label="Active Truckers" value={truckers.total} />
           <StatCard label="Outstanding Invoices" value={fmt(invoices.total_outstanding_cents)} />
         </div>
+
+        {/* Today's Activity — auto-refreshes every 30s */}
+        <Card>
+          <CardHeader title="Today's Activity" subtitle="Trucker updates by you and your team" />
+          <div className="flex items-baseline gap-3">
+            <span className="text-3xl font-bold text-navy font-mono">{activity?.my_today ?? 0}</span>
+            <span className="text-xs text-txt-light">trucker updates by you today</span>
+          </div>
+          {activity?.team && activity.team.length > 0 && (
+            <div className="mt-4 pt-3 border-t border-border">
+              <div className="text-[10px] font-mono text-txt-light uppercase tracking-wide mb-2">Team Activity</div>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-[10px] font-mono text-txt-light uppercase">
+                    <th className="text-left py-1 font-medium">User</th>
+                    <th className="text-right py-1 font-medium w-20">Today</th>
+                    <th className="text-right py-1 font-medium w-20">Last 7 days</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activity.team.map((t) => (
+                    <tr key={t.user_id} className="border-t border-border/50">
+                      <td className="py-1.5 text-txt">{t.full_name}</td>
+                      <td className="py-1.5 text-right font-mono font-semibold text-navy">{t.today}</td>
+                      <td className="py-1.5 text-right font-mono text-txt-light">{t.last_7_days}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
 
         {/* Row 2: Load Status + Commissions */}
         <div className="grid grid-cols-2 gap-4">

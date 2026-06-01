@@ -97,6 +97,9 @@ export function useTruckers(params: Record<string, string | number | boolean> = 
   return useQuery({
     queryKey: ["truckers", params],
     queryFn: () => apiFetch<PaginatedResponse<Trucker>>(`/api/truckers?${qs}`),
+    // Live updates — auto-refetch every 30s so a status change one rep makes
+    // shows up for others without a manual reload. Refetches on tab focus too.
+    refetchInterval: 30_000,
   });
 }
 
@@ -136,6 +139,21 @@ export function useBulkDeleteTruckers() {
     mutationFn: (ids: string[]) =>
       apiFetch("/api/truckers/bulk-delete", { method: "POST", body: JSON.stringify({ ids }) }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["truckers"] }); },
+  });
+}
+
+export interface TodayActivity {
+  my_today: number;
+  team?: Array<{ user_id: string; full_name: string; today: number; last_7_days: number }>;
+}
+
+// Daily progress card on the dashboard — how many trucker updates the
+// current user (and, for admin/supervisor, each teammate) did today.
+export function useTruckerActivityToday() {
+  return useQuery({
+    queryKey: ["trucker-activity-today"],
+    queryFn: () => apiFetch<TodayActivity>("/api/truckers/activity/today"),
+    refetchInterval: 30_000,
   });
 }
 
