@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import Topbar from "@/components/layout/Topbar";
 import DataGrid, { Column } from "@/components/ui/DataGrid";
@@ -11,7 +11,7 @@ import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
-import { useTruckers, useCreateTrucker, useUpdateTrucker, useDeleteTrucker, useBulkDeleteTruckers, useInitiateOnboarding, useEmployees, useTruckerDocuments, useUploadDocument } from "@/lib/hooks";
+import { useTruckers, useCreateTrucker, useUpdateTrucker, useDeleteTrucker, useBulkDeleteTruckers, useBulkAssignTruckers, useInitiateOnboarding, useEmployees, useTruckerDocuments, useUploadDocument, useMe } from "@/lib/hooks";
 import { useAuthStore } from "@/lib/auth";
 import { totalPages, employeeTypeLabel } from "@/lib/utils";
 import ProgressBar from "@/components/ui/ProgressBar";
@@ -113,6 +113,29 @@ export default function TruckersPage() {
   const [modalTab, setModalTab] = useState<"details" | "documents">("details");
   const isSup = useAuthStore((s) => s.isSupervisorOrAdmin());
 
+  // Current user — used to default sales reps to their own truckers.
+  const { data: meData } = useMe();
+  const me = meData as { id?: string; role?: string; employee_id?: string } | undefined;
+  const isSelfRep = me?.role === "sales_agent" || me?.role === "sales_and_dispatcher";
+
+  // Sales Rep filter for the list. Empty string = no filter (show all).
+  // For a sales rep, defaults to their own employee_id; they can flip to "All".
+  const [filterSalesAgentId, setFilterSalesAgentId] = useState<string>("");
+  const [salesFilterInitialized, setSalesFilterInitialized] = useState(false);
+  useEffect(() => {
+    if (!salesFilterInitialized && isSelfRep && me?.employee_id) {
+      setFilterSalesAgentId(me.employee_id);
+      setSalesFilterInitialized(true);
+    } else if (!salesFilterInitialized && me && !isSelfRep) {
+      setSalesFilterInitialized(true);
+    }
+  }, [isSelfRep, me, salesFilterInitialized]);
+
+  // Bulk-assign modal state.
+  const [showBulkAssign, setShowBulkAssign] = useState<null | { mode: "selection" | "batch"; count: number }>(null);
+  const [bulkSalesValue, setBulkSalesValue] = useState<string>("");        // "" don't change, "__unassign__" clear, uuid assign
+  const [bulkDispatcherValue, setBulkDispatcherValue] = useState<string>("");
+
   // The Unassigned tab uses a separate query filter, not status.
   const isUnassignedTab = tab === "__unassigned_dispatcher__";
   const queryParams: Record<string, string | number | boolean> = {
@@ -123,6 +146,7 @@ export default function TruckersPage() {
   };
   if (isUnassignedTab) queryParams.unassigned_dispatcher = true;
   if (batchId) queryParams.batch = batchId;
+  if (filterSalesAgentId) queryParams.assigned_sales_agent_to = filterSalesAgentId;
   const { data, isLoading } = useTruckers(queryParams);
   // Fetch sales agents, dispatchers, and dual-role users. Each role's dropdown
   // gets the appropriate union (sales_agent ∪ sales_and_dispatcher for the
@@ -167,7 +191,34 @@ export default function TruckersPage() {
   const updateTrucker = useUpdateTrucker();
   const deleteTrucker = useDeleteTrucker();
   const bulkDelete = useBulkDeleteTruckers();
+  const bulkAssign = useBulkAssignTruckers();
   const initiateOnboarding = useInitiateOnboarding();
+
+  const handleOpenBulkAssign = (mode: "selection" | "batch", count: number) => {
+    setBulkSalesValue("");
+    setBulkDispatcherValue("");
+    setShowBulkAssign({ mode, count });
+  };
+  const handleConfirmBulkAssign = () => {
+    if (!showBulkAssign) return;
+    const sales = bulkSalesValue === "" ? undefined : bulkSalesValue === "__unassign__" ? null : bulkSalesValue;
+    const disp = bulkDispatcherValue === "" ? undefined : bulkDispatcherValue === "__unassign__" ? null : bulkDispatcherValue;
+    if (sales === undefined && disp === undefined) return;
+    const payload: { ids?: string[]; batch_id?: string; sales_agent_id?: string | null; dispatcher_id?: string | null } = {};
+    if (sales !== undefined) payload.sales_agent_id = sales;
+    if (disp !== undefined) payload.dispatcher_id = disp;
+    if (showBulkAssign.mode === "batch" && batchId) {
+      payload.batch_id = batchId;
+    } else {
+      payload.ids = Array.from(selectedIds);
+    }
+    bulkAssign.mutate(payload, {
+      onSuccess: () => {
+        setShowBulkAssign(null);
+        setSelectedIds(new Set());
+      },
+    });
+  };
   const { data: truckerDocs } = useTruckerDocuments(selectedTrucker?.id ?? "");
   const uploadDoc = useUploadDocument();
 
@@ -417,14 +468,22 @@ export default function TruckersPage() {
         actions={
           <div className="flex gap-2">
             {isSup && selectedIds.size > 0 && (
-              <Button
-                variant="secondary"
-                onClick={handleBulkDelete}
-                disabled={bulkDelete.isPending}
-                className="!text-red !border-red/30 hover:!bg-red/5"
-              >
-                {bulkDelete.isPending ? "Deleting..." : `Delete Selected (${selectedIds.size})`}
-              </Button>
+              <>
+                <Button
+                  variant="secondary"
+                  onClick={() => handleOpenBulkAssign("selection", selectedIds.size)}
+                >
+                  Bulk Assign ({selectedIds.size})
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={handleBulkDelete}
+                  disabled={bulkDelete.isPending}
+                  className="!text-red !border-red/30 hover:!bg-red/5"
+                >
+                  {bulkDelete.isPending ? "Deleting..." : `Delete Selected (${selectedIds.size})`}
+                </Button>
+              </>
             )}
             {isSup && <Button onClick={() => setShowCreate(true)}>+ Add Trucker</Button>}
           </div>
@@ -434,7 +493,17 @@ export default function TruckersPage() {
       {batchId && (
         <div className="mx-6 mt-4 px-3 py-2 bg-blue-light/10 border border-blue-light/30 rounded-md text-xs text-blue flex items-center justify-between">
           <span>Showing imported batch only</span>
-          <a href="/truckers" className="underline font-semibold">View All Truckers</a>
+          <div className="flex items-center gap-3">
+            {isSup && (
+              <button
+                onClick={() => handleOpenBulkAssign("batch", data?.total ?? 0)}
+                className="underline font-semibold cursor-pointer"
+              >
+                Assign Entire Batch ({data?.total ?? 0})
+              </button>
+            )}
+            <a href="/truckers" className="underline font-semibold">View All Truckers</a>
+          </div>
         </div>
       )}
       <div className="flex-1 min-h-0 overflow-y-auto p-6 bg-surface">
@@ -450,7 +519,17 @@ export default function TruckersPage() {
           onPageChange={(p) => { setPage(p); setSelectedIds(new Set()); }}
           onRowClick={openDetail}
           toolbar={
-            <SearchBox value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search MC#, name..." />
+            <div className="flex items-center gap-3 flex-1">
+              <SearchBox value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search MC#, name..." />
+              <Select
+                value={filterSalesAgentId}
+                onChange={(e) => { setFilterSalesAgentId(e.target.value); setPage(1); setSelectedIds(new Set()); }}
+                options={[
+                  { value: "", label: "All sales reps" },
+                  ...salesAgentOptions,
+                ]}
+              />
+            </div>
           }
         />
       </div>
@@ -892,6 +971,52 @@ export default function TruckersPage() {
           <Button variant="secondary" onClick={() => setShowCreate(false)}>Cancel</Button>
           <Button onClick={handleCreate} disabled={createTrucker.isPending}>
             {createTrucker.isPending ? "Creating..." : "Create Trucker"}
+          </Button>
+        </div>
+      </Modal>
+
+      {/* Bulk Assign Modal */}
+      <Modal
+        open={!!showBulkAssign}
+        onClose={() => setShowBulkAssign(null)}
+        title={`Bulk Assign ${showBulkAssign?.count ?? 0} Trucker${showBulkAssign?.count === 1 ? "" : "s"}`}
+        width="480px"
+      >
+        <p className="text-xs text-txt-light mb-4">
+          {showBulkAssign?.mode === "batch"
+            ? `Apply to every trucker in this upload batch (${showBulkAssign?.count ?? 0}).`
+            : `Apply to the ${showBulkAssign?.count ?? 0} selected trucker${showBulkAssign?.count === 1 ? "" : "s"}.`}
+          {" "}Leave a field on &quot;Don&apos;t change&quot; to keep its current value.
+        </p>
+        <div className="space-y-3">
+          <Select
+            label="Sales Agent"
+            value={bulkSalesValue}
+            onChange={(e) => setBulkSalesValue(e.target.value)}
+            options={[
+              { value: "", label: "Don't change" },
+              { value: "__unassign__", label: "Clear (Unassigned)" },
+              ...salesAgentOptions,
+            ]}
+          />
+          <Select
+            label="Dispatcher"
+            value={bulkDispatcherValue}
+            onChange={(e) => setBulkDispatcherValue(e.target.value)}
+            options={[
+              { value: "", label: "Don't change" },
+              { value: "__unassign__", label: "Clear (Unassigned)" },
+              ...dispatcherOptions,
+            ]}
+          />
+        </div>
+        <div className="flex justify-end gap-2 mt-5">
+          <Button variant="secondary" onClick={() => setShowBulkAssign(null)}>Cancel</Button>
+          <Button
+            onClick={handleConfirmBulkAssign}
+            disabled={bulkAssign.isPending || (bulkSalesValue === "" && bulkDispatcherValue === "")}
+          >
+            {bulkAssign.isPending ? "Saving..." : "Apply"}
           </Button>
         </div>
       </Modal>

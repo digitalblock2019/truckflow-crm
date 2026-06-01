@@ -139,6 +139,26 @@ export function useBulkDeleteTruckers() {
   });
 }
 
+// Bulk-assign sales agent and/or dispatcher across a selection of truckers
+// or an entire upload batch. sales_agent_id / dispatcher_id: omit to leave
+// unchanged, null to clear, UUID to assign.
+export function useBulkAssignTruckers() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: {
+      ids?: string[];
+      batch_id?: string;
+      sales_agent_id?: string | null;
+      dispatcher_id?: string | null;
+    }) =>
+      apiFetch<{ updated: number }>("/api/truckers/bulk-assign", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["truckers"] }); },
+  });
+}
+
 export function useDeleteBatch() {
   const qc = useQueryClient();
   return useMutation({

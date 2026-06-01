@@ -389,6 +389,70 @@ export class TruckersService {
     return { message: 'Trucker deleted' };
   }
 
+  // Reassign sales agent and/or dispatcher across a set of truckers in one
+  // shot. undefined = leave the field alone; null = clear it; a UUID = assign.
+  // Either `ids` (explicit selection) or `batchId` (entire upload batch).
+  async bulkAssign(
+    opts: { ids?: string[]; batchId?: string | null },
+    salesAgentId: string | null | undefined,
+    dispatcherId: string | null | undefined,
+    userId: string,
+  ) {
+    const { ids, batchId } = opts;
+    if ((!Array.isArray(ids) || ids.length === 0) && !batchId) {
+      throw new AppError('ids or batch_id required', 400, 'VALIDATION_ERROR');
+    }
+    if (salesAgentId === undefined && dispatcherId === undefined) {
+      throw new AppError('Provide sales_agent_id and/or dispatcher_id', 400, 'VALIDATION_ERROR');
+    }
+
+    const sets: string[] = ['updated_at = NOW()'];
+    const params: any[] = [];
+    let idx = 1;
+
+    if (salesAgentId !== undefined) {
+      sets.push(`assigned_sales_agent_id = $${idx}`);
+      // Mirror to the legacy assigned_agent_id column for back-compat readers.
+      sets.push(`assigned_agent_id = $${idx}`);
+      params.push(salesAgentId);
+      idx++;
+    }
+    if (dispatcherId !== undefined) {
+      sets.push(`assigned_dispatcher_id = $${idx++}`);
+      params.push(dispatcherId);
+    }
+
+    let whereClause: string;
+    if (batchId) {
+      whereClause = `upload_batch_id = $${idx++}`;
+      params.push(batchId);
+    } else {
+      whereClause = `id = ANY($${idx++}::uuid[])`;
+      params.push(ids);
+    }
+    const result = await query(
+      `UPDATE truckers SET ${sets.join(', ')} WHERE ${whereClause} RETURNING id`,
+      params,
+    );
+    const updated = result.rowCount || 0;
+
+    try {
+      const desc =
+        `Bulk-assigned ${updated} trucker(s)` +
+        (salesAgentId !== undefined ? ` · sales=${salesAgentId ?? 'cleared'}` : '') +
+        (dispatcherId !== undefined ? ` · dispatcher=${dispatcherId ?? 'cleared'}` : '');
+      await query(
+        `INSERT INTO audit_log (user_id, user_role, action, entity_type, description)
+         VALUES ($1, (SELECT role FROM users WHERE id=$1), 'update', 'trucker', $2)`,
+        [userId, desc],
+      );
+    } catch (err: any) {
+      console.error('[bulkAssign] audit failed:', err?.message);
+    }
+
+    return { updated };
+  }
+
   async bulkDelete(ids: string[], userId: string) {
     let deleted = 0;
     for (const id of ids) {
