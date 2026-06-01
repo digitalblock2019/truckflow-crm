@@ -31,7 +31,7 @@ export default function CommissionsPage() {
   const [tab, setTab] = useState("");
   const [page, setPage] = useState(1);
   const isSup = useAuthStore((s) => s.isSupervisorOrAdmin());
-  const { data, isLoading } = useCommissions({ status: tab, page, limit: 20 });
+  const { data, isLoading } = useCommissions({ status: tab, page, limit: 100 });
   const { data: summary } = useCommissionSummary();
   const updateStatus = useUpdateCommissionStatus();
 
@@ -91,7 +91,7 @@ export default function CommissionsPage() {
             page={page}
             totalPages={totalPages(data)}
             total={data?.total}
-            pageSize={20}
+            pageSize={100}
             onPageChange={setPage}
           />
         </div>

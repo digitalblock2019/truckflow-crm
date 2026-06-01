@@ -71,7 +71,7 @@ export default function LoadsPage() {
   const isAdmin = useAuthStore((s) => s.isAdmin());
   const canCreate = useAuthStore((s) => s.canCreateLoad());
 
-  const { data, isLoading } = useLoads({ status: tab, page, limit: 20 });
+  const { data, isLoading } = useLoads({ status: tab, page, limit: 100 });
   const updateStatus = useUpdateLoadStatus();
   const deleteLoad = useDeleteLoad();
   const { data: loadDocs } = useLoadDocuments(selectedLoad?.id ?? "");
@@ -106,7 +106,7 @@ export default function LoadsPage() {
           page={page}
           totalPages={totalPages(data)}
           total={data?.total}
-          pageSize={20}
+          pageSize={100}
           onPageChange={setPage}
           onRowClick={(row) => setSelectedLoad(row as unknown as Load)}
         />
