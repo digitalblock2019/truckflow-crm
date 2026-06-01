@@ -52,6 +52,11 @@ export class TruckersController {
     res.json(result);
   }
 
+  async todayActivity(req: Request, res: Response) {
+    const result = await svc.getTodayActivity(req.user!.id, req.user!.role);
+    res.json(result);
+  }
+
   async bulkAssign(req: Request, res: Response) {
     const { ids, batch_id, sales_agent_id, dispatcher_id } = req.body;
     const sales = sales_agent_id !== undefined ? (sales_agent_id || null) : undefined;

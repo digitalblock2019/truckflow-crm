@@ -389,6 +389,40 @@ export class TruckersService {
     return { message: 'Trucker deleted' };
   }
 
+  // Per-user trucker-activity counts for "what got done today" dashboard card.
+  // Counts every audit_log row against a trucker, since dispatchers do more
+  // than just status_change (updates, assignments, etc.) and the team wants
+  // a single "did anything happen" number.
+  async getTodayActivity(userId: string, role: string) {
+    const isPrivileged = role === 'admin' || role === 'supervisor';
+
+    const mine = await query(
+      `SELECT count(*)::int AS c FROM audit_log
+       WHERE user_id = $1 AND entity_type = 'trucker'
+         AND created_at >= CURRENT_DATE`,
+      [userId],
+    );
+    const my_today = mine.rows[0]?.c ?? 0;
+
+    if (!isPrivileged) {
+      return { my_today };
+    }
+
+    const team = await query(
+      `SELECT u.id AS user_id, u.full_name,
+              count(*) FILTER (WHERE al.created_at >= CURRENT_DATE)::int AS today,
+              count(*)::int AS last_7_days
+         FROM audit_log al
+         JOIN users u ON u.id = al.user_id
+        WHERE al.entity_type = 'trucker'
+          AND al.created_at >= CURRENT_DATE - INTERVAL '7 days'
+        GROUP BY u.id, u.full_name
+        ORDER BY today DESC, last_7_days DESC`,
+    );
+
+    return { my_today, team: team.rows };
+  }
+
   // Reassign sales agent and/or dispatcher across a set of truckers in one
   // shot. undefined = leave the field alone; null = clear it; a UUID = assign.
   // Either `ids` (explicit selection) or `batchId` (entire upload batch).
