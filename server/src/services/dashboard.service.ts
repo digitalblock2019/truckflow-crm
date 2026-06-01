@@ -39,6 +39,24 @@ export interface DashboardStats {
 
 export class DashboardService {
   async getStats(opts: { scoped: boolean; employeeId?: string }): Promise<DashboardStats> {
+    try {
+      return await this.runStats(opts);
+    } catch (err: any) {
+      // Don't strand the UI on a single bad column/enum reference — log loudly
+      // and return zeros so the dashboard renders.
+      console.error('[dashboard.getStats] query failed:', err?.message, err?.detail);
+      return {
+        loads: { total: 0, pending: 0, dispatched: 0, in_transit: 0, delivered: 0, payment_received: 0 },
+        revenue: opts.scoped ? null : { total_gross_cents: 0, total_net_cents: 0, this_month_gross_cents: 0 },
+        commissions: { total_pending_cents: 0, total_approved_cents: 0, total_paid_cents: 0 },
+        invoices: { total: 0, draft: 0, sent: 0, overdue: 0, paid: 0, total_outstanding_cents: 0 },
+        truckers: { total: 0, onboarding: 0, fully_onboarded: 0 },
+        employees: { total_active: 0 },
+      };
+    }
+  }
+
+  private async runStats(opts: { scoped: boolean; employeeId?: string }): Promise<DashboardStats> {
     const { scoped, employeeId } = opts;
     // Non-privileged callers (sales agent / dispatcher) see only their own
     // commission totals and no company revenue; privileged callers get
@@ -74,9 +92,11 @@ export class DashboardService {
         (SELECT count(*) FROM invoices WHERE status = 'paid')::int AS invoices_paid,
         COALESCE((SELECT sum(total_amount) FROM invoices WHERE status IN ('sent', 'overdue')), 0)::bigint AS invoices_outstanding_cents,
 
-        -- Truckers (status column is status_system; "onboarding" maps to the funnel between imported and fully_onboarded)
+        -- Truckers (status column is status_system; "onboarding" = any trucker
+        -- that has a status set but isn't fully onboarded yet. Avoids listing
+        -- intermediate enum values whose presence varies across environments.)
         (SELECT count(*) FROM truckers)::int AS truckers_total,
-        (SELECT count(*) FROM truckers WHERE status_system IN ('called','sms_sent','interested','ready_for_onboarding','onboarding_initiated'))::int AS truckers_onboarding,
+        (SELECT count(*) FROM truckers WHERE status_system IS NOT NULL AND status_system <> 'fully_onboarded')::int AS truckers_onboarding,
         (SELECT count(*) FROM truckers WHERE status_system = 'fully_onboarded')::int AS truckers_fully_onboarded,
 
         -- Employees (status column is employment_status)
