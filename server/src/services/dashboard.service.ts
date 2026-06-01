@@ -48,39 +48,39 @@ export class DashboardService {
 
     const result = await query(`
       SELECT
-        -- Loads
-        (SELECT count(*) FROM loads)::int AS loads_total,
-        (SELECT count(*) FROM loads WHERE status = 'pending')::int AS loads_pending,
-        (SELECT count(*) FROM loads WHERE status = 'dispatched')::int AS loads_dispatched,
-        (SELECT count(*) FROM loads WHERE status = 'in_transit')::int AS loads_in_transit,
-        (SELECT count(*) FROM loads WHERE status = 'delivered')::int AS loads_delivered,
-        (SELECT count(*) FROM loads WHERE status = 'payment_received')::int AS loads_payment_received,
+        -- Loads (table is load_orders, status column is load_status)
+        (SELECT count(*) FROM load_orders)::int AS loads_total,
+        (SELECT count(*) FROM load_orders WHERE load_status = 'pending')::int AS loads_pending,
+        (SELECT count(*) FROM load_orders WHERE load_status = 'dispatched')::int AS loads_dispatched,
+        (SELECT count(*) FROM load_orders WHERE load_status = 'in_transit')::int AS loads_in_transit,
+        (SELECT count(*) FROM load_orders WHERE load_status = 'delivered')::int AS loads_delivered,
+        (SELECT count(*) FROM load_orders WHERE load_status = 'payment_received')::int AS loads_payment_received,
 
-        -- Revenue
-        COALESCE((SELECT sum(gross_pay_cents) FROM loads), 0)::bigint AS revenue_total_gross_cents,
-        COALESCE((SELECT sum(net_pay_cents) FROM loads), 0)::bigint AS revenue_total_net_cents,
-        COALESCE((SELECT sum(gross_pay_cents) FROM loads WHERE created_at >= date_trunc('month', now())), 0)::bigint AS revenue_this_month_gross_cents,
+        -- Revenue (gross_load_amount_cents = total load amount; company_net_cents = company cut after payouts)
+        COALESCE((SELECT sum(gross_load_amount_cents) FROM load_orders), 0)::bigint AS revenue_total_gross_cents,
+        COALESCE((SELECT sum(company_net_cents) FROM load_orders), 0)::bigint AS revenue_total_net_cents,
+        COALESCE((SELECT sum(gross_load_amount_cents) FROM load_orders WHERE created_at >= date_trunc('month', now())), 0)::bigint AS revenue_this_month_gross_cents,
 
         -- Commissions
         COALESCE((SELECT sum(amount_cents) FROM commissions WHERE status = 'pending' ${commFilter}), 0)::bigint AS comm_pending_cents,
         COALESCE((SELECT sum(amount_cents) FROM commissions WHERE status = 'approved' ${commFilter}), 0)::bigint AS comm_approved_cents,
         COALESCE((SELECT sum(amount_cents) FROM commissions WHERE status = 'paid' ${commFilter}), 0)::bigint AS comm_paid_cents,
 
-        -- Invoices
+        -- Invoices (amount column is total_amount)
         (SELECT count(*) FROM invoices)::int AS invoices_total,
         (SELECT count(*) FROM invoices WHERE status = 'draft')::int AS invoices_draft,
         (SELECT count(*) FROM invoices WHERE status = 'sent')::int AS invoices_sent,
         (SELECT count(*) FROM invoices WHERE status = 'overdue')::int AS invoices_overdue,
         (SELECT count(*) FROM invoices WHERE status = 'paid')::int AS invoices_paid,
-        COALESCE((SELECT sum(total_cents) FROM invoices WHERE status IN ('sent', 'overdue')), 0)::bigint AS invoices_outstanding_cents,
+        COALESCE((SELECT sum(total_amount) FROM invoices WHERE status IN ('sent', 'overdue')), 0)::bigint AS invoices_outstanding_cents,
 
-        -- Truckers
+        -- Truckers (status column is status_system; "onboarding" maps to the funnel between imported and fully_onboarded)
         (SELECT count(*) FROM truckers)::int AS truckers_total,
-        (SELECT count(*) FROM truckers WHERE onboarding_status = 'onboarding')::int AS truckers_onboarding,
-        (SELECT count(*) FROM truckers WHERE onboarding_status = 'fully_onboarded')::int AS truckers_fully_onboarded,
+        (SELECT count(*) FROM truckers WHERE status_system IN ('called','sms_sent','interested','ready_for_onboarding','onboarding_initiated'))::int AS truckers_onboarding,
+        (SELECT count(*) FROM truckers WHERE status_system = 'fully_onboarded')::int AS truckers_fully_onboarded,
 
-        -- Employees
-        (SELECT count(*) FROM employees WHERE status = 'active')::int AS employees_active
+        -- Employees (status column is employment_status)
+        (SELECT count(*) FROM employees WHERE employment_status = 'active')::int AS employees_active
     `, params);
 
     const r = result.rows[0];
