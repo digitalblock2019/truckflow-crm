@@ -4,6 +4,7 @@ import Topbar from "@/components/layout/Topbar";
 import Card, { CardHeader } from "@/components/ui/Card";
 import StatCard from "@/components/ui/StatCard";
 import { useDashboard, useTruckerActivityToday } from "@/lib/hooks";
+import { initials, employeeTypeLabel } from "@/lib/utils";
 
 function fmt(cents: number): string {
   return "$" + (cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -62,25 +63,27 @@ export default function DashboardPage() {
           </div>
           {activity?.team && activity.team.length > 0 && (
             <div className="mt-4 pt-3 border-t border-border">
-              <div className="text-[10px] font-mono text-txt-light uppercase tracking-wide mb-2">Team Activity</div>
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="text-[10px] font-mono text-txt-light uppercase">
-                    <th className="text-left py-1 font-medium">User</th>
-                    <th className="text-right py-1 font-medium w-20">Today</th>
-                    <th className="text-right py-1 font-medium w-20">Last 7 days</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {activity.team.map((t) => (
-                    <tr key={t.user_id} className="border-t border-border/50">
-                      <td className="py-1.5 text-txt">{t.full_name}</td>
-                      <td className="py-1.5 text-right font-mono font-semibold text-navy">{t.today}</td>
-                      <td className="py-1.5 text-right font-mono text-txt-light">{t.last_7_days}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="text-[10px] font-mono text-txt-light uppercase tracking-wide mb-3">Team Activity</div>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                {activity.team.map((t) => (
+                  <div key={t.user_id} className="border border-border rounded-md p-3 bg-white">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-8 h-8 rounded-full bg-blue text-white text-[11px] font-bold flex items-center justify-center shrink-0">
+                        {initials(t.full_name)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-semibold text-txt truncate">{t.full_name}</div>
+                        <div className="text-[10px] font-mono text-txt-light uppercase truncate">{employeeTypeLabel(t.role)}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-2xl font-bold text-navy font-mono">{t.today}</span>
+                      <span className="text-[10px] text-txt-light">today</span>
+                    </div>
+                    <div className="text-[10px] text-txt-light mt-0.5 font-mono">{t.last_7_days} in last 7 days</div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </Card>

@@ -408,16 +408,26 @@ export class TruckersService {
       return { my_today };
     }
 
+    // Every active sales rep / dispatcher / dual-role user — LEFT JOIN their
+    // trucker activity so we still surface a card for people with zero activity.
     const team = await query(
-      `SELECT u.id AS user_id, u.full_name,
-              count(*) FILTER (WHERE al.created_at >= CURRENT_DATE)::int AS today,
-              count(*)::int AS last_7_days
-         FROM audit_log al
-         JOIN users u ON u.id = al.user_id
-        WHERE al.entity_type = 'trucker'
-          AND al.created_at >= CURRENT_DATE - INTERVAL '7 days'
-        GROUP BY u.id, u.full_name
-        ORDER BY today DESC, last_7_days DESC`,
+      `SELECT u.id AS user_id, u.full_name, u.role,
+              COALESCE(td.c, 0)::int AS today,
+              COALESCE(wk.c, 0)::int AS last_7_days
+         FROM users u
+         LEFT JOIN (
+           SELECT user_id, count(*)::int AS c FROM audit_log
+            WHERE entity_type = 'trucker' AND created_at >= CURRENT_DATE
+            GROUP BY user_id
+         ) td ON td.user_id = u.id
+         LEFT JOIN (
+           SELECT user_id, count(*)::int AS c FROM audit_log
+            WHERE entity_type = 'trucker' AND created_at >= CURRENT_DATE - INTERVAL '7 days'
+            GROUP BY user_id
+         ) wk ON wk.user_id = u.id
+        WHERE u.is_active = TRUE
+          AND u.role IN ('sales_agent', 'dispatcher', 'sales_and_dispatcher')
+        ORDER BY today DESC, last_7_days DESC, u.full_name`,
     );
 
     return { my_today, team: team.rows };

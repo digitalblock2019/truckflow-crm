@@ -144,7 +144,7 @@ export function useBulkDeleteTruckers() {
 
 export interface TodayActivity {
   my_today: number;
-  team?: Array<{ user_id: string; full_name: string; today: number; last_7_days: number }>;
+  team?: Array<{ user_id: string; full_name: string; role: string; today: number; last_7_days: number }>;
 }
 
 // Daily progress card on the dashboard — how many trucker updates the
