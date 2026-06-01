@@ -91,8 +91,9 @@ const tabs = [
   { key: "onboarded", label: "Ready For Onboarding" },
   { key: "fully_onboarded", label: "Fully Onboarded" },
   { key: "not_interested", label: "Not Interested" },
-  // Special tab: uses unassigned_dispatcher filter instead of status. Handled
-  // in queryParams below — the key value is a sentinel.
+  // Special tabs: use *_unassigned_* filters instead of a status enum value.
+  // Handled in queryParams below — the key values are sentinels.
+  { key: "__unassigned_sales_agent__", label: "Unassigned (no sales rep)" },
   { key: "__unassigned_dispatcher__", label: "Unassigned (no dispatcher)" },
 ];
 
@@ -136,17 +137,20 @@ export default function TruckersPage() {
   const [bulkSalesValue, setBulkSalesValue] = useState<string>("");        // "" don't change, "__unassign__" clear, uuid assign
   const [bulkDispatcherValue, setBulkDispatcherValue] = useState<string>("");
 
-  // The Unassigned tab uses a separate query filter, not status.
-  const isUnassignedTab = tab === "__unassigned_dispatcher__";
+  // The Unassigned tabs use separate query filters instead of a status enum value.
+  const isUnassignedDispatcherTab = tab === "__unassigned_dispatcher__";
+  const isUnassignedSalesTab = tab === "__unassigned_sales_agent__";
+  const isSpecialTab = isUnassignedDispatcherTab || isUnassignedSalesTab;
   const queryParams: Record<string, string | number | boolean> = {
-    status: isUnassignedTab ? "" : tab,
+    status: isSpecialTab ? "" : tab,
     search,
     page,
     limit: pageSize,
   };
-  if (isUnassignedTab) queryParams.unassigned_dispatcher = true;
+  if (isUnassignedDispatcherTab) queryParams.unassigned_dispatcher = true;
   if (batchId) queryParams.batch = batchId;
-  if (filterSalesAgentId === "__unassigned__") {
+  // Sales-agent scope: tab wins over the dropdown when the tab is active.
+  if (isUnassignedSalesTab || filterSalesAgentId === "__unassigned__") {
     queryParams.unassigned_sales_agent = true;
   } else if (filterSalesAgentId) {
     queryParams.assigned_sales_agent_to = filterSalesAgentId;
@@ -530,7 +534,7 @@ export default function TruckersPage() {
                 onChange={(e) => { setFilterSalesAgentId(e.target.value); setPage(1); setSelectedIds(new Set()); }}
                 options={[
                   { value: "", label: "All sales reps" },
-                  { value: "__unassigned__", label: "Unassigned" },
+                  { value: "__unassigned__", label: "Unassigned (no sales rep)" },
                   ...salesAgentOptions,
                 ]}
               />
