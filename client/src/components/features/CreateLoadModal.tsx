@@ -18,6 +18,7 @@ const EQUIPMENT_OPTIONS = [
   { value: "power_only", label: "Power only" },
   { value: "hotshot", label: "Hotshot" },
   { value: "cargo_van", label: "Cargo Van" },
+  { value: "sprinter_van", label: "Sprinter Van" },
 ];
 
 const TRAILER_LENGTH_OPTIONS = [
