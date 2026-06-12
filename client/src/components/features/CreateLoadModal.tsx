@@ -17,12 +17,15 @@ const EQUIPMENT_OPTIONS = [
   { value: "step_deck", label: "Step deck" },
   { value: "power_only", label: "Power only" },
   { value: "hotshot", label: "Hotshot" },
+  { value: "cargo_van", label: "Cargo Van" },
 ];
 
 const TRAILER_LENGTH_OPTIONS = [
   { value: "", label: "—" },
   { value: "53", label: "53 ft" },
   { value: "48", label: "48 ft" },
+  { value: "26", label: "26 ft" },
+  { value: "16", label: "16 ft" },
 ];
 
 const LOAD_TYPE_OPTIONS = [
