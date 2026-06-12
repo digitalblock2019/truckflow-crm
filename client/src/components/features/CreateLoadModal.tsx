@@ -286,7 +286,7 @@ export default function CreateLoadModal({ open, onClose }: Props) {
   const showError = submitted && missing.length > 0;
 
   return (
-    <Modal open={open} onClose={handleClose} title="Create New Load" width="760px">
+    <Modal open={open} onClose={handleClose} title="Create New Load" width="760px" closeOnOverlay={false}>
       <div className="max-h-[68vh] overflow-y-auto pr-1">
         {/* 1. People & Broker */}
         <FormSection title="People & Broker">

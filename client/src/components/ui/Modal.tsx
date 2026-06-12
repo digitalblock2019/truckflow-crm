@@ -8,12 +8,17 @@ export default function Modal({
   title,
   children,
   width = "480px",
+  closeOnOverlay = true,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: React.ReactNode;
   width?: string;
+  // When false, clicking the dimmed background no longer closes the modal —
+  // only the X button (or an in-modal Cancel) will. Use for forms that
+  // would lose unsaved input on an accidental backdrop click.
+  closeOnOverlay?: boolean;
 }) {
   const overlayRef = useRef<HTMLDivElement>(null);
 
@@ -34,7 +39,9 @@ export default function Modal({
     <div
       ref={overlayRef}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-      onClick={(e) => e.target === overlayRef.current && onClose()}
+      onClick={(e) => {
+        if (closeOnOverlay && e.target === overlayRef.current) onClose();
+      }}
     >
       <div
         className="bg-white rounded-lg shadow-xl max-h-[90vh] flex flex-col"
