@@ -19,14 +19,17 @@ const EQUIPMENT_OPTIONS = [
   { value: "hotshot", label: "Hotshot" },
   { value: "cargo_van", label: "Cargo Van" },
   { value: "sprinter_van", label: "Sprinter Van" },
+  { value: "box_truck", label: "Box Truck" },
 ];
 
 const TRAILER_LENGTH_OPTIONS = [
   { value: "", label: "—" },
-  { value: "53", label: "53 ft" },
-  { value: "48", label: "48 ft" },
-  { value: "26", label: "26 ft" },
+  { value: "9", label: "9 ft" },
+  { value: "12", label: "12 ft" },
   { value: "16", label: "16 ft" },
+  { value: "26", label: "26 ft" },
+  { value: "48", label: "48 ft" },
+  { value: "53", label: "53 ft" },
 ];
 
 const LOAD_TYPE_OPTIONS = [
