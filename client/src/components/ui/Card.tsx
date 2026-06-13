@@ -12,19 +12,26 @@ export default function Card({
   );
 }
 
+import InfoTip from "./InfoTip";
+
 export function CardHeader({
   title,
   subtitle,
   action,
+  tooltip,
 }: {
   title: string;
   subtitle?: string;
   action?: React.ReactNode;
+  tooltip?: string;
 }) {
   return (
     <div className="flex items-center justify-between mb-4">
       <div>
-        <h3 className="text-sm font-semibold text-navy">{title}</h3>
+        <h3 className="text-sm font-semibold text-navy">
+          {title}
+          {tooltip && <InfoTip text={tooltip} />}
+        </h3>
         {subtitle && <p className="text-[11px] text-txt-light mt-0.5">{subtitle}</p>}
       </div>
       {action && <div>{action}</div>}
