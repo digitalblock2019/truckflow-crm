@@ -3,8 +3,41 @@
 import Topbar from "@/components/layout/Topbar";
 import Card, { CardHeader } from "@/components/ui/Card";
 import StatCard from "@/components/ui/StatCard";
-import { useDashboard, useTruckerActivityToday } from "@/lib/hooks";
+import { useState } from "react";
+import { useDashboard, useTruckerActivity } from "@/lib/hooks";
 import { initials, employeeTypeLabel } from "@/lib/utils";
+import Select from "@/components/ui/Select";
+import Button from "@/components/ui/Button";
+
+type Period = "day" | "week" | "month";
+
+function todayIso() {
+  const d = new Date();
+  return d.toISOString().slice(0, 10);
+}
+
+function stepDate(period: Period, date: string, delta: number): string {
+  const d = new Date(date + "T00:00:00Z");
+  if (period === "day") d.setUTCDate(d.getUTCDate() + delta);
+  else if (period === "week") d.setUTCDate(d.getUTCDate() + 7 * delta);
+  else d.setUTCMonth(d.getUTCMonth() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+function periodLabel(period: Period, date: string): string {
+  const d = new Date(date + "T00:00:00Z");
+  if (period === "day") {
+    return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+  }
+  if (period === "month") {
+    return d.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+  }
+  // week — start (Monday) of the ISO week
+  const day = d.getUTCDay() || 7;
+  const monday = new Date(d);
+  monday.setUTCDate(monday.getUTCDate() - (day - 1));
+  return `Week of ${monday.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}`;
+}
 
 function fmt(cents: number): string {
   return "$" + (cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -24,7 +57,9 @@ function StatusRow({ label, count, color }: { label: string; count: number; colo
 
 export default function DashboardPage() {
   const { data, isLoading } = useDashboard();
-  const { data: activity } = useTruckerActivityToday();
+  const [period, setPeriod] = useState<Period>("day");
+  const [date, setDate] = useState<string>(todayIso);
+  const { data: activity } = useTruckerActivity(period, date);
 
   if (isLoading || !data) {
     return (
@@ -54,15 +89,35 @@ export default function DashboardPage() {
           <StatCard label="Outstanding Invoices" value={fmt(invoices.total_outstanding_cents)} />
         </div>
 
-        {/* Today's Activity — auto-refreshes every 30s */}
+        {/* Trucker Activity — selectable period, auto-refreshes every 30s */}
         <Card>
-          <CardHeader title="Today's Activity" subtitle="Trucker updates by you and your team" />
+          <CardHeader title="Trucker Activity" subtitle={periodLabel(period, date)} />
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <Select
+              value={period}
+              onChange={(e) => setPeriod(e.target.value as Period)}
+              options={[
+                { value: "day", label: "Day" },
+                { value: "week", label: "Week" },
+                { value: "month", label: "Month" },
+              ]}
+            />
+            <Button size="sm" variant="secondary" onClick={() => setDate(stepDate(period, date, -1))}>&lsaquo;</Button>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="px-2.5 py-1 border border-border rounded text-xs"
+            />
+            <Button size="sm" variant="secondary" onClick={() => setDate(stepDate(period, date, 1))}>&rsaquo;</Button>
+            <Button size="sm" variant="secondary" onClick={() => setDate(todayIso())}>Today</Button>
+          </div>
           <div className="flex items-baseline gap-3">
-            <span className="text-3xl font-bold text-navy font-mono">{activity?.my_today?.total ?? 0}</span>
-            <span className="text-xs text-txt-light">trucker touches by you today</span>
+            <span className="text-3xl font-bold text-navy font-mono">{activity?.me?.total ?? 0}</span>
+            <span className="text-xs text-txt-light">trucker touches by you</span>
           </div>
           <div className="text-[11px] text-txt-light mt-1 font-mono">
-            {activity?.my_today?.calls ?? 0} calls · {activity?.my_today?.sms ?? 0} SMS · {activity?.my_today?.interested ?? 0} interested
+            {activity?.me?.calls ?? 0} calls · {activity?.me?.sms ?? 0} SMS · {activity?.me?.interested ?? 0} interested
           </div>
           {activity?.team && activity.team.length > 0 && (
             <div className="mt-4 pt-3 border-t border-border">
@@ -80,13 +135,12 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     <div className="flex items-baseline gap-1.5">
-                      <span className="text-2xl font-bold text-navy font-mono">{t.today_total}</span>
-                      <span className="text-[10px] text-txt-light">today</span>
+                      <span className="text-2xl font-bold text-navy font-mono">{t.total}</span>
+                      <span className="text-[10px] text-txt-light">touches</span>
                     </div>
                     <div className="text-[10px] text-txt-light mt-0.5 font-mono">
-                      {t.today_calls} calls · {t.today_sms} SMS · {t.today_interested} interested
+                      {t.calls} calls · {t.sms} SMS · {t.interested} interested
                     </div>
-                    <div className="text-[10px] text-txt-light mt-0.5 font-mono">{t.last_7_days} in last 7 days</div>
                   </div>
                 ))}
               </div>

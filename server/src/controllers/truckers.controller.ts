@@ -52,8 +52,13 @@ export class TruckersController {
     res.json(result);
   }
 
-  async todayActivity(req: Request, res: Response) {
-    const result = await svc.getTodayActivity(req.user!.id, req.user!.role);
+  async activity(req: Request, res: Response) {
+    const period = (req.query.period as string) || 'day';
+    const date = (req.query.date as string) || new Date().toISOString().slice(0, 10);
+    if (!['day', 'week', 'month'].includes(period)) {
+      throw new AppError('period must be day|week|month', 400, 'VALIDATION_ERROR');
+    }
+    const result = await svc.getActivity(req.user!.id, req.user!.role, { period: period as 'day' | 'week' | 'month', date });
     res.json(result);
   }
 

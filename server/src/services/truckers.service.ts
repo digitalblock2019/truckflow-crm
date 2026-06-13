@@ -4,6 +4,30 @@ import { NotificationsService } from './notifications.service';
 
 const notifications = new NotificationsService();
 
+// Compute [start, end) bounds for a period+date selection. UTC-based so the
+// math doesn't drift across timezones — close enough until per-user TZ is added.
+function periodBounds(period: 'day' | 'week' | 'month', dateStr: string): { start: string; end: string } {
+  const d = new Date(dateStr + 'T00:00:00Z');
+  let start: Date;
+  let end: Date;
+  if (period === 'day') {
+    start = d;
+    end = new Date(d);
+    end.setUTCDate(end.getUTCDate() + 1);
+  } else if (period === 'week') {
+    // ISO week: Monday is day 1.
+    const day = d.getUTCDay() || 7;
+    start = new Date(d);
+    start.setUTCDate(start.getUTCDate() - (day - 1));
+    end = new Date(start);
+    end.setUTCDate(end.getUTCDate() + 7);
+  } else {
+    start = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+    end = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1));
+  }
+  return { start: start.toISOString(), end: end.toISOString() };
+}
+
 export class TruckersService {
   async list(filters: any) {
     const conditions: string[] = [];
@@ -402,12 +426,16 @@ export class TruckersService {
     return { message: 'Trucker deleted' };
   }
 
-  // Per-user trucker-activity counts for "what got done today" dashboard card.
-  // Returns a generic "total touches" number plus a breakdown of meaningful
-  // outreach moments (calls / sms / interested) derived from status_change
-  // audit rows whose new_value matches a trucker_status enum value.
-  async getTodayActivity(userId: string, role: string) {
+  // Per-user trucker-activity counts for the dashboard card. Accepts a
+  // period (day / week / month) and a date inside that period; computes the
+  // window in JS so the SQL stays straightforward.
+  async getActivity(
+    userId: string,
+    role: string,
+    opts: { period: 'day' | 'week' | 'month'; date: string },
+  ) {
     const isPrivileged = role === 'admin' || role === 'supervisor';
+    const { start, end } = periodBounds(opts.period, opts.date);
 
     const mine = await query(
       `SELECT
@@ -417,25 +445,22 @@ export class TruckersService {
          count(*) FILTER (WHERE action = 'status_change' AND new_value = 'interested')::int AS interested
        FROM audit_log
        WHERE user_id = $1 AND entity_type = 'trucker'
-         AND created_at >= CURRENT_DATE`,
-      [userId],
+         AND created_at >= $2 AND created_at < $3`,
+      [userId, start, end],
     );
     const m = mine.rows[0] || { total: 0, calls: 0, sms: 0, interested: 0 };
-    const my_today = { total: m.total, calls: m.calls, sms: m.sms, interested: m.interested };
+    const me = { total: m.total, calls: m.calls, sms: m.sms, interested: m.interested };
 
     if (!isPrivileged) {
-      return { my_today };
+      return { me };
     }
 
-    // Every active sales rep / dispatcher / dual-role user — LEFT JOIN their
-    // trucker activity so we still surface a card for people with zero activity.
     const team = await query(
       `SELECT u.id AS user_id, u.full_name, u.role,
-              COALESCE(td.total, 0)::int      AS today_total,
-              COALESCE(td.calls, 0)::int      AS today_calls,
-              COALESCE(td.sms, 0)::int        AS today_sms,
-              COALESCE(td.interested, 0)::int AS today_interested,
-              COALESCE(wk.total, 0)::int      AS last_7_days
+              COALESCE(td.total, 0)::int      AS total,
+              COALESCE(td.calls, 0)::int      AS calls,
+              COALESCE(td.sms, 0)::int        AS sms,
+              COALESCE(td.interested, 0)::int AS interested
          FROM users u
          LEFT JOIN (
            SELECT user_id,
@@ -444,20 +469,16 @@ export class TruckersService {
                   count(*) FILTER (WHERE action = 'status_change' AND new_value = 'sms_sent')::int  AS sms,
                   count(*) FILTER (WHERE action = 'status_change' AND new_value = 'interested')::int AS interested
              FROM audit_log
-            WHERE entity_type = 'trucker' AND created_at >= CURRENT_DATE
+            WHERE entity_type = 'trucker' AND created_at >= $1 AND created_at < $2
             GROUP BY user_id
          ) td ON td.user_id = u.id
-         LEFT JOIN (
-           SELECT user_id, count(*)::int AS total FROM audit_log
-            WHERE entity_type = 'trucker' AND created_at >= CURRENT_DATE - INTERVAL '7 days'
-            GROUP BY user_id
-         ) wk ON wk.user_id = u.id
         WHERE u.is_active = TRUE
           AND u.role IN ('sales_agent', 'dispatcher', 'sales_and_dispatcher')
-        ORDER BY today_total DESC, last_7_days DESC, u.full_name`,
+        ORDER BY total DESC, u.full_name`,
+      [start, end],
     );
 
-    return { my_today, team: team.rows };
+    return { me, team: team.rows };
   }
 
   // Reassign sales agent and/or dispatcher across a set of truckers in one
