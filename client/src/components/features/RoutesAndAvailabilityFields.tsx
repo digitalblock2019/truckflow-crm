@@ -44,6 +44,17 @@ const US_STATES = [
   "NM","NY","NC","ND","OH","OK","OR","PA","RI","SC",
   "SD","TN","TX","UT","VT","VA","WA","WV","WI","WY",
 ];
+const CA_PROVINCES = [
+  "AB","BC","MB","NB","NL","NS","NT","NU","ON","PE","QC","SK","YT",
+];
+// US states default; Canadian provinces appended after a disabled separator
+// in the lane state pickers so dispatchers can pick CA destinations.
+const stateSelectOptions = [
+  { value: "", label: "—" },
+  ...US_STATES.map((s) => ({ value: s, label: s })),
+  { value: "__ca_sep__", label: "── Canada ──", disabled: true },
+  ...CA_PROVINCES.map((p) => ({ value: p, label: p })),
+];
 
 type TruckerLike = {
   operation_type?: string | null;
@@ -161,7 +172,7 @@ export default function RoutesAndAvailabilityFields({ value, onChange, showHeadi
                   label={idx === 0 ? "ST" : undefined}
                   value={lane.origin_state}
                   onChange={(e) => updateLane(idx, "origin_state", e.target.value)}
-                  options={[{ value: "", label: "—" }, ...US_STATES.map((s) => ({ value: s, label: s }))]}
+                  options={stateSelectOptions}
                 />
                 <div className="text-txt-light text-center pb-2">→</div>
                 <Input
@@ -174,7 +185,7 @@ export default function RoutesAndAvailabilityFields({ value, onChange, showHeadi
                   label={idx === 0 ? "ST" : undefined}
                   value={lane.dest_state}
                   onChange={(e) => updateLane(idx, "dest_state", e.target.value)}
-                  options={[{ value: "", label: "—" }, ...US_STATES.map((s) => ({ value: s, label: s }))]}
+                  options={stateSelectOptions}
                 />
                 <button
                   type="button"
@@ -210,6 +221,23 @@ export default function RoutesAndAvailabilityFields({ value, onChange, showHeadi
             );
           })}
         </div>
+        <div className="text-[9px] font-mono text-txt-light/70 uppercase tracking-wide mt-3 mb-1.5">Canada</div>
+        <div className="flex flex-wrap gap-1.5">
+          {CA_PROVINCES.map((p) => {
+            const checked = value.operating_states.includes(p);
+            return (
+              <button
+                key={p}
+                type="button"
+                onClick={() => toggle("operating_states", p)}
+                className={`px-2 py-1 border rounded text-[11px] font-mono cursor-pointer transition-colors
+                  ${checked ? "border-blue bg-blue/10 text-blue font-semibold" : "border-border text-txt-mid hover:bg-surface-mid"}`}
+              >
+                {p}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="mb-4">
@@ -228,6 +256,23 @@ export default function RoutesAndAvailabilityFields({ value, onChange, showHeadi
                   ${checked ? "border-red bg-red/10 text-red font-semibold" : "border-border text-txt-mid hover:bg-surface-mid"}`}
               >
                 {s}
+              </button>
+            );
+          })}
+        </div>
+        <div className="text-[9px] font-mono text-txt-light/70 uppercase tracking-wide mt-3 mb-1.5">Canada</div>
+        <div className="flex flex-wrap gap-1.5">
+          {CA_PROVINCES.map((p) => {
+            const checked = value.avoid_states.includes(p);
+            return (
+              <button
+                key={p}
+                type="button"
+                onClick={() => toggle("avoid_states", p)}
+                className={`px-2 py-1 border rounded text-[11px] font-mono cursor-pointer transition-colors
+                  ${checked ? "border-red bg-red/10 text-red font-semibold" : "border-border text-txt-mid hover:bg-surface-mid"}`}
+              >
+                {p}
               </button>
             );
           })}
