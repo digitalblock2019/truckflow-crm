@@ -58,8 +58,11 @@ export default function DashboardPage() {
         <Card>
           <CardHeader title="Today's Activity" subtitle="Trucker updates by you and your team" />
           <div className="flex items-baseline gap-3">
-            <span className="text-3xl font-bold text-navy font-mono">{activity?.my_today ?? 0}</span>
-            <span className="text-xs text-txt-light">trucker updates by you today</span>
+            <span className="text-3xl font-bold text-navy font-mono">{activity?.my_today?.total ?? 0}</span>
+            <span className="text-xs text-txt-light">trucker touches by you today</span>
+          </div>
+          <div className="text-[11px] text-txt-light mt-1 font-mono">
+            {activity?.my_today?.calls ?? 0} calls · {activity?.my_today?.sms ?? 0} SMS · {activity?.my_today?.interested ?? 0} interested
           </div>
           {activity?.team && activity.team.length > 0 && (
             <div className="mt-4 pt-3 border-t border-border">
@@ -77,8 +80,11 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     <div className="flex items-baseline gap-1.5">
-                      <span className="text-2xl font-bold text-navy font-mono">{t.today}</span>
+                      <span className="text-2xl font-bold text-navy font-mono">{t.today_total}</span>
                       <span className="text-[10px] text-txt-light">today</span>
+                    </div>
+                    <div className="text-[10px] text-txt-light mt-0.5 font-mono">
+                      {t.today_calls} calls · {t.today_sms} SMS · {t.today_interested} interested
                     </div>
                     <div className="text-[10px] text-txt-light mt-0.5 font-mono">{t.last_7_days} in last 7 days</div>
                   </div>

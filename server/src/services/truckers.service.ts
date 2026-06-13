@@ -225,6 +225,19 @@ export class TruckersService {
         [id, old.status_system, old.status_custom_id, data.status_system, data.status_custom_id || null, userId]
       );
 
+      // Also write a status_change row to audit_log with new_value populated so
+      // the dashboard can break activity down (calls / sms / interested / etc.).
+      // Best-effort — never block the status change on the audit failing.
+      try {
+        await query(
+          `INSERT INTO audit_log (user_id, user_role, action, entity_type, entity_id, description, field_changed, old_value, new_value)
+           VALUES ($1, (SELECT role FROM users WHERE id=$1), 'status_change', 'trucker', $2, $3, 'status_system', $4, $5)`,
+          [userId, id, `Status: ${old.status_system ?? '—'} → ${data.status_system}`, old.status_system, data.status_system],
+        );
+      } catch (err: any) {
+        console.error('[trucker status_change audit] insert failed:', err?.message);
+      }
+
       if (!old.assigned_sales_agent_id && !old.assigned_agent_id && data.assigned_sales_agent_id === undefined) {
         const userEmployee = await query('SELECT id FROM employees WHERE crm_user_id = $1', [userId]);
         if (userEmployee.rows.length) {
@@ -390,19 +403,25 @@ export class TruckersService {
   }
 
   // Per-user trucker-activity counts for "what got done today" dashboard card.
-  // Counts every audit_log row against a trucker, since dispatchers do more
-  // than just status_change (updates, assignments, etc.) and the team wants
-  // a single "did anything happen" number.
+  // Returns a generic "total touches" number plus a breakdown of meaningful
+  // outreach moments (calls / sms / interested) derived from status_change
+  // audit rows whose new_value matches a trucker_status enum value.
   async getTodayActivity(userId: string, role: string) {
     const isPrivileged = role === 'admin' || role === 'supervisor';
 
     const mine = await query(
-      `SELECT count(*)::int AS c FROM audit_log
+      `SELECT
+         count(*)::int AS total,
+         count(*) FILTER (WHERE action = 'status_change' AND new_value = 'called')::int AS calls,
+         count(*) FILTER (WHERE action = 'status_change' AND new_value = 'sms_sent')::int AS sms,
+         count(*) FILTER (WHERE action = 'status_change' AND new_value = 'interested')::int AS interested
+       FROM audit_log
        WHERE user_id = $1 AND entity_type = 'trucker'
          AND created_at >= CURRENT_DATE`,
       [userId],
     );
-    const my_today = mine.rows[0]?.c ?? 0;
+    const m = mine.rows[0] || { total: 0, calls: 0, sms: 0, interested: 0 };
+    const my_today = { total: m.total, calls: m.calls, sms: m.sms, interested: m.interested };
 
     if (!isPrivileged) {
       return { my_today };
@@ -412,22 +431,30 @@ export class TruckersService {
     // trucker activity so we still surface a card for people with zero activity.
     const team = await query(
       `SELECT u.id AS user_id, u.full_name, u.role,
-              COALESCE(td.c, 0)::int AS today,
-              COALESCE(wk.c, 0)::int AS last_7_days
+              COALESCE(td.total, 0)::int      AS today_total,
+              COALESCE(td.calls, 0)::int      AS today_calls,
+              COALESCE(td.sms, 0)::int        AS today_sms,
+              COALESCE(td.interested, 0)::int AS today_interested,
+              COALESCE(wk.total, 0)::int      AS last_7_days
          FROM users u
          LEFT JOIN (
-           SELECT user_id, count(*)::int AS c FROM audit_log
+           SELECT user_id,
+                  count(*)::int AS total,
+                  count(*) FILTER (WHERE action = 'status_change' AND new_value = 'called')::int    AS calls,
+                  count(*) FILTER (WHERE action = 'status_change' AND new_value = 'sms_sent')::int  AS sms,
+                  count(*) FILTER (WHERE action = 'status_change' AND new_value = 'interested')::int AS interested
+             FROM audit_log
             WHERE entity_type = 'trucker' AND created_at >= CURRENT_DATE
             GROUP BY user_id
          ) td ON td.user_id = u.id
          LEFT JOIN (
-           SELECT user_id, count(*)::int AS c FROM audit_log
+           SELECT user_id, count(*)::int AS total FROM audit_log
             WHERE entity_type = 'trucker' AND created_at >= CURRENT_DATE - INTERVAL '7 days'
             GROUP BY user_id
          ) wk ON wk.user_id = u.id
         WHERE u.is_active = TRUE
           AND u.role IN ('sales_agent', 'dispatcher', 'sales_and_dispatcher')
-        ORDER BY today DESC, last_7_days DESC, u.full_name`,
+        ORDER BY today_total DESC, last_7_days DESC, u.full_name`,
     );
 
     return { my_today, team: team.rows };
