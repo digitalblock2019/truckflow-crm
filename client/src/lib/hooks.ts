@@ -142,26 +142,27 @@ export function useBulkDeleteTruckers() {
   });
 }
 
-export interface TodayActivity {
-  my_today: { total: number; calls: number; sms: number; interested: number };
+export interface Activity {
+  me: { total: number; calls: number; sms: number; interested: number };
   team?: Array<{
     user_id: string;
     full_name: string;
     role: string;
-    today_total: number;
-    today_calls: number;
-    today_sms: number;
-    today_interested: number;
-    last_7_days: number;
+    total: number;
+    calls: number;
+    sms: number;
+    interested: number;
   }>;
 }
 
-// Daily progress card on the dashboard — how many trucker updates the
-// current user (and, for admin/supervisor, each teammate) did today.
-export function useTruckerActivityToday() {
+// Trucker-activity card with selectable period and date. Period day/week/month;
+// date is any YYYY-MM-DD inside the desired window. The backend computes the
+// [start, end) window so the frontend just hands over the user's pick.
+export function useTruckerActivity(period: "day" | "week" | "month", date: string) {
+  const qs = new URLSearchParams({ period, date }).toString();
   return useQuery({
-    queryKey: ["trucker-activity-today"],
-    queryFn: () => apiFetch<TodayActivity>("/api/truckers/activity/today"),
+    queryKey: ["trucker-activity", period, date],
+    queryFn: () => apiFetch<Activity>(`/api/truckers/activity?${qs}`),
     refetchInterval: 30_000,
   });
 }
