@@ -43,7 +43,17 @@ const US_STATES = [
   "KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY",
   "NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY",
 ];
-const stateOptions = [{ value: "", label: "ST" }, ...US_STATES.map((s) => ({ value: s, label: s }))];
+const CA_PROVINCES = [
+  "AB","BC","MB","NB","NL","NS","NT","NU","ON","PE","QC","SK","YT",
+];
+// US states default; Canadian provinces appended after a disabled separator
+// so dispatchers can still pick a CA destination when a load runs north.
+const stateOptions = [
+  { value: "", label: "ST" },
+  ...US_STATES.map((s) => ({ value: s, label: s })),
+  { value: "__ca_sep__", label: "── Canada ──", disabled: true },
+  ...CA_PROVINCES.map((p) => ({ value: p, label: p })),
+];
 
 const emptyForm = {
   // People & Broker
