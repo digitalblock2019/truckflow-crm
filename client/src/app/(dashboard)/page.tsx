@@ -81,17 +81,38 @@ export default function DashboardPage() {
         {/* Row 1: Key Stats. Net Revenue is company-wide — only privileged
             users get a non-null `revenue` from the API. */}
         <div className={`grid ${revenue ? "grid-cols-4" : "grid-cols-3"} gap-4`}>
-          <StatCard label="Total Loads" value={loads.total} />
+          <StatCard
+            label="Total Loads"
+            value={loads.total}
+            tooltip="Every load ever created across every status — Pending, Dispatched, In Transit, Delivered, and Payment Received. Cancelled loads excluded."
+          />
           {revenue && (
-            <StatCard label="Net Revenue" value={fmt(revenue.total_net_cents)} delta={`${fmt(revenue.this_month_gross_cents)} gross this month`} />
+            <StatCard
+              label="Net Revenue"
+              value={fmt(revenue.total_net_cents)}
+              delta={`${fmt(revenue.this_month_gross_cents)} gross this month`}
+              tooltip="What the company keeps across all loads: company commission minus the sales-agent and dispatcher payouts on each load. The line below shows gross loads booked this calendar month."
+            />
           )}
-          <StatCard label="Active Truckers" value={truckers.total} />
-          <StatCard label="Outstanding Invoices" value={fmt(invoices.total_outstanding_cents)} />
+          <StatCard
+            label="Active Truckers"
+            value={truckers.total}
+            tooltip="Total truckers in the system — both in the onboarding funnel and fully onboarded. Doesn't filter out inactive or stale records."
+          />
+          <StatCard
+            label="Outstanding Invoices"
+            value={fmt(invoices.total_outstanding_cents)}
+            tooltip="Total amount on invoices currently Sent or Overdue — money the company is waiting to collect."
+          />
         </div>
 
         {/* Trucker Activity — selectable period, auto-refreshes every 30s */}
         <Card>
-          <CardHeader title="Trucker Activity" subtitle={periodLabel(period, date)} />
+          <CardHeader
+            title="Trucker Activity"
+            subtitle={periodLabel(period, date)}
+            tooltip="Counts the trucker status changes you (and, for admins, each rep) recorded in the selected period. Calls = status flipped to 'called'. SMS = 'sms_sent'. Interested = 'interested'. The big number is the total of all trucker touches, not just outreach. Use the controls above to jump to any day, week, or month."
+          />
           <div className="flex flex-wrap items-center gap-2 mb-4">
             <Select
               value={period}
@@ -151,7 +172,11 @@ export default function DashboardPage() {
         {/* Row 2: Load Status + Commissions */}
         <div className="grid grid-cols-2 gap-4">
           <Card>
-            <CardHeader title="Load Status Breakdown" subtitle={`${loads.total} total loads`} />
+            <CardHeader
+              title="Load Status Breakdown"
+              subtitle={`${loads.total} total loads`}
+              tooltip="How many loads sit at each step of the delivery pipeline. Pending → Dispatched → In Transit → Delivered → Payment Received."
+            />
             <div className="divide-y divide-border">
               <StatusRow label="Pending" count={loads.pending} color="bg-yellow-400" />
               <StatusRow label="Dispatched" count={loads.dispatched} color="bg-blue-400" />
@@ -162,7 +187,11 @@ export default function DashboardPage() {
           </Card>
 
           <Card>
-            <CardHeader title="Commission Summary" subtitle="All-time totals" />
+            <CardHeader
+              title="Commission Summary"
+              subtitle="All-time totals"
+              tooltip="Sales-agent and dispatcher commissions across every load, by approval state. Pending = booked but not yet approved by admin. Approved = ready to pay out. Paid = the rep has been paid. Admins see the whole company; everyone else sees only their own."
+            />
             <div className="divide-y divide-border">
               <StatusRow label="Pending" count={Number((commissions.total_pending_cents / 100).toFixed(0))} color="bg-yellow-400" />
               <StatusRow label="Approved" count={Number((commissions.total_approved_cents / 100).toFixed(0))} color="bg-blue-400" />
@@ -182,7 +211,11 @@ export default function DashboardPage() {
         {/* Row 3: Invoices + Truckers + Employees */}
         <div className="grid grid-cols-2 gap-4">
           <Card>
-            <CardHeader title="Invoice Overview" subtitle={`${invoices.total} total invoices`} />
+            <CardHeader
+              title="Invoice Overview"
+              subtitle={`${invoices.total} total invoices`}
+              tooltip="Where every invoice sits in its lifecycle. Draft = saved but not sent. Sent = emailed to the recipient. Overdue = past the due date and not paid. Paid = settled."
+            />
             <div className="divide-y divide-border">
               <StatusRow label="Draft" count={invoices.draft} color="bg-gray-400" />
               <StatusRow label="Sent" count={invoices.sent} color="bg-blue-400" />
@@ -192,7 +225,11 @@ export default function DashboardPage() {
           </Card>
 
           <Card>
-            <CardHeader title="Trucker Pipeline" subtitle={`${truckers.total} total truckers`} />
+            <CardHeader
+              title="Trucker Pipeline"
+              subtitle={`${truckers.total} total truckers`}
+              tooltip="Onboarding = trucker has a status set and isn't fully onboarded yet (anywhere in the funnel from Called through Onboarded). Fully Onboarded = all required documents on file. Active Employees is your team headcount."
+            />
             <div className="divide-y divide-border">
               <StatusRow label="Onboarding" count={truckers.onboarding} color="bg-yellow-400" />
               <StatusRow label="Fully Onboarded" count={truckers.fully_onboarded} color="bg-green-400" />
