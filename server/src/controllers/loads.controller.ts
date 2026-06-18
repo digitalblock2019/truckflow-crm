@@ -35,6 +35,11 @@ export class LoadsController {
     res.status(201).json(result);
   }
 
+  async update(req: Request, res: Response) {
+    const result = await svc.update(req.params.id as string, req.body, req.user!.id);
+    res.json(result);
+  }
+
   async updateStatus(req: Request, res: Response) {
     const { status } = req.body;
     if (!status) throw new AppError('status required', 400, 'VALIDATION_ERROR');

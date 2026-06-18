@@ -225,6 +225,86 @@ export class LoadsService {
     return result.rows[0];
   }
 
+  // Operational-field edit. Locks fields that would cascade through the
+  // commission engine (trucker_id, gross/component amounts, commission
+  // percentages) and the status field (use updateStatus for that).
+  async update(id: string, data: any, userId: string) {
+    const existing = await query('SELECT * FROM load_orders WHERE id = $1', [id]);
+    if (!existing.rows.length) throw new AppError('Load not found', 404, 'NOT_FOUND');
+    const old = existing.rows[0];
+
+    const allowed = [
+      'broker_name', 'broker_mc_number', 'broker_load_number', 'bol_number',
+      'origin_city', 'origin_state', 'origin_zip',
+      'dest_city', 'dest_state', 'dest_zip',
+      'loaded_miles', 'deadhead_miles',
+      'pickup_at', 'delivery_at',
+      'equipment_type', 'trailer_length_ft', 'load_type',
+      'commodity', 'weight_lbs',
+      'is_hazmat', 'tarps_required', 'team_drivers', 'liftgate_required',
+      'notes',
+      'shipper_id', 'shipper_email_override',
+      'dispatcher_id', 'sales_agent_id',
+    ];
+
+    const fields: string[] = [];
+    const values: any[] = [];
+    let idx = 1;
+    for (const [key, value] of Object.entries(data)) {
+      if (allowed.includes(key)) {
+        fields.push(`${key} = $${idx++}`);
+        values.push(value);
+      }
+    }
+    if (!fields.length) {
+      throw new AppError('No editable fields provided', 400, 'VALIDATION_ERROR');
+    }
+
+    // Recompose the legacy flat load_origin / load_destination strings the
+    // list grid + detail modal display when any city/state changed.
+    const composeLocation = (city?: string, state?: string, zip?: string): string | null => {
+      const c = (city || '').trim();
+      const sz = [state, zip].map((x) => (x || '').trim()).filter(Boolean).join(' ');
+      if (c && sz) return `${c}, ${sz}`;
+      return (c || sz) || null;
+    };
+    const originChanged = ['origin_city', 'origin_state', 'origin_zip'].some((k) => k in data);
+    const destChanged = ['dest_city', 'dest_state', 'dest_zip'].some((k) => k in data);
+    if (originChanged) {
+      fields.push(`load_origin = $${idx++}`);
+      values.push(composeLocation(
+        data.origin_city ?? old.origin_city,
+        data.origin_state ?? old.origin_state,
+        data.origin_zip ?? old.origin_zip,
+      ));
+    }
+    if (destChanged) {
+      fields.push(`load_destination = $${idx++}`);
+      values.push(composeLocation(
+        data.dest_city ?? old.dest_city,
+        data.dest_state ?? old.dest_state,
+        data.dest_zip ?? old.dest_zip,
+      ));
+    }
+
+    fields.push('updated_at = NOW()');
+    values.push(id);
+    await query(`UPDATE load_orders SET ${fields.join(', ')} WHERE id = $${idx}`, values);
+
+    try {
+      await query(
+        `INSERT INTO audit_log (user_id, user_role, action, entity_type, entity_id, description)
+         VALUES ($1, (SELECT role FROM users WHERE id=$1), 'update', 'load_order', $2, $3)`,
+        [userId, id, `Updated load ${old.order_number || id}`],
+      );
+    } catch (err: any) {
+      console.error('[loads.update] audit failed:', err?.message);
+    }
+
+    const updated = await query('SELECT * FROM load_orders WHERE id = $1', [id]);
+    return updated.rows[0];
+  }
+
   async updateStatus(id: string, newStatus: string, userId: string) {
     const load = await query('SELECT * FROM load_orders WHERE id = $1', [id]);
     if (!load.rows.length) throw new AppError('Load not found', 404, 'NOT_FOUND');
