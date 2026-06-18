@@ -126,6 +126,7 @@ export default function TruckersPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(100);
   const [showCreate, setShowCreate] = useState(false);
+  const [createTruckerErr, setCreateTruckerErr] = useState<string | null>(null);
   const [selectedTrucker, setSelectedTrucker] = useState<Trucker | null>(null);
   const [newStatus, setNewStatus] = useState("");
   const [newSalesAgentId, setNewSalesAgentId] = useState("");
@@ -351,15 +352,18 @@ export default function TruckersPage() {
       max_payload_lbs: form.max_payload_lbs ? parseInt(form.max_payload_lbs) || null : null,
       ...serializeRoutes(form.routes),
     };
+    setCreateTruckerErr(null);
     createTrucker.mutate(payload as Partial<Trucker>, {
       onSuccess: () => {
         setShowCreate(false);
+        setCreateTruckerErr(null);
         setForm({
           mc_number: "", legal_name: "", phone: "", email: "", city: "", state: "",
           power_units: "", truck_types: [], truck_length_ft: "", truck_width_ft: "",
           truck_height_ft: "", max_payload_lbs: "", routes: emptyRoutes,
         });
       },
+      onError: (err) => setCreateTruckerErr(err instanceof Error ? err.message : "Could not create trucker"),
     });
   };
 
@@ -897,7 +901,7 @@ export default function TruckersPage() {
       </Modal>
 
       {/* Create Trucker Modal */}
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Add New Trucker" width="720px">
+      <Modal open={showCreate} onClose={() => { setShowCreate(false); setCreateTruckerErr(null); }} title="Add New Trucker" width="720px">
         <div className="max-h-[70vh] overflow-y-auto pr-1">
           <div className="grid grid-cols-2 gap-4">
             <Input
@@ -996,8 +1000,13 @@ export default function TruckersPage() {
             />
           </div>
         </div>
+        {createTruckerErr && (
+          <div className="mt-4 bg-red-50 border border-red-200 text-red-700 text-xs px-3 py-2 rounded">
+            {createTruckerErr}
+          </div>
+        )}
         <div className="flex justify-end gap-2 mt-5">
-          <Button variant="secondary" onClick={() => setShowCreate(false)}>Cancel</Button>
+          <Button variant="secondary" onClick={() => { setShowCreate(false); setCreateTruckerErr(null); }}>Cancel</Button>
           <Button onClick={handleCreate} disabled={createTrucker.isPending}>
             {createTrucker.isPending ? "Creating..." : "Create Trucker"}
           </Button>
