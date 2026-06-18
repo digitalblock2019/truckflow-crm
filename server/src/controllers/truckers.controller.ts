@@ -26,6 +26,7 @@ export class TruckersController {
 
   async create(req: Request, res: Response) {
     if (!req.body.mc_number || !req.body.legal_name) throw new AppError('MC number and legal name required', 400, 'VALIDATION_ERROR');
+    if (req.query.force === 'true') req.body.__force_duplicate_mc = true;
     const result = await svc.create(req.body, req.user!.id);
     res.status(201).json(result);
   }

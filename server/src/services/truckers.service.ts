@@ -113,9 +113,20 @@ export class TruckersService {
     if (data.dot_number) data.dot_number = String(data.dot_number).replace(/\D/g, '');
     if (!data.mc_number) throw new AppError('MC number must contain at least one digit', 400, 'VALIDATION_ERROR');
 
-    // Check duplicate MC#
-    const dup = await query('SELECT id FROM truckers WHERE mc_number = $1', [data.mc_number]);
-    if (dup.rows.length) throw new AppError('Duplicate MC number', 409, 'DUPLICATE');
+    // Soft duplicate-MC check — small carriers (a husband-wife team, etc.)
+    // legitimately share one MC across multiple driver records, so the caller
+    // can pass ?force=true to bypass after confirming with the user.
+    if (!data.__force_duplicate_mc) {
+      const dup = await query('SELECT id, legal_name FROM truckers WHERE mc_number = $1 LIMIT 1', [data.mc_number]);
+      if (dup.rows.length) {
+        throw new AppError(
+          `MC ${data.mc_number} already exists for "${dup.rows[0].legal_name}". Add this as a separate trucker?`,
+          409,
+          'DUPLICATE_MC',
+        );
+      }
+    }
+    delete data.__force_duplicate_mc;
 
     const result = await query(
       `INSERT INTO truckers (mc_number, dot_number, legal_name, dba_name, owner_driver_name, phone, email,

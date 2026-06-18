@@ -336,7 +336,16 @@ export default function TruckersPage() {
     { key: "dispatcher_name", header: "Dispatcher", render: (r) => <span className="text-xs">{r.dispatcher_name || "—"}</span> },
   ];
 
-  const handleCreate = () => {
+  const handleCreate = (force = false) => {
+    // Inline validation — surface what's missing before sending to the server.
+    const missing: string[] = [];
+    if (!form.mc_number.trim()) missing.push("MC Number");
+    if (!form.legal_name.trim()) missing.push("Legal Name");
+    if (missing.length) {
+      setCreateTruckerErr(`Please fill in: ${missing.join(", ")}.`);
+      return;
+    }
+
     const payload: Record<string, unknown> = {
       mc_number: form.mc_number,
       legal_name: form.legal_name,
@@ -353,7 +362,7 @@ export default function TruckersPage() {
       ...serializeRoutes(form.routes),
     };
     setCreateTruckerErr(null);
-    createTrucker.mutate(payload as Partial<Trucker>, {
+    createTrucker.mutate({ data: payload as Partial<Trucker>, force }, {
       onSuccess: () => {
         setShowCreate(false);
         setCreateTruckerErr(null);
@@ -363,7 +372,21 @@ export default function TruckersPage() {
           truck_height_ft: "", max_payload_lbs: "", routes: emptyRoutes,
         });
       },
-      onError: (err) => setCreateTruckerErr(err instanceof Error ? err.message : "Could not create trucker"),
+      onError: (err) => {
+        const apiErr = err as { code?: string; message?: string };
+        // Duplicate MC# is allowed — prompt the user to confirm and retry with force=true.
+        if (apiErr.code === "DUPLICATE_MC") {
+          const msg = apiErr.message ?? "An existing trucker already uses this MC number. Add anyway as a separate record?";
+          if (confirm(msg)) {
+            handleCreate(true);
+            return;
+          }
+          // User declined — show the message so they know what happened.
+          setCreateTruckerErr(msg);
+          return;
+        }
+        setCreateTruckerErr(apiErr.message || "Could not create trucker");
+      },
     });
   };
 
@@ -1007,7 +1030,7 @@ export default function TruckersPage() {
         )}
         <div className="flex justify-end gap-2 mt-5">
           <Button variant="secondary" onClick={() => { setShowCreate(false); setCreateTruckerErr(null); }}>Cancel</Button>
-          <Button onClick={handleCreate} disabled={createTrucker.isPending}>
+          <Button onClick={() => handleCreate(false)} disabled={createTrucker.isPending}>
             {createTrucker.isPending ? "Creating..." : "Create Trucker"}
           </Button>
         </div>
