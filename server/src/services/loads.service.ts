@@ -51,10 +51,11 @@ export class LoadsService {
   async listInvoiceable() {
     const result = await query(
       `SELECT lo.id, lo.order_number, lo.company_gross_cents,
+              lo.gross_load_amount_cents, lo.company_commission_pct,
               lo.origin_city, lo.origin_state, lo.dest_city, lo.dest_state,
               lo.load_origin, lo.load_destination,
-              lo.weight_lbs, lo.loaded_miles,
-              t.legal_name AS trucker_name, t.email AS trucker_email
+              lo.weight_lbs, lo.loaded_miles, lo.delivery_at,
+              t.mc_number, t.legal_name AS trucker_name, t.email AS trucker_email
        FROM load_orders lo
        LEFT JOIN truckers t ON t.id = lo.trucker_id
        WHERE lo.load_status = 'delivered'
