@@ -403,6 +403,15 @@ export function useDeleteLoad() {
   });
 }
 
+export function useUpdateLoad() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string; [k: string]: unknown }) =>
+      apiFetch(`/api/loads/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["loads"] }); },
+  });
+}
+
 export interface InvoiceableLoad {
   id: string;
   order_number: string;
