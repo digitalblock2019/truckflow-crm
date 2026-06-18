@@ -385,17 +385,20 @@ export default function CreateLoadModal({ open, onClose }: Props) {
 
         {/* 5. Pay */}
         <FormSection title="Pay">
+          <p className="text-[11px] text-txt-light mb-3 -mt-1">
+            If the rate confirmation only shows one total amount, type it in the Base Rate field and leave Fuel Surcharge / Accessorials at 0. Load Total below sums all three.
+          </p>
           <div className="grid grid-cols-2 gap-3 mb-3">
             <Input
-              label="Linehaul ($)"
-              tooltip="Base freight charge — the core negotiated rate, before fuel and extras."
+              label="Base Rate / Linehaul ($)"
+              tooltip="The trucker's base haul charge from the broker, before fuel surcharge or accessorials. Called 'linehaul' on most rate confirmations. If the broker only quotes a single total, type it here and leave the next two fields at 0."
               type="number" min="0" step="0.01"
               value={form.linehaul}
               onChange={(e) => setLinehaul(e.target.value)}
             />
             <Input
               label="Rate / Mile ($)"
-              tooltip="Linehaul divided by loaded miles. Enter this OR linehaul — the other fills in automatically (needs loaded miles)."
+              tooltip="Base Rate divided by loaded miles. Enter this OR the Base Rate — the other auto-fills (needs loaded miles)."
               type="number" min="0" step="0.01"
               value={form.rate_per_mile}
               onChange={(e) => setRatePerMile(e.target.value)}
