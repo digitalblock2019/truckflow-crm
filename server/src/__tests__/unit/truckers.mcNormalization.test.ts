@@ -76,16 +76,58 @@ describe('TruckersService.create — MC#/DOT# digits-only normalization', () => 
   });
 
   it('cleaned MC# is used for duplicate-check (so MC-1234567 collides with 1234567)', async () => {
-    mockQuery.mockResolvedValueOnce(ok([{ id: 'existing-trucker' }])); // dup found
+    mockQuery.mockResolvedValueOnce(ok([{ id: 'existing-trucker', legal_name: 'Existing Co' }]));
 
     await expect(svc.create({ mc_number: 'MC-1234567', legal_name: 'Dupe' }, 'user-1'))
       .rejects.toMatchObject({
         statusCode: 409,
-        key: 'DUPLICATE',
+        key: 'DUPLICATE_MC',
       });
 
     // Confirm the dup check actually used the cleaned value
     expect(mockQuery.mock.calls[0][1]).toEqual(['1234567']);
+  });
+
+  it('DUPLICATE_MC error message includes the existing trucker\'s legal name', async () => {
+    mockQuery.mockResolvedValueOnce(ok([{ id: 'existing-trucker', legal_name: 'Smith & Sons LLC' }]));
+
+    await expect(svc.create({ mc_number: '1234567', legal_name: 'Dupe' }, 'user-1'))
+      .rejects.toMatchObject({
+        statusCode: 409,
+        key: 'DUPLICATE_MC',
+        message: expect.stringContaining('Smith & Sons LLC'),
+      });
+  });
+
+  it('bypasses the duplicate-MC check when __force_duplicate_mc is true (insert is attempted)', async () => {
+    // No dup-check SELECT happens at all — the very first query should be the INSERT.
+    // We resolve INSERT with a returned trucker row.
+    mockQuery.mockResolvedValueOnce(ok([{ id: 'tr-new', mc_number: '1234567', legal_name: 'Bob Smith' }]));
+
+    const result = await svc.create(
+      { mc_number: '1234567', legal_name: 'Bob Smith', __force_duplicate_mc: true },
+      'user-1',
+    );
+
+    expect(result).toMatchObject({ id: 'tr-new', mc_number: '1234567' });
+
+    // The first call must be the INSERT, not a SELECT-for-dup-check.
+    const firstSql = String(mockQuery.mock.calls[0][0]);
+    expect(firstSql).toMatch(/INSERT INTO truckers/i);
+    expect(firstSql).not.toMatch(/SELECT id, legal_name FROM truckers WHERE mc_number/i);
+  });
+
+  it('strips __force_duplicate_mc so it never reaches the INSERT payload', async () => {
+    mockQuery.mockResolvedValueOnce(ok([{ id: 'tr-new' }]));
+
+    await svc.create(
+      { mc_number: '1234567', legal_name: 'Bob Smith', __force_duplicate_mc: true },
+      'user-1',
+    );
+
+    // The INSERT params should NOT contain the marker — only real trucker columns.
+    const insertParams = mockQuery.mock.calls[0][1] ?? [];
+    expect(insertParams.some((p: unknown) => p === true)).toBe(false);
   });
 });
 
