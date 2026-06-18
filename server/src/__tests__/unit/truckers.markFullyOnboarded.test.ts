@@ -190,6 +190,7 @@ describe('TruckersService.update — fully_onboarded transition guard', () => {
     mockQuery
       .mockResolvedValueOnce(ok([TRUCKER_ROW({ status_system: 'imported' })])) // existing
       .mockResolvedValueOnce(ok([]))                                            // status_history INSERT
+      .mockResolvedValueOnce(ok([]))                                            // audit_log status_change INSERT
       .mockResolvedValueOnce(ok([]))                                            // employee lookup (auto-assign)
       .mockResolvedValueOnce(ok([]))                                            // UPDATE truckers
       .mockResolvedValueOnce(ok([{ id: 'tr-1' }]))                              // getById SELECT trucker
