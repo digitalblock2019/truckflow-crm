@@ -62,14 +62,33 @@ export default function InvoicesPage() {
   const { data: invoiceableData } = useInvoiceableLoads();
   const invoiceableLoads = invoiceableData ?? [];
 
-  const [form, setForm] = useState({
+  const [invoiceTab, setInvoiceTab] = useState<"trucking" | "other">("trucking");
+
+  const emptyForm = {
     load_order_id: "",
     recipient_email: "",
     recipient_name: "",
+    // Trucking-specific fields
+    mc_number: "",
+    pickup: "",
+    destination: "",
+    delivery_date: "",
+    total_load_amount: "",
+    loaded_miles: "",
+    dispatch_pct: "",
+    // Shared
     due_date: "",
     notes: "",
     line_items: [{ description: "", quantity: "1", unit_price: "" }],
-  });
+  };
+  const [form, setForm] = useState(emptyForm);
+
+  // Trucking computed values (live).
+  const truckingTotal = parseFloat(form.total_load_amount) || 0;
+  const truckingMiles = parseFloat(form.loaded_miles) || 0;
+  const truckingDispatchPct = parseFloat(form.dispatch_pct) || 0;
+  const perMileRate = truckingMiles > 0 ? truckingTotal / truckingMiles : 0;
+  const dispatchAmount = (truckingTotal * truckingDispatchPct) / 100;
 
   // Edit form state (for draft editing)
   const [editForm, setEditForm] = useState({
@@ -126,36 +145,66 @@ export default function InvoicesPage() {
   ];
 
   const handleCreate = () => {
-    const line_items = form.line_items
-      .filter((li) => li.description && li.unit_price)
-      .map((li) => ({
-        description: li.description,
-        quantity: parseInt(li.quantity) || 1,
-        unit_price_cents: Math.round(parseFloat(li.unit_price) * 100),
-      }));
-
-    createInvoice.mutate(
-      {
+    let payload: Record<string, unknown>;
+    if (invoiceTab === "trucking") {
+      // Trucking invoice composes a single line item (Dispatch Commission)
+      // and stuffs MC#, miles, total load, and per-mile rate into the Notes
+      // field so the recipient sees the freight context.
+      const descParts = [
+        `Dispatch service: ${form.pickup || "Origin"} → ${form.destination || "Destination"}`,
+        form.delivery_date ? `delivered ${form.delivery_date}` : null,
+      ].filter(Boolean);
+      const noteParts = [
+        form.mc_number ? `MC#: ${form.mc_number}` : null,
+        form.loaded_miles ? `Loaded miles: ${form.loaded_miles}` : null,
+        truckingTotal > 0 ? `Total load: $${truckingTotal.toFixed(2)}` : null,
+        perMileRate > 0 ? `Per mile rate: $${perMileRate.toFixed(2)}` : null,
+      ].filter(Boolean);
+      const combinedNotes = [noteParts.join("\n"), form.notes].filter(Boolean).join("\n\n");
+      payload = {
         load_order_id: form.load_order_id || undefined,
+        recipient_email: form.recipient_email,
+        recipient_name: form.recipient_name || undefined,
+        due_date: form.due_date,
+        notes: combinedNotes || undefined,
+        line_items: [
+          {
+            description: descParts.join(" — "),
+            quantity: 1,
+            unit_price_cents: Math.round(dispatchAmount * 100),
+          },
+        ],
+      };
+    } else {
+      // Other invoice: manual line items, no load linkage.
+      const line_items = form.line_items
+        .filter((li) => li.description && li.unit_price)
+        .map((li) => ({
+          description: li.description,
+          quantity: parseInt(li.quantity) || 1,
+          unit_price_cents: Math.round(parseFloat(li.unit_price) * 100),
+        }));
+      payload = {
         recipient_email: form.recipient_email,
         recipient_name: form.recipient_name || undefined,
         due_date: form.due_date,
         notes: form.notes || undefined,
         line_items,
+      };
+    }
+    createInvoice.mutate(payload as Parameters<typeof createInvoice.mutate>[0], {
+      onSuccess: (created: unknown) => {
+        const c = created as { id: string; invoice_number: string };
+        setShowCreate(false);
+        setForm(emptyForm);
+        setInvoiceTab("trucking");
+        setSendPrompt({ id: c.id, number: c.invoice_number });
       },
-      {
-        onSuccess: (created: any) => {
-          setShowCreate(false);
-          setForm({ load_order_id: "", recipient_email: "", recipient_name: "", due_date: "", notes: "", line_items: [{ description: "", quantity: "1", unit_price: "" }] });
-          // Show "Send now?" prompt
-          setSendPrompt({ id: created.id, number: created.invoice_number });
-        },
-      }
-    );
+    });
   };
 
-  // Picking a delivered load auto-fills the recipient (trucker) and a line item
-  // for the company commission. Every field stays editable afterwards.
+  // Picking a delivered load auto-fills every trucking field (recipient,
+  // route, miles, total load, dispatch %). Each field stays editable.
   const handlePickLoad = (loadId: string) => {
     if (!loadId) {
       setForm((f) => ({ ...f, load_order_id: "" }));
@@ -163,25 +212,27 @@ export default function InvoicesPage() {
     }
     const load = invoiceableLoads.find((l) => l.id === loadId);
     if (!load) return;
-    const origin =
-      [load.origin_city, load.origin_state].filter(Boolean).join(", ") || load.load_origin || "Origin";
-    const dest =
-      [load.dest_city, load.dest_state].filter(Boolean).join(", ") || load.load_destination || "Destination";
-    const parts = [`Dispatch service: ${origin} → ${dest}`];
-    if (load.weight_lbs) parts.push(`${load.weight_lbs.toLocaleString()} lbs`);
-    if (load.loaded_miles) parts.push(`${load.loaded_miles.toLocaleString()} mi`);
+    const pickup =
+      [load.origin_city, load.origin_state].filter(Boolean).join(", ") || load.load_origin || "";
+    const destination =
+      [load.dest_city, load.dest_state].filter(Boolean).join(", ") || load.load_destination || "";
+    const deliveryDate = load.delivery_at ? String(load.delivery_at).slice(0, 10) : "";
     setForm((f) => ({
       ...f,
       load_order_id: loadId,
       recipient_email: load.trucker_email || f.recipient_email,
       recipient_name: load.trucker_name || f.recipient_name,
-      line_items: [
-        {
-          description: parts.join(" · "),
-          quantity: "1",
-          unit_price: (load.company_gross_cents / 100).toFixed(2),
-        },
-      ],
+      mc_number: load.mc_number || f.mc_number,
+      pickup,
+      destination,
+      delivery_date: deliveryDate,
+      total_load_amount: load.gross_load_amount_cents
+        ? (load.gross_load_amount_cents / 100).toFixed(2)
+        : f.total_load_amount,
+      loaded_miles: load.loaded_miles != null ? String(load.loaded_miles) : f.loaded_miles,
+      dispatch_pct: load.company_commission_pct != null
+        ? (Number(load.company_commission_pct) * 100).toFixed(2)
+        : f.dispatch_pct,
     }));
   };
 
@@ -416,90 +467,103 @@ export default function InvoicesPage() {
       </Modal>
 
       {/* Create Invoice Modal */}
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Invoice" width="600px">
-        <div className="mb-4">
-          <Select
-            label="Link to Load (optional)"
-            value={form.load_order_id}
-            onChange={(e) => handlePickLoad(e.target.value)}
-            options={[
-              { value: "", label: "— Standalone invoice (no load) —" },
-              ...invoiceableLoads.map((l) => ({
-                value: l.id,
-                label: `${l.order_number} — ${l.trucker_name ?? "Unknown trucker"} · ${fmtCurrency(l.company_gross_cents)}`,
-              })),
-            ]}
-          />
-          {form.load_order_id && (
-            <p className="text-[10px] text-txt-light mt-1">
-              Recipient and line item auto-filled from the load. Edit any field as needed.
-            </p>
-          )}
-        </div>
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          <Input
-            label="Recipient Email"
-            type="email"
-            value={form.recipient_email}
-            onChange={(e) => setForm({ ...form, recipient_email: e.target.value })}
-            required
-          />
-          <Input
-            label="Recipient Name"
-            value={form.recipient_name}
-            onChange={(e) => setForm({ ...form, recipient_name: e.target.value })}
-          />
-        </div>
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          <Input
-            label="Due Date"
-            type="date"
-            value={form.due_date}
-            onChange={(e) => setForm({ ...form, due_date: e.target.value })}
-            required
-          />
-        </div>
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Invoice" width="640px">
+        <Tabs
+          tabs={[
+            { key: "trucking", label: "Trucking Invoice" },
+            { key: "other", label: "Other Invoice" },
+          ]}
+          active={invoiceTab}
+          onChange={(k) => setInvoiceTab(k as "trucking" | "other")}
+        />
 
-        <h4 className="text-[11px] font-semibold text-txt-mid font-mono uppercase tracking-wide mb-2">
-          Line Items
-        </h4>
-        {form.line_items.map((li, i) => (
-          <div key={i} className="grid grid-cols-[1fr_80px_100px_30px] gap-2 mb-2 items-end">
-            <Input
-              label={i === 0 ? "Description" : undefined}
-              value={li.description}
-              onChange={(e) => updateLineItem(i, "description", e.target.value)}
-            />
-            <Input
-              label={i === 0 ? "Qty" : undefined}
-              type="number"
-              value={li.quantity}
-              onChange={(e) => updateLineItem(i, "quantity", e.target.value)}
-            />
-            <Input
-              label={i === 0 ? "Price ($)" : undefined}
-              type="number"
-              value={li.unit_price}
-              onChange={(e) => updateLineItem(i, "unit_price", e.target.value)}
-            />
-            <button
-              onClick={() => {
-                const items = form.line_items.filter((_, idx) => idx !== i);
-                setForm({ ...form, line_items: items.length ? items : [{ description: "", quantity: "1", unit_price: "" }] });
-              }}
-              className="text-red hover:text-red/80 text-lg pb-1 cursor-pointer"
-            >
-              &times;
-            </button>
+        {invoiceTab === "trucking" ? (
+          <div className="mt-5">
+            <div className="mb-4">
+              <Select
+                label="Link to Load (optional, auto-fills below)"
+                value={form.load_order_id}
+                onChange={(e) => handlePickLoad(e.target.value)}
+                options={[
+                  { value: "", label: "— Manual entry (no load) —" },
+                  ...invoiceableLoads.map((l) => ({
+                    value: l.id,
+                    label: `${l.order_number} — ${l.trucker_name ?? "Unknown trucker"} · ${fmtCurrency(l.gross_load_amount_cents)}`,
+                  })),
+                ]}
+              />
+              {form.load_order_id && (
+                <p className="text-[10px] text-txt-light mt-1">
+                  All fields auto-filled from the load. Edit any as needed.
+                </p>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <Input label="Trucker / Company Name" value={form.recipient_name} onChange={(e) => setForm({ ...form, recipient_name: e.target.value })} />
+              <Input label="MC#" value={form.mc_number} onChange={(e) => setForm({ ...form, mc_number: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <Input label="Recipient Email" type="email" value={form.recipient_email} onChange={(e) => setForm({ ...form, recipient_email: e.target.value })} required />
+              <Input label="Due Date" type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} required />
+            </div>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <Input label="Pickup" value={form.pickup} onChange={(e) => setForm({ ...form, pickup: e.target.value })} placeholder="Tampa, FL" />
+              <Input label="Destination" value={form.destination} onChange={(e) => setForm({ ...form, destination: e.target.value })} placeholder="Atlanta, GA" />
+            </div>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <Input label="Delivery Date" type="date" value={form.delivery_date} onChange={(e) => setForm({ ...form, delivery_date: e.target.value })} />
+              <Input label="Total Load ($)" type="number" step="0.01" value={form.total_load_amount} onChange={(e) => setForm({ ...form, total_load_amount: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <Input label="Loaded Miles" type="number" value={form.loaded_miles} onChange={(e) => setForm({ ...form, loaded_miles: e.target.value })} />
+              <Input label="Per Mile Rate ($)" value={perMileRate > 0 ? perMileRate.toFixed(2) : ""} disabled readOnly />
+            </div>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <Input label="Dispatch %" type="number" step="0.01" value={form.dispatch_pct} onChange={(e) => setForm({ ...form, dispatch_pct: e.target.value })} placeholder="8" />
+              <Input label="Dispatch Commission ($)" value={dispatchAmount > 0 ? dispatchAmount.toFixed(2) : ""} disabled readOnly />
+            </div>
+            <Input label="Notes (optional)" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+            <p className="text-[10px] text-txt-light mt-2">
+              Invoice total = Dispatch Commission (Total Load × Dispatch %). MC#, miles, and per-mile rate are included as notes on the invoice.
+            </p>
           </div>
-        ))}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setForm({ ...form, line_items: [...form.line_items, { description: "", quantity: "1", unit_price: "" }] })}
-        >
-          + Add Line
-        </Button>
+        ) : (
+          <div className="mt-5">
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <Input label="Recipient Email" type="email" value={form.recipient_email} onChange={(e) => setForm({ ...form, recipient_email: e.target.value })} required />
+              <Input label="Recipient Name" value={form.recipient_name} onChange={(e) => setForm({ ...form, recipient_name: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <Input label="Due Date" type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} required />
+            </div>
+
+            <h4 className="text-[11px] font-semibold text-txt-mid font-mono uppercase tracking-wide mb-2">
+              Line Items
+            </h4>
+            {form.line_items.map((li, i) => (
+              <div key={i} className="grid grid-cols-[1fr_80px_100px_30px] gap-2 mb-2 items-end">
+                <Input label={i === 0 ? "Description" : undefined} value={li.description} onChange={(e) => updateLineItem(i, "description", e.target.value)} />
+                <Input label={i === 0 ? "Qty" : undefined} type="number" value={li.quantity} onChange={(e) => updateLineItem(i, "quantity", e.target.value)} />
+                <Input label={i === 0 ? "Price ($)" : undefined} type="number" value={li.unit_price} onChange={(e) => updateLineItem(i, "unit_price", e.target.value)} />
+                <button
+                  onClick={() => {
+                    const items = form.line_items.filter((_, idx) => idx !== i);
+                    setForm({ ...form, line_items: items.length ? items : [{ description: "", quantity: "1", unit_price: "" }] });
+                  }}
+                  className="text-red hover:text-red/80 text-lg pb-1 cursor-pointer"
+                >
+                  &times;
+                </button>
+              </div>
+            ))}
+            <Button variant="ghost" size="sm" onClick={() => setForm({ ...form, line_items: [...form.line_items, { description: "", quantity: "1", unit_price: "" }] })}>
+              + Add Line
+            </Button>
+            <div className="mt-4">
+              <Input label="Notes (optional)" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+            </div>
+          </div>
+        )}
 
         <div className="flex justify-end gap-2 mt-5">
           <Button variant="secondary" onClick={() => setShowCreate(false)}>Cancel</Button>

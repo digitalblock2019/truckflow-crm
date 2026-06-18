@@ -75,9 +75,29 @@ const TRUCK_KIND_OPTIONS = [
   { value: "dry_van", label: "Dry Van" },
   { value: "reefer", label: "Reefer" },
   { value: "flatbed", label: "Flatbed" },
+  { value: "step_deck", label: "Step deck" },
+  { value: "power_only", label: "Power only" },
+  { value: "hotshot", label: "Hotshot" },
+  { value: "cargo_van", label: "Cargo Van" },
+  { value: "sprinter_van", label: "Sprinter Van" },
   { value: "box_truck", label: "Box Truck" },
   { value: "tanker", label: "Tanker" },
   { value: "other", label: "Other" },
+];
+
+const US_STATES = [
+  "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS",
+  "KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY",
+  "NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY",
+];
+const CA_PROVINCES = [
+  "AB","BC","MB","NB","NL","NS","NT","NU","ON","PE","QC","SK","YT",
+];
+const STATE_PROVINCE_OPTIONS = [
+  { value: "", label: "Select..." },
+  ...US_STATES.map((s) => ({ value: s, label: s })),
+  { value: "__ca_sep__", label: "── Canada ──", disabled: true },
+  ...CA_PROVINCES.map((p) => ({ value: p, label: p })),
 ];
 
 const truckKindLabel = (value: string) =>
@@ -897,7 +917,7 @@ export default function TruckersPage() {
               label="State"
               value={form.state}
               onChange={(e) => setForm({ ...form, state: e.target.value })}
-              options={[{ value: "", label: "Select..." }, ...["CA", "TX", "FL", "NY", "IL", "PA", "OH", "GA", "NC", "MI"].map((s) => ({ value: s, label: s }))]}
+              options={STATE_PROVINCE_OPTIONS}
             />
             <Input
               label="Number of Trucks"

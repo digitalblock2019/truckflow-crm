@@ -407,6 +407,8 @@ export interface InvoiceableLoad {
   id: string;
   order_number: string;
   company_gross_cents: number;
+  gross_load_amount_cents: number;
+  company_commission_pct: string | number | null;
   origin_city: string | null;
   origin_state: string | null;
   dest_city: string | null;
@@ -415,6 +417,8 @@ export interface InvoiceableLoad {
   load_destination: string | null;
   weight_lbs: number | null;
   loaded_miles: number | null;
+  delivery_at: string | null;
+  mc_number: string | null;
   trucker_name: string | null;
   trucker_email: string | null;
 }

@@ -316,7 +316,11 @@ export default function CreateLoadModal({ open, onClose }: Props) {
               onChange={(e) => set("dispatcher_id", e.target.value)}
               options={[
                 { value: "", label: "Select dispatcher..." },
-                ...(dispatchersData?.data ?? []).map((d) => ({ value: d.id, label: d.full_name })),
+                // Defensive dedup by id — a duplicate employee row in the DB
+                // would otherwise show the same name twice in the dropdown.
+                ...(dispatchersData?.data ?? [])
+                  .filter((d, i, arr) => arr.findIndex((x) => x.id === d.id) === i)
+                  .map((d) => ({ value: d.id, label: d.full_name })),
               ]}
             />
             <Input
