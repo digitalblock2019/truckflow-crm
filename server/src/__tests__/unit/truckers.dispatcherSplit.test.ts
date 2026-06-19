@@ -127,11 +127,14 @@ describe('TruckersService.update — dispatcher-split notification de-dupe', () 
         assigned_agent_id: null,
       }]))
       .mockResolvedValueOnce(ok([]))                       // UPDATE
-      // notification path: lookup crm_user_id by employee id (called for the de-duped employee)
+      // ensureThreshold path (called once for the de-duped employee):
+      .mockResolvedValueOnce(ok([{ value: '3' }]))         //   SELECT system_settings default
+      .mockResolvedValueOnce(ok([]))                       //   INSERT threshold
+      // notification path: lookup crm_user_id by employee id (de-duped):
       .mockResolvedValueOnce(ok([{ crm_user_id: 'user-X' }]))
       // getById final SELECT
       .mockResolvedValueOnce(ok([{ id: 'tr-1' }]))
-      .mockResolvedValueOnce(ok([]));                      // commission threshold
+      .mockResolvedValueOnce(ok([]));                      // commission threshold getById
 
     await svc.update('tr-1', {
       assigned_sales_agent_id: 'employee-dual',

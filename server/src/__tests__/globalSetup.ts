@@ -31,21 +31,27 @@ export const TEST_USERS = {
   },
 };
 
-async function waitForDb(maxAttempts = 30, intervalMs = 500): Promise<void> {
+// Try to reach the DB quickly; return true if up, false otherwise. We don't
+// throw — unit-only runs (which mock the DB) should still succeed without a
+// container running. Integration tests will fail individually if the DB is
+// down, which is the right behavior (loud, but not blocking unit work).
+async function dbIsUp(maxAttempts = 10, intervalMs = 300): Promise<boolean> {
   for (let i = 0; i < maxAttempts; i++) {
     try {
       await query('SELECT 1');
-      return;
-    } catch (err) {
-      if (i === maxAttempts - 1) {
-        throw new Error(
-          `Test database not reachable at ${process.env.DATABASE_URL}. ` +
-          `Start it with: npm run test:db:up`
-        );
-      }
+      return true;
+    } catch {
+      if (i === maxAttempts - 1) return false;
       await new Promise((resolve) => setTimeout(resolve, intervalMs));
     }
   }
+  return false;
+}
+
+function isUnitOnlyRun(): boolean {
+  // Match `--testPathPatterns=unit`, `--testPathPattern=unit`, or any arg
+  // that contains the unit pattern. Jest renamed the flag mid-versions.
+  return process.argv.some((a) => /testPathPatterns?=.*unit/.test(a));
 }
 
 async function isAlreadySeeded(): Promise<boolean> {
@@ -111,7 +117,21 @@ async function seedUsers(): Promise<void> {
 }
 
 export default async function globalSetup(): Promise<void> {
-  await waitForDb();
+  // Skip the DB dance entirely on unit-only runs — they mock the database.
+  if (isUnitOnlyRun()) {
+    return;
+  }
+
+  const up = await dbIsUp();
+  if (!up) {
+    console.warn(
+      `\n  Test database not reachable at ${process.env.DATABASE_URL}.\n` +
+      `  Unit tests will still run (they mock the DB).\n` +
+      `  For integration tests, start the test DB: npm run test:db:up\n`
+    );
+    await pool.end();
+    return;
+  }
 
   const seeded = await isAlreadySeeded();
   if (!seeded) {
