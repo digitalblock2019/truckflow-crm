@@ -10,7 +10,9 @@ const config: Config = {
   testMatch: ['**/__tests__/**/*.test.ts'],
   moduleFileExtensions: ['ts', 'js', 'json'],
   setupFiles: ['<rootDir>/src/__tests__/setup.ts'],
-  testTimeout: 15000,
+  globalSetup: '<rootDir>/src/__tests__/globalSetup.ts',
+  globalTeardown: '<rootDir>/src/__tests__/globalTeardown.ts',
+  testTimeout: 30000,
 };
 
 export default config;
