@@ -50,7 +50,10 @@ function splitStatements(sql: string): string[] {
   return statements;
 }
 
-async function runSchema(): Promise<void> {
+export async function runSchema(opts: { closePool?: boolean; quiet?: boolean } = {}): Promise<void> {
+  const { closePool = true, quiet = false } = opts;
+  const log = (msg: string) => { if (!quiet) console.log(msg); };
+
   const schemaPath = path.resolve(__dirname, '../../TruckFlow_CRM_Schema_v1.5.sql');
 
   if (!fs.existsSync(schemaPath)) {
@@ -61,8 +64,8 @@ async function runSchema(): Promise<void> {
   const sql = fs.readFileSync(schemaPath, 'utf-8');
   const statements = splitStatements(sql);
 
-  console.log('Connecting to database...');
-  console.log(`Running schema (${statements.length} statements)...`);
+  log('Connecting to database...');
+  log(`Running schema (${statements.length} statements)...`);
 
   // Pass 1: run all statements, collect failures
   let pass1Success = 0;
@@ -90,16 +93,16 @@ async function runSchema(): Promise<void> {
     }
   }
 
-  console.log(`Pass 1: ${pass1Success} succeeded, ${deferred.length} deferred`);
+  log(`Pass 1: ${pass1Success} succeeded, ${deferred.length} deferred`);
   if (deferred.length > 0) {
-    console.log(`Pass 2: ${pass2Success} succeeded, ${failed.length} failed`);
+    log(`Pass 2: ${pass2Success} succeeded, ${failed.length} failed`);
   }
 
   if (failed.length > 0) {
-    console.log('\nFailed statements:');
+    log('\nFailed statements:');
     for (const f of failed) {
-      console.log(`  #${f.idx}: ${f.stmt}...`);
-      console.log(`    Error: ${f.error}\n`);
+      log(`  #${f.idx}: ${f.stmt}...`);
+      log(`    Error: ${f.error}\n`);
     }
   }
 
@@ -111,10 +114,13 @@ async function runSchema(): Promise<void> {
         AND table_type = 'BASE TABLE'`
   );
 
-  console.log(`\nTables in database: ${result.rows[0].count}`);
-  console.log('Schema execution complete.');
+  log(`\nTables in database: ${result.rows[0].count}`);
+  log('Schema execution complete.');
 
-  await pool.end();
+  if (closePool) await pool.end();
 }
 
-runSchema();
+// Run only when invoked directly (e.g. `npm run db:schema`) — not when imported.
+if (require.main === module) {
+  runSchema();
+}
