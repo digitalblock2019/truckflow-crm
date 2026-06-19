@@ -116,6 +116,12 @@ export class TruckersService {
     // Soft duplicate-MC check — small carriers (a husband-wife team, etc.)
     // legitimately share one MC across multiple driver records, so the caller
     // can pass ?force=true to bypass after confirming with the user.
+    //
+    // On bypass, also inherit the sales/dispatcher assignments AND the
+    // per-agent threshold_loads from the original same-MC record (the "sibling")
+    // unless the form explicitly sets them. The original rep landed the
+    // carrier, so they earn on the new driver too — with a fresh load count.
+    let inheritedThresholds: Map<string, number> | null = null;
     if (!data.__force_duplicate_mc) {
       const dup = await query('SELECT id, legal_name FROM truckers WHERE mc_number = $1 LIMIT 1', [data.mc_number]);
       if (dup.rows.length) {
@@ -124,6 +130,33 @@ export class TruckersService {
           409,
           'DUPLICATE_MC',
         );
+      }
+    } else {
+      const sibling = await query(
+        `SELECT id, assigned_sales_agent_id, assigned_dispatcher_id, assigned_agent_id
+         FROM truckers WHERE mc_number = $1 ORDER BY created_at LIMIT 1`,
+        [data.mc_number],
+      );
+      if (sibling.rows.length) {
+        const s = sibling.rows[0];
+        if (!data.assigned_sales_agent_id && s.assigned_sales_agent_id) {
+          data.assigned_sales_agent_id = s.assigned_sales_agent_id;
+        }
+        if (!data.assigned_dispatcher_id && s.assigned_dispatcher_id) {
+          data.assigned_dispatcher_id = s.assigned_dispatcher_id;
+        }
+        if (!data.assigned_agent_id && s.assigned_agent_id) {
+          data.assigned_agent_id = s.assigned_agent_id;
+        }
+        const siblingThresholds = await query(
+          `SELECT agent_employee_id, threshold_loads
+           FROM agent_commission_thresholds WHERE trucker_id = $1`,
+          [s.id],
+        );
+        inheritedThresholds = new Map<string, number>();
+        for (const r of siblingThresholds.rows) {
+          inheritedThresholds.set(r.agent_employee_id, r.threshold_loads);
+        }
       }
     }
     delete data.__force_duplicate_mc;
@@ -167,18 +200,45 @@ export class TruckersService {
     ].filter(Boolean) as string[]));
     if (assigneeIds.length) {
       const defaultThreshold = await query("SELECT value FROM system_settings WHERE key = 'agent_commission_threshold_default'");
-      const thresholdLoads = parseInt(defaultThreshold.rows[0]?.value || '1');
+      // Team standard: every sales person joining gets 3 eligible loads per
+      // trucker by default. Configurable via system_settings.
+      const fallbackLoads = parseInt(defaultThreshold.rows[0]?.value || '3');
       for (const employeeId of assigneeIds) {
+        // Inherit per-agent threshold from a same-MC sibling when present —
+        // otherwise fall back to the system default.
+        const loads = inheritedThresholds?.get(employeeId) ?? fallbackLoads;
         await query(
           `INSERT INTO agent_commission_thresholds (trucker_id, agent_employee_id, threshold_loads, set_by)
            VALUES ($1, $2, $3, $4)
            ON CONFLICT (trucker_id, agent_employee_id) DO NOTHING`,
-          [result.rows[0].id, employeeId, thresholdLoads, userId]
+          [result.rows[0].id, employeeId, loads, userId]
         );
       }
     }
 
     return result.rows[0];
+  }
+
+  // Create the threshold row for a (trucker, agent) pair if one doesn't
+  // already exist. Used by update() to seed when a sales rep is assigned
+  // AFTER trucker creation, so commissions kick in without needing manual
+  // SQL. ON CONFLICT keeps it idempotent.
+  private async ensureThreshold(truckerId: string, agentEmployeeId: string | null | undefined, userId: string): Promise<void> {
+    if (!agentEmployeeId) return;
+    try {
+      const setting = await query(
+        "SELECT value FROM system_settings WHERE key = 'agent_commission_threshold_default'",
+      );
+      const loads = parseInt(setting.rows[0]?.value || '3');
+      await query(
+        `INSERT INTO agent_commission_thresholds (trucker_id, agent_employee_id, threshold_loads, set_by)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (trucker_id, agent_employee_id) DO NOTHING`,
+        [truckerId, agentEmployeeId, loads, userId],
+      );
+    } catch (err: any) {
+      console.error('[ensureThreshold] insert failed:', err?.message);
+    }
   }
 
   // Throws AppError(400) if the trucker still has unfulfilled required documents.
@@ -318,6 +378,9 @@ export class TruckersService {
       newlyAssigned.add(data.assigned_agent_id);
     }
     for (const employeeId of newlyAssigned) {
+      // Seed a commission threshold for every newly-assigned employee so the
+      // rep starts earning immediately. ON CONFLICT keeps re-assignments idempotent.
+      await this.ensureThreshold(id, employeeId, userId);
       try {
         const agentUser = await query('SELECT crm_user_id FROM employees WHERE id = $1', [employeeId]);
         if (agentUser.rows[0]?.crm_user_id) {
