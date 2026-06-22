@@ -74,6 +74,9 @@ export class CommissionsService {
     return updated.rows[0];
   }
 
+  // Returns a single totals object the Commissions page consumes for the
+  // top formula bar + the Pending/Approved/Paid/Total stat cards. Scoped by
+  // employee_id when a non-privileged user calls in.
   async summary(filters: any) {
     const conditions: string[] = ['c.excluded = FALSE'];
     const params: any[] = [];
@@ -84,21 +87,55 @@ export class CommissionsService {
 
     const where = 'WHERE ' + conditions.join(' AND ');
 
-    const data = await query(
-      `SELECT c.employee_id, e.full_name, e.employee_type,
-              DATE_TRUNC('month', lo.payment_received_date) as month,
-              COUNT(c.id) as load_count,
-              SUM(c.amount_cents) as total_usd_cents,
-              SUM(c.amount_pkr_paisa) as total_pkr_paisa
+    // Commission status totals + count
+    const totals = await query(
+      `SELECT
+         COALESCE(SUM(c.amount_cents) FILTER (WHERE c.status = 'pending'),  0)::bigint AS total_pending_cents,
+         COALESCE(SUM(c.amount_cents) FILTER (WHERE c.status = 'approved'), 0)::bigint AS total_approved_cents,
+         COALESCE(SUM(c.amount_cents) FILTER (WHERE c.status = 'paid'),     0)::bigint AS total_paid_cents,
+         COALESCE(SUM(c.amount_cents),                                       0)::bigint AS total_commission_cents,
+         COUNT(c.id)::int AS count
        FROM commissions c
-       JOIN employees e ON e.id = c.employee_id
        JOIN load_orders lo ON lo.id = c.load_order_id
-       ${where}
-       GROUP BY c.employee_id, e.full_name, e.employee_type, DATE_TRUNC('month', lo.payment_received_date)
-       ORDER BY month DESC, total_usd_cents DESC`,
+       ${where}`,
       params
     );
-    return data.rows;
+
+    // Load-side totals (distinct, since one load has both an agent + dispatcher row).
+    // Carrier pay = gross * (1 - company_pct); net revenue = gross * company_pct.
+    const loadTotals = await query(
+      `WITH scoped AS (
+         SELECT DISTINCT lo.id, lo.gross_load_amount_cents, lo.company_commission_pct
+         FROM load_orders lo
+         JOIN commissions c ON c.load_order_id = lo.id
+         ${where}
+       )
+       SELECT
+         COALESCE(SUM(gross_load_amount_cents), 0)::bigint AS total_gross_cents,
+         COALESCE(SUM(ROUND(gross_load_amount_cents * (1 - company_commission_pct))::bigint), 0)::bigint AS total_carrier_cents,
+         COALESCE(SUM(ROUND(gross_load_amount_cents * company_commission_pct)::bigint), 0)::bigint AS total_net_cents
+       FROM scoped`,
+      params
+    );
+
+    const t = totals.rows[0];
+    const l = loadTotals.rows[0];
+    const netCents = Number(l.total_net_cents) || 0;
+    const commCents = Number(t.total_commission_cents) || 0;
+    // avg_rate = effective commission rate against company net revenue (1 decimal).
+    const avgRate = netCents > 0 ? Math.round((commCents / netCents) * 1000) / 10 : 0;
+
+    return {
+      total_pending_cents:    Number(t.total_pending_cents)    || 0,
+      total_approved_cents:   Number(t.total_approved_cents)   || 0,
+      total_paid_cents:       Number(t.total_paid_cents)       || 0,
+      total_commission_cents: commCents,
+      total_gross_cents:      Number(l.total_gross_cents)      || 0,
+      total_carrier_cents:    Number(l.total_carrier_cents)    || 0,
+      total_net_cents:        netCents,
+      avg_rate:               avgRate,
+      count:                  Number(t.count) || 0,
+    };
   }
 
   async getExchangeRate() {

@@ -175,7 +175,11 @@ export interface CommissionSummary {
   total_pending_cents: number;
   total_approved_cents: number;
   total_paid_cents: number;
-  total_disputed_cents: number;
+  total_commission_cents: number;
+  total_gross_cents: number;
+  total_carrier_cents: number;
+  total_net_cents: number;
+  avg_rate: number;
   count: number;
 }
 
