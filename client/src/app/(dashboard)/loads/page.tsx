@@ -84,6 +84,26 @@ export default function LoadsPage() {
     { key: "load_destination", header: "Destination" },
     { key: "load_status", header: "Status", render: (r) => <Badge color={statusColors[r.load_status] ?? "gray"}>{(r.load_status ?? "—").replace(/_/g, " ")}</Badge> },
     { key: "gross_load_amount_cents", header: "Gross", render: (r) => <span className="font-mono">{fmt(r.gross_load_amount_cents)}</span> },
+    // Net + Empl Comm are admin/supervisor-only — operational roles
+    // (dispatcher, rep) keep a leaner grid.
+    ...(isSup
+      ? [
+          {
+            key: "company_net_cents" as const,
+            header: "Net",
+            render: (r: Load) => <span className="font-mono">{fmt(r.company_net_cents ?? 0)}</span>,
+          },
+          {
+            key: "empl_comm" as const,
+            header: "Empl Comm",
+            render: (r: Load) => (
+              <span className="font-mono">
+                {fmt((r.agent_commission_cents ?? 0) + (r.dispatcher_commission_cents ?? 0))}
+              </span>
+            ),
+          },
+        ]
+      : []),
     { key: "dispatcher_name", header: "Dispatcher" },
     { key: "created_at", header: "Created", render: (r) => new Date(r.created_at).toLocaleDateString() },
   ];
