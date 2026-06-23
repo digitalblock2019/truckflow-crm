@@ -286,6 +286,7 @@ export interface ChatMessage {
   reply_to_id: string | null;
   reply_to: { id: string; content: string; sender_name: string } | null;
   is_deleted: boolean;
+  is_system?: boolean;
   edited_at: string | null;
   created_at: string;
   attachments: ChatAttachment[];
