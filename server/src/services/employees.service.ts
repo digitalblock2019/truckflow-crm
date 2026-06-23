@@ -61,6 +61,33 @@ export class EmployeesService {
   }
 
   async create(data: Record<string, any>, userId: string) {
+    // Normalize text inputs so whitespace and case differences don't slip
+    // duplicate rows past the dedupe check below ("Muhammad Sheraz " vs
+    // "Muhammad Sheraz" used to be treated as distinct people).
+    data.full_name = String(data.full_name || '').trim();
+    data.personal_email = String(data.personal_email || '').trim().toLowerCase() || null;
+
+    // Dedupe by personal_email so a second admin can't unknowingly create a
+    // ghost copy of an existing employee. Email is the only field stable
+    // enough to dedupe on — names collide (multiple "John Smith") and roles
+    // change. Hard block (no force flag) since two employees sharing an
+    // email is almost always a mistake; if it's intentional they can use a
+    // distinct address.
+    if (data.personal_email) {
+      const dup = await query(
+        'SELECT id, full_name, employee_number FROM employees WHERE LOWER(personal_email) = $1 LIMIT 1',
+        [data.personal_email],
+      );
+      if (dup.rows.length) {
+        const d = dup.rows[0];
+        throw new AppError(
+          `Employee "${d.full_name}" (${d.employee_number}) already uses ${data.personal_email}. Edit that record or use a different email.`,
+          409,
+          'EMPLOYEE_DUPLICATE_EMAIL',
+        );
+      }
+    }
+
     // Auto-generate employee number
     const lastNum = await query("SELECT employee_number FROM employees ORDER BY created_at DESC LIMIT 1");
     let nextNum = 'EMP-0001';
@@ -129,6 +156,27 @@ export class EmployeesService {
     const existing = await query('SELECT * FROM employees WHERE id = $1', [id]);
     if (!existing.rows.length) throw new AppError('Employee not found', 404, 'NOT_FOUND');
     const old = existing.rows[0];
+
+    // Normalize the same fields create() does so an admin can't introduce a
+    // whitespace/case variant via edit that would slip past future dedupe.
+    if (typeof data.full_name === 'string') data.full_name = data.full_name.trim();
+    if (typeof data.personal_email === 'string') {
+      const normalized = data.personal_email.trim().toLowerCase() || null;
+      data.personal_email = normalized;
+      if (normalized) {
+        const dup = await query(
+          'SELECT id FROM employees WHERE LOWER(personal_email) = $1 AND id <> $2 LIMIT 1',
+          [normalized, id],
+        );
+        if (dup.rows.length) {
+          throw new AppError(
+            `Another employee already uses ${normalized}.`,
+            409,
+            'EMPLOYEE_DUPLICATE_EMAIL',
+          );
+        }
+      }
+    }
 
     const fields: string[] = [];
     const values: any[] = [];
