@@ -382,6 +382,11 @@ export class ChatService {
       throw new AppError('Only conversation admins can update', 403, 'FORBIDDEN');
     }
 
+    // Snapshot the old values BEFORE updating so we can describe what changed.
+    const before = await query('SELECT name, description FROM chat_conversations WHERE id = $1', [conversationId]);
+    const oldName = before.rows[0]?.name as string | null;
+    const oldDescription = before.rows[0]?.description as string | null;
+
     const sets: string[] = [];
     const params: any[] = [];
     let idx = 1;
@@ -396,6 +401,18 @@ export class ChatService {
       `UPDATE chat_conversations SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *`,
       params
     );
+
+    // Post a system message for each user-visible change so the thread has an
+    // audit trail. Skipped on no-op updates (same value resubmitted).
+    const actorRow = await query('SELECT full_name FROM users WHERE id = $1', [userId]);
+    const actorName = actorRow.rows[0]?.full_name || 'Someone';
+    if (data.name !== undefined && data.name !== oldName) {
+      const fromPart = oldName ? ` from "${oldName}"` : '';
+      await this._postSystemMessage(conversationId, userId, `${actorName} renamed the chat${fromPart} to "${data.name}"`);
+    }
+    if (data.description !== undefined && data.description !== oldDescription) {
+      await this._postSystemMessage(conversationId, userId, `${actorName} updated the chat description`);
+    }
 
     emitToConversation(conversationId, 'conversation:updated', result.rows[0]);
     return result.rows[0];
@@ -531,7 +548,23 @@ export class ChatService {
       throw new AppError('Only admins can remove other members', 403, 'FORBIDDEN');
     }
 
+    // Capture the actor's name and the target's name BEFORE the removal so the
+    // system message reads "X left" (self) or "X removed Y" (admin remove).
+    // The actor stays in the conversation either way (or just left it for self),
+    // so we can still write a message as them.
+    const targetRow = await query('SELECT full_name FROM users WHERE id = $1', [targetUserId]);
+    const targetName = targetRow.rows[0]?.full_name || 'A member';
+
     await query('UPDATE chat_members SET left_at = NOW() WHERE conversation_id = $1 AND user_id = $2', [conversationId, targetUserId]);
+
+    if (targetUserId === userId) {
+      await this._postSystemMessage(conversationId, userId, `${targetName} left`);
+    } else {
+      const actorRow = await query('SELECT full_name FROM users WHERE id = $1', [userId]);
+      const actorName = actorRow.rows[0]?.full_name || 'Someone';
+      await this._postSystemMessage(conversationId, userId, `${actorName} removed ${targetName}`);
+    }
+
     emitToConversation(conversationId, 'members:removed', { userId: targetUserId });
     emitToUser(targetUserId, 'conversation:removed', { conversationId });
     return { message: 'Member removed' };
@@ -551,6 +584,13 @@ export class ChatService {
       'UPDATE chat_members SET is_admin = TRUE WHERE conversation_id = $1 AND user_id = $2',
       [conversationId, targetUserId]
     );
+
+    const actorRow = await query('SELECT full_name FROM users WHERE id = $1', [userId]);
+    const targetRow = await query('SELECT full_name FROM users WHERE id = $1', [targetUserId]);
+    const actorName = actorRow.rows[0]?.full_name || 'Someone';
+    const targetName = targetRow.rows[0]?.full_name || 'a member';
+    await this._postSystemMessage(conversationId, userId, `${actorName} made ${targetName} an admin`);
+
     emitToConversation(conversationId, 'member:promoted', { userId: targetUserId });
     return { message: 'Member promoted' };
   }

@@ -123,8 +123,11 @@ export default function MessageList({ conversationId, conversation, userId }: Pr
               </div>
             )}
             {m.is_system ? (
-              <div className="flex justify-center px-5 py-1">
-                <span className="text-[11px] text-txt-light italic bg-surface-2 px-2.5 py-1 rounded-full">
+              // Slack/WhatsApp-style info line: centered pill, neutral gray,
+              // no avatar/timestamp clutter. Stands clearly apart from chat bubbles.
+              <div className="flex justify-center px-5 py-2">
+                <span className="inline-flex items-center gap-1.5 text-[11px] text-txt-light bg-surface-2 border border-border/60 px-3 py-1 rounded-full">
+                  <span className="w-1 h-1 rounded-full bg-txt-light/60" />
                   {m.content}
                 </span>
               </div>
