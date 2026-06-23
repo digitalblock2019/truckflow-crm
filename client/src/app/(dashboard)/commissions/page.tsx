@@ -63,7 +63,7 @@ export default function CommissionsPage() {
 
   return (
     <>
-      <Topbar title="Commissions" subtitle="Commission management dashboard" />
+      <Topbar title="Employee Commissions" subtitle="Sales-agent + dispatcher commission earnings (separate from the company's cut of trucker loads)" />
       <div className="flex-1 min-h-0 overflow-y-auto p-6 bg-surface">
         {(data?.total ?? 0) > 0 && (
           <CommissionFormula

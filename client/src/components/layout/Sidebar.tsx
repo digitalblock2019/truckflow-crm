@@ -30,7 +30,7 @@ const sections: { title: string; items: NavItem[] }[] = [
   {
     title: "Finance",
     items: [
-      { href: "/commissions", label: "Commissions", icon: "&#x1F4B0;" },
+      { href: "/commissions", label: "Employee Commissions", icon: "&#x1F4B0;" },
       { href: "/invoices", label: "Invoices", icon: "&#x1F4C4;" },
     ],
   },
