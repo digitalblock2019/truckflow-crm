@@ -13,12 +13,20 @@ interface Props {
   conversationId: string;
 }
 
+// Owner has 15 minutes after sending to edit. Backend enforces the same
+// window so a stale UI / hand-crafted PATCH still bounces — this is just to
+// hide the Edit button once it would no longer work.
+const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
+
 export default function MessageBubble({ message: m, isOwn, userId, conversationId }: Props) {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const addReaction = useAddReaction();
   const removeReaction = useRemoveReaction();
   const deleteMessage = useDeleteMessage();
   const { setReplyTo, setEditingMessage } = useChatStore();
+
+  const canEdit =
+    isOwn && Date.now() - new Date(m.created_at).getTime() < MESSAGE_EDIT_WINDOW_MS;
 
   // Deleted placeholder
   if (m.is_deleted) {
@@ -196,23 +204,23 @@ export default function MessageBubble({ message: m, isOwn, userId, conversationI
                 />
               )}
             </div>
+            {canEdit && (
+              <button
+                onClick={() => setEditingMessage({ id: m.id, content: m.content ?? "" })}
+                className="p-1 rounded hover:bg-surface text-txt-light hover:text-txt text-[12px]"
+                title="Edit (within 15 minutes of sending)"
+              >
+                <span className="inline-block scale-x-[-1]">{"\u270F\uFE0F"}</span>
+              </button>
+            )}
             {isOwn && (
-              <>
-                <button
-                  onClick={() => setEditingMessage({ id: m.id, content: m.content ?? "" })}
-                  className="p-1 rounded hover:bg-surface text-txt-light hover:text-txt text-[12px]"
-                  title="Edit"
-                >
-                  <span className="inline-block scale-x-[-1]">{"\u270F\uFE0F"}</span>
-                </button>
-                <button
-                  onClick={() => { if (confirm("Delete this message?")) deleteMessage.mutate({ conversationId, messageId: m.id }); }}
-                  className="p-1 rounded hover:bg-red-50 text-txt-light hover:text-red-500 text-[12px]"
-                  title="Delete"
-                >
-                  {"\u{1F5D1}"}
-                </button>
-              </>
+              <button
+                onClick={() => { if (confirm("Delete this message?")) deleteMessage.mutate({ conversationId, messageId: m.id }); }}
+                className="p-1 rounded hover:bg-red-50 text-txt-light hover:text-red-500 text-[12px]"
+                title="Delete"
+              >
+                {"\u{1F5D1}"}
+              </button>
             )}
           </div>
       </div>

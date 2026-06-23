@@ -6,6 +6,11 @@ import { emitToConversation, emitToUser, getOnlineUsers, joinConversationRoom } 
 
 const CHAT_ATTACHMENT_BUCKET = 'trucker-documents'; // reuse the existing bucket; chat/ prefix isolates files
 
+// How long after sending a message the sender can still edit it. Matches the
+// frontend constant — keep them in sync. WhatsApp uses 15 minutes; if we ever
+// want different numbers per role/conversation type, this becomes a setting.
+export const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
+
 // Convert profile_image_path to signed URL, returns null on failure
 async function resolveAvatar(path: string | null): Promise<string | null> {
   if (!path) return null;
@@ -305,13 +310,26 @@ export class ChatService {
   }
 
   // ── Edit message ────────────────────────────────────────────────────
+  // Edit window: 15 minutes after the message was sent (matches WhatsApp).
+  // Server-side enforced regardless of what the client shows, so a stale UI
+  // or a hand-crafted PATCH still bounces.
   async editMessage(conversationId: string, messageId: string, content: string, userId: string) {
     const msg = await query(
-      'SELECT sender_id FROM chat_messages WHERE id = $1 AND conversation_id = $2 AND is_deleted = FALSE',
+      'SELECT sender_id, is_system, created_at FROM chat_messages WHERE id = $1 AND conversation_id = $2 AND is_deleted = FALSE',
       [messageId, conversationId]
     );
     if (!msg.rows.length) throw new AppError('Message not found', 404, 'NOT_FOUND');
+    if (msg.rows[0].is_system) throw new AppError('System messages cannot be edited', 403, 'FORBIDDEN');
     if (msg.rows[0].sender_id !== userId) throw new AppError('Can only edit your own messages', 403, 'FORBIDDEN');
+
+    const ageMs = Date.now() - new Date(msg.rows[0].created_at).getTime();
+    if (ageMs > MESSAGE_EDIT_WINDOW_MS) {
+      throw new AppError(
+        'This message is older than 15 minutes and can no longer be edited.',
+        403,
+        'EDIT_WINDOW_EXPIRED',
+      );
+    }
 
     const result = await query(
       'UPDATE chat_messages SET content = $1, edited_at = NOW() WHERE id = $2 RETURNING *',
