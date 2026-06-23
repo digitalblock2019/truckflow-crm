@@ -74,9 +74,11 @@ export class CommissionsService {
     return updated.rows[0];
   }
 
-  // Returns a single totals object the Commissions page consumes for the
-  // top formula bar + the Pending/Approved/Paid/Total stat cards. Scoped by
-  // employee_id when a non-privileged user calls in.
+  // Returns a totals object the Commissions page consumes:
+  //   - flat fields = LIFETIME totals (powers the top formula bar + Lifetime card row)
+  //   - current_month = same shape, scoped to the current calendar month by
+  //     payment_received_date (powers the This Month card row)
+  // Scoped by employee_id when a non-privileged user calls in.
   async summary(filters: any) {
     const conditions: string[] = ['c.excluded = FALSE'];
     const params: any[] = [];
@@ -87,14 +89,34 @@ export class CommissionsService {
 
     const where = 'WHERE ' + conditions.join(' AND ');
 
-    // Commission status totals + count
+    // Commission status totals + count — lifetime AND current month in one query.
     const totals = await query(
       `SELECT
+         -- lifetime
          COALESCE(SUM(c.amount_cents) FILTER (WHERE c.status = 'pending'),  0)::bigint AS total_pending_cents,
          COALESCE(SUM(c.amount_cents) FILTER (WHERE c.status = 'approved'), 0)::bigint AS total_approved_cents,
          COALESCE(SUM(c.amount_cents) FILTER (WHERE c.status = 'paid'),     0)::bigint AS total_paid_cents,
          COALESCE(SUM(c.amount_cents),                                       0)::bigint AS total_commission_cents,
-         COUNT(c.id)::int AS count
+         COUNT(c.id)::int AS count,
+         -- current month
+         COALESCE(SUM(c.amount_cents) FILTER (
+           WHERE c.status = 'pending'
+             AND DATE_TRUNC('month', lo.payment_received_date) = DATE_TRUNC('month', CURRENT_DATE)
+         ), 0)::bigint AS month_pending_cents,
+         COALESCE(SUM(c.amount_cents) FILTER (
+           WHERE c.status = 'approved'
+             AND DATE_TRUNC('month', lo.payment_received_date) = DATE_TRUNC('month', CURRENT_DATE)
+         ), 0)::bigint AS month_approved_cents,
+         COALESCE(SUM(c.amount_cents) FILTER (
+           WHERE c.status = 'paid'
+             AND DATE_TRUNC('month', lo.payment_received_date) = DATE_TRUNC('month', CURRENT_DATE)
+         ), 0)::bigint AS month_paid_cents,
+         COALESCE(SUM(c.amount_cents) FILTER (
+           WHERE DATE_TRUNC('month', lo.payment_received_date) = DATE_TRUNC('month', CURRENT_DATE)
+         ), 0)::bigint AS month_commission_cents,
+         COUNT(c.id) FILTER (
+           WHERE DATE_TRUNC('month', lo.payment_received_date) = DATE_TRUNC('month', CURRENT_DATE)
+         )::int AS month_count
        FROM commissions c
        JOIN load_orders lo ON lo.id = c.load_order_id
        ${where}`,
@@ -135,6 +157,13 @@ export class CommissionsService {
       total_net_cents:        netCents,
       avg_rate:               avgRate,
       count:                  Number(t.count) || 0,
+      current_month: {
+        total_pending_cents:    Number(t.month_pending_cents)    || 0,
+        total_approved_cents:   Number(t.month_approved_cents)   || 0,
+        total_paid_cents:       Number(t.month_paid_cents)       || 0,
+        total_commission_cents: Number(t.month_commission_cents) || 0,
+        count:                  Number(t.month_count)            || 0,
+      },
     };
   }
 

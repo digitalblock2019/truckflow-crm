@@ -18,15 +18,20 @@ const ok = (rows: any[]) => ({ rows, command: '', rowCount: rows.length, oid: 0,
 describe('CommissionsService.summary — Commissions page contract', () => {
   beforeEach(() => mockQuery.mockReset());
 
-  it('returns the exact field set the page expects', async () => {
+  it('returns the exact field set the page expects (lifetime + current_month)', async () => {
     mockQuery
-      // totals (status breakdown)
+      // totals (lifetime + month status breakdown)
       .mockResolvedValueOnce(ok([{
         total_pending_cents: '1000',
         total_approved_cents: '500',
         total_paid_cents: '300',
         total_commission_cents: '1800',
         count: 5,
+        month_pending_cents: '400',
+        month_approved_cents: '200',
+        month_paid_cents: '100',
+        month_commission_cents: '700',
+        month_count: 2,
       }]))
       // load totals (gross / carrier / net)
       .mockResolvedValueOnce(ok([{
@@ -47,7 +52,39 @@ describe('CommissionsService.summary — Commissions page contract', () => {
       total_net_cents: 5000,
       avg_rate: 36, // 1800 / 5000 = 36.0%
       count: 5,
+      current_month: {
+        total_pending_cents: 400,
+        total_approved_cents: 200,
+        total_paid_cents: 100,
+        total_commission_cents: 700,
+        count: 2,
+      },
     });
+  });
+
+  it('current_month filter is keyed off CURRENT_DATE (not a query param)', async () => {
+    mockQuery
+      .mockResolvedValueOnce(ok([{
+        total_pending_cents: '0', total_approved_cents: '0',
+        total_paid_cents: '0', total_commission_cents: '0', count: 0,
+        month_pending_cents: '0', month_approved_cents: '0',
+        month_paid_cents: '0', month_commission_cents: '0', month_count: 0,
+      }]))
+      .mockResolvedValueOnce(ok([{
+        total_gross_cents: '0', total_carrier_cents: '0', total_net_cents: '0',
+      }]));
+
+    await svc.summary({});
+
+    const totalsSql = String(mockQuery.mock.calls[0][0]);
+    // Month overlay must reference CURRENT_DATE so the page auto-rolls over.
+    expect(totalsSql).toMatch(/DATE_TRUNC\('month',\s*CURRENT_DATE\)/);
+    // Lock that the month overlay covers all three statuses + total + count.
+    expect(totalsSql).toMatch(/month_pending_cents/);
+    expect(totalsSql).toMatch(/month_approved_cents/);
+    expect(totalsSql).toMatch(/month_paid_cents/);
+    expect(totalsSql).toMatch(/month_commission_cents/);
+    expect(totalsSql).toMatch(/month_count/);
   });
 
   it('avg_rate is 0 when net revenue is 0 (no division-by-zero)', async () => {

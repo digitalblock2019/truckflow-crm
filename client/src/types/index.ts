@@ -181,6 +181,13 @@ export interface CommissionSummary {
   total_net_cents: number;
   avg_rate: number;
   count: number;
+  current_month: {
+    total_pending_cents: number;
+    total_approved_cents: number;
+    total_paid_cents: number;
+    total_commission_cents: number;
+    count: number;
+  };
 }
 
 export interface Invoice {

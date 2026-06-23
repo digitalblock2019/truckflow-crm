@@ -75,6 +75,15 @@ export default function CommissionsPage() {
           />
         )}
 
+        <div className="text-xs uppercase tracking-wide text-secondary mb-2">This Month</div>
+        <div className="grid grid-cols-4 gap-3 mb-4">
+          <StatCard label="Pending" value={fmt(summaryData?.current_month?.total_pending_cents ?? 0)} />
+          <StatCard label="Approved" value={fmt(summaryData?.current_month?.total_approved_cents ?? 0)} />
+          <StatCard label="Paid" value={fmt(summaryData?.current_month?.total_paid_cents ?? 0)} />
+          <StatCard label="Total" value={summaryData?.current_month?.count ?? 0} />
+        </div>
+
+        <div className="text-xs uppercase tracking-wide text-secondary mb-2">Lifetime</div>
         <div className="grid grid-cols-4 gap-3 mb-5">
           <StatCard label="Pending" value={fmt(summaryData?.total_pending_cents ?? 0)} />
           <StatCard label="Approved" value={fmt(summaryData?.total_approved_cents ?? 0)} />
