@@ -43,7 +43,7 @@ function fmt(cents: number): string {
   return "$" + (cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function StatusRow({ label, count, color }: { label: string; count: number; color: string }) {
+function StatusRow({ label, count, color }: { label: string; count: number | string; color: string }) {
   return (
     <div className="flex items-center justify-between py-1.5">
       <div className="flex items-center gap-2">
@@ -193,17 +193,9 @@ export default function DashboardPage() {
               tooltip="Sales-agent and dispatcher commissions across every load, by approval state. Pending = booked but not yet approved by admin. Approved = ready to pay out. Paid = the rep has been paid. Admins see the whole company; everyone else sees only their own."
             />
             <div className="divide-y divide-border">
-              <StatusRow label="Pending" count={Number((commissions.total_pending_cents / 100).toFixed(0))} color="bg-yellow-400" />
-              <StatusRow label="Approved" count={Number((commissions.total_approved_cents / 100).toFixed(0))} color="bg-blue-400" />
-              <StatusRow label="Paid" count={Number((commissions.total_paid_cents / 100).toFixed(0))} color="bg-green-400" />
-            </div>
-            <div className="mt-3 pt-3 border-t border-border flex justify-between text-[13px]">
-              <span className="text-txt-light">Total Pending</span>
-              <span className="font-mono font-semibold text-navy">{fmt(commissions.total_pending_cents)}</span>
-            </div>
-            <div className="flex justify-between text-[13px] mt-1">
-              <span className="text-txt-light">Total Paid</span>
-              <span className="font-mono font-semibold text-navy">{fmt(commissions.total_paid_cents)}</span>
+              <StatusRow label="Pending" count={fmt(commissions.total_pending_cents)} color="bg-yellow-400" />
+              <StatusRow label="Approved" count={fmt(commissions.total_approved_cents)} color="bg-blue-400" />
+              <StatusRow label="Paid" count={fmt(commissions.total_paid_cents)} color="bg-green-400" />
             </div>
           </Card>
         </div>
