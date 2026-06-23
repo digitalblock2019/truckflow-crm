@@ -188,9 +188,9 @@ export default function DashboardPage() {
 
           <Card>
             <CardHeader
-              title="Commission Summary"
+              title="Employee Commission Summary"
               subtitle="All-time totals"
-              tooltip="Sales-agent and dispatcher commissions across every load, by approval state. Pending = booked but not yet approved by admin. Approved = ready to pay out. Paid = the rep has been paid. Admins see the whole company; everyone else sees only their own."
+              tooltip="Sales-agent and dispatcher commissions across every load, by approval state. Separate from the company's cut from truckers. Pending = booked but not yet approved by admin. Approved = ready to pay out. Paid = the rep has been paid. Admins see the whole company; everyone else sees only their own."
             />
             <div className="divide-y divide-border">
               <StatusRow label="Pending" count={fmt(commissions.total_pending_cents)} color="bg-yellow-400" />

@@ -122,12 +122,20 @@ export default function MessageList({ conversationId, conversation, userId }: Pr
                 <div className="flex-1 h-px bg-border" />
               </div>
             )}
-            <MessageBubble
-              message={m}
-              isOwn={m.sender_id === userId}
-              userId={userId}
-              conversationId={conversationId}
-            />
+            {m.is_system ? (
+              <div className="flex justify-center px-5 py-1">
+                <span className="text-[11px] text-txt-light italic bg-surface-2 px-2.5 py-1 rounded-full">
+                  {m.content}
+                </span>
+              </div>
+            ) : (
+              <MessageBubble
+                message={m}
+                isOwn={m.sender_id === userId}
+                userId={userId}
+                conversationId={conversationId}
+              />
+            )}
           </div>
         );
       })}

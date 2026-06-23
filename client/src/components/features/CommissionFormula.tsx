@@ -15,8 +15,8 @@ export default function CommissionFormula({
     { label: "Gross Load", value: grossLoad },
     { label: "Carrier Pay", value: carrierPay },
     { label: "Net Revenue", value: netRevenue },
-    { label: "Comm Rate", value: rate },
-    { label: "Commission", value: commission },
+    { label: "Empl Rate", value: rate },
+    { label: "Empl Comm", value: commission },
   ];
 
   return (

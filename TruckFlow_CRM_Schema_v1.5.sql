@@ -980,6 +980,7 @@ CREATE TABLE chat_messages (
                                             -- full-text search vector
   reply_to_id     UUID REFERENCES chat_messages(id),  -- threaded reply
   is_deleted      BOOLEAN NOT NULL DEFAULT FALSE,      -- soft delete
+  is_system       BOOLEAN NOT NULL DEFAULT FALSE,      -- system messages (e.g. "X added Y") render centered/gray, no avatar
   edited_at       TIMESTAMPTZ,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

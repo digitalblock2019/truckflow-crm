@@ -148,7 +148,7 @@ export class ChatService {
 
     const data = await query(
       `SELECT m.id, m.conversation_id, m.sender_id, m.content, m.reply_to_id,
-              m.is_deleted, m.edited_at, m.created_at,
+              m.is_deleted, m.is_system, m.edited_at, m.created_at,
               u.full_name as sender_name, u.role as sender_role, u.profile_image_path as sender_avatar
        FROM chat_messages m
        JOIN users u ON u.id = m.sender_id
@@ -449,24 +449,75 @@ export class ChatService {
     const conv = await query('SELECT type FROM chat_conversations WHERE id = $1', [conversationId]);
     if (conv.rows[0]?.type === 'direct') throw new AppError('Cannot add members to direct messages', 400, 'VALIDATION_ERROR');
 
+    // Resolve names up front so the system message reads cleanly.
+    const actor = await query('SELECT full_name FROM users WHERE id = $1', [userId]);
+    const actorName = actor.rows[0]?.full_name || 'Someone';
+
+    const addedNames: string[] = [];
     for (const memberId of memberIds) {
       // Re-join if previously left, or insert new
       const existing = await query(
         'SELECT id, left_at FROM chat_members WHERE conversation_id = $1 AND user_id = $2',
         [conversationId, memberId]
       );
+      let wasAdded = false;
       if (existing.rows.length && existing.rows[0].left_at) {
         await query('UPDATE chat_members SET left_at = NULL WHERE id = $1', [existing.rows[0].id]);
+        wasAdded = true;
       } else if (!existing.rows.length) {
         await query('INSERT INTO chat_members (conversation_id, user_id) VALUES ($1, $2)', [conversationId, memberId]);
         await query('INSERT INTO chat_member_state (conversation_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [conversationId, memberId]);
+        wasAdded = true;
       }
       joinConversationRoom(conversationId, memberId);
       emitToUser(memberId, 'conversation:new', conv.rows[0]);
+
+      if (wasAdded) {
+        const u = await query('SELECT full_name FROM users WHERE id = $1', [memberId]);
+        if (u.rows[0]?.full_name) addedNames.push(u.rows[0].full_name);
+      }
+    }
+
+    // Drop a single combined system message into the thread so existing
+    // members see WHO was added and BY WHOM. Skipped if nobody was actually
+    // added (idempotent re-add of current members shouldn't spam the thread).
+    if (addedNames.length) {
+      const list =
+        addedNames.length === 1 ? addedNames[0]
+        : addedNames.length === 2 ? `${addedNames[0]} and ${addedNames[1]}`
+        : `${addedNames.slice(0, -1).join(', ')}, and ${addedNames[addedNames.length - 1]}`;
+      await this._postSystemMessage(conversationId, userId, `${actorName} added ${list}`);
     }
 
     emitToConversation(conversationId, 'members:added', { memberIds });
     return { message: 'Members added' };
+  }
+
+  // Drop a "X added Y" / "X removed Y" / "X left" message into the thread.
+  // Stored as a normal chat_messages row with is_system = TRUE so the UI can
+  // render it distinctly (centered pill, no avatar). sender_id is the actor
+  // so future audit queries can still see who triggered it.
+  private async _postSystemMessage(conversationId: string, actorUserId: string, content: string) {
+    const result = await query(
+      `INSERT INTO chat_messages (conversation_id, sender_id, content, is_system)
+       VALUES ($1, $2, $3, TRUE) RETURNING *`,
+      [conversationId, actorUserId, content]
+    );
+    const msg = result.rows[0];
+    await query(
+      'UPDATE chat_conversations SET updated_at = NOW(), last_message_at = NOW(), last_message_preview = $2 WHERE id = $1',
+      [conversationId, content.substring(0, 100)]
+    );
+    emitToConversation(conversationId, 'message:new', {
+      ...msg,
+      sender_name: null,
+      sender_avatar: null,
+      sender_role: null,
+      attachments: [],
+      reactions: [],
+      reply_to: null,
+    });
+    return msg;
   }
 
   // ── Remove member ───────────────────────────────────────────────────
