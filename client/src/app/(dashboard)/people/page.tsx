@@ -91,6 +91,7 @@ export default function PeoplePage() {
   const resetPw = useAdminResetPassword();
   const [resetMsg, setResetMsg] = useState<string | null>(null);
   const [formErr, setFormErr] = useState<string | null>(null);
+  const [createErr, setCreateErr] = useState<string | null>(null);
   const terminateEmp = useTerminateEmployee();
   const reinstateEmp = useReinstateEmployee();
 
@@ -142,13 +143,16 @@ export default function PeoplePage() {
       payload.crm_email = form.crm_email;
       if (form.crm_password) payload.crm_password = form.crm_password;
     }
+    setCreateErr(null);
     createEmp.mutate(
       payload as Partial<Employee>,
       {
         onSuccess: () => {
           setShowCreate(false);
           setForm({ ...emptyForm });
+          setCreateErr(null);
         },
+        onError: (err: any) => setCreateErr(err?.message || "Couldn't create employee"),
       }
     );
   };
@@ -481,8 +485,13 @@ export default function PeoplePage() {
           </div>
         </div>
 
+        {createErr && (
+          <div className="mt-3 px-3 py-2 rounded bg-red-50 border border-red-200 text-red-700 text-[12px]">
+            {createErr}
+          </div>
+        )}
         <div className="flex justify-end gap-2 mt-5">
-          <Button variant="secondary" onClick={() => setShowCreate(false)}>Cancel</Button>
+          <Button variant="secondary" onClick={() => { setShowCreate(false); setCreateErr(null); }}>Cancel</Button>
           <Button onClick={handleCreate} disabled={createEmp.isPending || !form.full_name}>
             {createEmp.isPending ? "Creating..." : "Create Employee"}
           </Button>
