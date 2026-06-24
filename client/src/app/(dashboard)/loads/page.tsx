@@ -9,7 +9,8 @@ import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import LoadPipeline from "@/components/features/LoadPipeline";
 import CreateLoadModal from "@/components/features/CreateLoadModal";
-import { useLoads, useUpdateLoadStatus, useDeleteLoad, useLoadDocuments, useUploadLoadDocument } from "@/lib/hooks";
+import Input from "@/components/ui/Input";
+import { useLoads, useUpdateLoadStatus, useUpdateLoad, useDeleteLoad, useLoadDocuments, useUploadLoadDocument } from "@/lib/hooks";
 import { useAuthStore } from "@/lib/auth";
 import { totalPages, fmt } from "@/lib/utils";
 import type { Load, LoadDocument } from "@/types";
@@ -62,6 +63,24 @@ function pctLabel(pct: string | number | null | undefined): string {
   return `${+n.toFixed(2)}%`;
 }
 
+function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="mb-4">
+      <div className="text-[11px] font-mono uppercase tracking-wide text-txt-mid mb-2">{title}</div>
+      {children}
+    </div>
+  );
+}
+
+function CheckboxField({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label className="inline-flex items-center gap-2 cursor-pointer">
+      <input type="checkbox" checked={!!checked} onChange={(e) => onChange(e.target.checked)} className="w-4 h-4" />
+      <span className="text-txt">{label}</span>
+    </label>
+  );
+}
+
 export default function LoadsPage() {
   const [tab, setTab] = useState("");
   const [page, setPage] = useState(1);
@@ -73,9 +92,97 @@ export default function LoadsPage() {
 
   const { data, isLoading } = useLoads({ status: tab, page, limit: 100 });
   const updateStatus = useUpdateLoadStatus();
+  const updateLoad = useUpdateLoad();
   const deleteLoad = useDeleteLoad();
   const { data: loadDocs } = useLoadDocuments(selectedLoad?.id ?? "");
   const uploadLoadDoc = useUploadLoadDocument();
+
+  // Edit mode state. Operational fields only — trucker, gross/component
+  // amounts, and commission percentages are locked because changing them
+  // would invalidate already-computed commission rows on this load.
+  const [isEditingLoad, setIsEditingLoad] = useState(false);
+  const [editForm, setEditForm] = useState<Record<string, any>>({});
+  const [editErr, setEditErr] = useState<string | null>(null);
+
+  // datetime-local input wants 'YYYY-MM-DDTHH:MM' (no timezone). Strip the
+  // 'Z'/offset off whatever the API returns.
+  const toLocalDT = (iso: string | null | undefined): string => {
+    if (!iso) return "";
+    try { return new Date(iso).toISOString().slice(0, 16); } catch { return ""; }
+  };
+
+  const startEditLoad = () => {
+    if (!selectedLoad) return;
+    setEditForm({
+      broker_name: selectedLoad.broker_name ?? "",
+      broker_mc_number: selectedLoad.broker_mc_number ?? "",
+      broker_load_number: (selectedLoad as any).broker_load_number ?? "",
+      bol_number: (selectedLoad as any).bol_number ?? "",
+      origin_city: selectedLoad.origin_city ?? "",
+      origin_state: selectedLoad.origin_state ?? "",
+      origin_zip: selectedLoad.origin_zip ?? "",
+      dest_city: selectedLoad.dest_city ?? "",
+      dest_state: selectedLoad.dest_state ?? "",
+      dest_zip: selectedLoad.dest_zip ?? "",
+      loaded_miles: selectedLoad.loaded_miles ?? "",
+      deadhead_miles: selectedLoad.deadhead_miles ?? "",
+      pickup_at: toLocalDT(selectedLoad.pickup_at),
+      delivery_at: toLocalDT(selectedLoad.delivery_at),
+      equipment_type: selectedLoad.equipment_type ?? "",
+      trailer_length_ft: selectedLoad.trailer_length_ft ?? "",
+      load_type: selectedLoad.load_type ?? "",
+      commodity: selectedLoad.commodity ?? "",
+      weight_lbs: selectedLoad.weight_lbs ?? "",
+      is_hazmat: !!selectedLoad.is_hazmat,
+      tarps_required: !!selectedLoad.tarps_required,
+      team_drivers: !!selectedLoad.team_drivers,
+      liftgate_required: !!(selectedLoad as any).liftgate_required,
+      notes: (selectedLoad as any).notes ?? "",
+    });
+    setEditErr(null);
+    setIsEditingLoad(true);
+  };
+
+  const cancelEditLoad = () => { setIsEditingLoad(false); setEditErr(null); };
+
+  const handleSaveLoad = () => {
+    if (!selectedLoad) return;
+    setEditErr(null);
+
+    // Send only fields that actually changed. Empty strings collapse to null
+    // so clearing a field is supported.
+    const patch: Record<string, any> = {};
+    const numFields = new Set(["loaded_miles", "deadhead_miles", "trailer_length_ft", "weight_lbs"]);
+    for (const [k, v] of Object.entries(editForm)) {
+      let newVal: any = v;
+      if (typeof newVal === "string") newVal = newVal.trim();
+      if (newVal === "") newVal = null;
+      if (numFields.has(k) && newVal !== null) newVal = Number(newVal);
+      const oldVal = (selectedLoad as any)[k] ?? (typeof newVal === "boolean" ? false : null);
+      // Boolean comparison is direct; otherwise compare normalized values.
+      if (typeof newVal === "boolean") {
+        if (newVal !== !!oldVal) patch[k] = newVal;
+      } else if (newVal !== oldVal) {
+        patch[k] = newVal;
+      }
+    }
+
+    if (Object.keys(patch).length === 0) { setIsEditingLoad(false); return; }
+
+    updateLoad.mutate(
+      { id: selectedLoad.id, ...patch },
+      {
+        onSuccess: (updated: any) => {
+          setSelectedLoad({ ...selectedLoad, ...updated } as Load);
+          setIsEditingLoad(false);
+        },
+        onError: (err: any) => setEditErr(err?.message || "Save failed"),
+      },
+    );
+  };
+
+  // Compact field setter for the form
+  const setField = (k: string, v: any) => setEditForm((prev) => ({ ...prev, [k]: v }));
 
   const columns: Column<Load>[] = [
     { key: "order_number", header: "Order#", render: (r) => <span className="font-mono font-semibold">{r.order_number}</span> },
@@ -134,11 +241,98 @@ export default function LoadsPage() {
 
       <Modal
         open={!!selectedLoad}
-        onClose={() => setSelectedLoad(null)}
-        title={selectedLoad ? `Load ${selectedLoad.order_number}` : ""}
-        width="600px"
+        onClose={() => { setSelectedLoad(null); setIsEditingLoad(false); setEditErr(null); }}
+        title={selectedLoad ? `Load ${selectedLoad.order_number}${isEditingLoad ? " — Editing" : ""}` : ""}
+        width={isEditingLoad ? "720px" : "600px"}
       >
-        {selectedLoad && (
+        {selectedLoad && isEditingLoad && (
+          <div>
+            {/* Edit form. Operational fields only — trucker/amounts/commission% are
+                locked because changing them would invalidate the commission rows
+                already attached to this load. Change status via the Advance button. */}
+            <FormSection title="Broker">
+              <div className="grid grid-cols-2 gap-3">
+                <Input label="Broker Name"          value={editForm.broker_name}        onChange={(e) => setField("broker_name", e.target.value)} />
+                <Input label="Broker MC#"           value={editForm.broker_mc_number}   onChange={(e) => setField("broker_mc_number", e.target.value)} />
+                <Input label="Broker Load #"        value={editForm.broker_load_number} onChange={(e) => setField("broker_load_number", e.target.value)} />
+                <Input label="BOL #"                value={editForm.bol_number}         onChange={(e) => setField("bol_number", e.target.value)} />
+              </div>
+            </FormSection>
+
+            <FormSection title="Route">
+              <div className="grid grid-cols-3 gap-3 mb-2">
+                <Input label="Origin City"  value={editForm.origin_city}  onChange={(e) => setField("origin_city", e.target.value)} />
+                <Input label="Origin State" value={editForm.origin_state} onChange={(e) => setField("origin_state", e.target.value)} />
+                <Input label="Origin ZIP"   value={editForm.origin_zip}   onChange={(e) => setField("origin_zip", e.target.value)} />
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <Input label="Dest City"  value={editForm.dest_city}  onChange={(e) => setField("dest_city", e.target.value)} />
+                <Input label="Dest State" value={editForm.dest_state} onChange={(e) => setField("dest_state", e.target.value)} />
+                <Input label="Dest ZIP"   value={editForm.dest_zip}   onChange={(e) => setField("dest_zip", e.target.value)} />
+              </div>
+            </FormSection>
+
+            <FormSection title="Schedule & Distance">
+              <div className="grid grid-cols-2 gap-3 mb-2">
+                <Input type="datetime-local" label="Pickup"   value={editForm.pickup_at}   onChange={(e) => setField("pickup_at", e.target.value)} />
+                <Input type="datetime-local" label="Delivery" value={editForm.delivery_at} onChange={(e) => setField("delivery_at", e.target.value)} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Input type="number" label="Loaded Miles"   value={editForm.loaded_miles}   onChange={(e) => setField("loaded_miles", e.target.value)} />
+                <Input type="number" label="Deadhead Miles" value={editForm.deadhead_miles} onChange={(e) => setField("deadhead_miles", e.target.value)} />
+              </div>
+            </FormSection>
+
+            <FormSection title="Equipment & Freight">
+              <div className="grid grid-cols-2 gap-3 mb-2">
+                <Input label="Equipment Type"      value={editForm.equipment_type}    onChange={(e) => setField("equipment_type", e.target.value)} />
+                <Input type="number" label="Trailer Length (ft)" value={editForm.trailer_length_ft} onChange={(e) => setField("trailer_length_ft", e.target.value)} />
+              </div>
+              <div className="grid grid-cols-2 gap-3 mb-2">
+                <Input label="Load Type"  value={editForm.load_type} onChange={(e) => setField("load_type", e.target.value)} />
+                <Input label="Commodity" value={editForm.commodity} onChange={(e) => setField("commodity", e.target.value)} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Input type="number" label="Weight (lbs)" value={editForm.weight_lbs} onChange={(e) => setField("weight_lbs", e.target.value)} />
+                <div />
+              </div>
+            </FormSection>
+
+            <FormSection title="Special Handling">
+              <div className="grid grid-cols-2 gap-y-2 gap-x-3 text-[13px]">
+                <CheckboxField label="Hazmat"            checked={editForm.is_hazmat}         onChange={(v) => setField("is_hazmat", v)} />
+                <CheckboxField label="Tarps required"    checked={editForm.tarps_required}    onChange={(v) => setField("tarps_required", v)} />
+                <CheckboxField label="Team drivers"      checked={editForm.team_drivers}      onChange={(v) => setField("team_drivers", v)} />
+                <CheckboxField label="Liftgate required" checked={editForm.liftgate_required} onChange={(v) => setField("liftgate_required", v)} />
+              </div>
+            </FormSection>
+
+            <FormSection title="Notes">
+              <textarea
+                value={editForm.notes}
+                onChange={(e) => setField("notes", e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 border border-border rounded-[5px] text-[13px] text-txt bg-white font-sans focus:outline-none focus:border-blue-light focus:ring-[3px] focus:ring-blue-light/10"
+                placeholder="Internal notes about this load"
+              />
+            </FormSection>
+
+            {editErr && (
+              <div className="mt-3 px-3 py-2 rounded bg-red-50 border border-red-200 text-red-700 text-[12px]">
+                {editErr}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-3 mt-3 border-t border-border">
+              <Button variant="secondary" onClick={cancelEditLoad}>Cancel</Button>
+              <Button onClick={handleSaveLoad} disabled={updateLoad.isPending}>
+                {updateLoad.isPending ? "Saving..." : "Save changes"}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {selectedLoad && !isEditingLoad && (
           <div>
             {/* Compact order details */}
             <div className="grid grid-cols-3 gap-3 text-xs mb-4">
@@ -266,27 +460,38 @@ export default function LoadsPage() {
               ) : null;
             })()}
 
-            {isAdmin && (
-              <div className="flex justify-end pt-3 mt-3 border-t border-border">
-                <Button
-                  variant="danger"
-                  onClick={() => {
-                    if (
-                      confirm(
-                        `Delete load ${selectedLoad.order_number}? This permanently removes the load and its documents and cannot be undone.`
-                      )
-                    ) {
-                      deleteLoad.mutate(selectedLoad.id, {
-                        onSuccess: () => setSelectedLoad(null),
-                        onError: (err) =>
-                          alert(err instanceof Error ? err.message : "Could not delete load"),
-                      });
-                    }
-                  }}
-                  disabled={deleteLoad.isPending}
-                >
-                  Delete Load
-                </Button>
+            {(canCreate || isAdmin) && (
+              <div className="flex justify-between pt-3 mt-3 border-t border-border">
+                <div>
+                  {canCreate && (
+                    <Button variant="secondary" onClick={startEditLoad}>
+                      Edit Load
+                    </Button>
+                  )}
+                </div>
+                <div>
+                  {isAdmin && (
+                    <Button
+                      variant="danger"
+                      onClick={() => {
+                        if (
+                          confirm(
+                            `Delete load ${selectedLoad.order_number}? This permanently removes the load and its documents and cannot be undone.`
+                          )
+                        ) {
+                          deleteLoad.mutate(selectedLoad.id, {
+                            onSuccess: () => setSelectedLoad(null),
+                            onError: (err) =>
+                              alert(err instanceof Error ? err.message : "Could not delete load"),
+                          });
+                        }
+                      }}
+                      disabled={deleteLoad.isPending}
+                    >
+                      Delete Load
+                    </Button>
+                  )}
+                </div>
               </div>
             )}
           </div>
