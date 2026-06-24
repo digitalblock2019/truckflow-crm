@@ -212,7 +212,7 @@ export default function OnboardingPage() {
   return (
     <>
       {toastNode}
-      <Topbar title="Onboarding" subtitle="Track trucker onboarding progress and documents" />
+      <Topbar title="Onboarding" subtitle="Track trucker onboarding progress and documents" helpSlug="onboarding" />
       <div className="flex-1 min-h-0 overflow-y-auto p-6 bg-surface">
         <div className="grid grid-cols-[340px_1fr] gap-4">
           <Card className="!p-0 max-h-[calc(100vh-140px)] overflow-y-auto">

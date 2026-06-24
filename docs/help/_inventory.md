@@ -10,10 +10,10 @@ The "?" button itself is a small icon at the top-right of each page (next to the
 
 | Page | Path | Draft | Notes |
 |---|---|---|---|
-| Truckers | `/truckers` | **[drafted]** `truckers.md` | Main carrier database; status pipeline |
-| Onboarded Truckers | `/truckers` (Onboarded tab) | **[drafted]** `onboarded-truckers.md` | Subset of Truckers — fully onboarded only |
-| Onboarding | `/onboarding` | **[drafted]** `onboarding.md` | Document collection flow, required vs optional types |
-| Loads / Orders | `/loads` | **[drafted]** `loads.md` | Status pipeline, document requirements, Edit Load lock rules |
+| Truckers | `/truckers` | **[wired]** `truckers.md` | Main carrier database; status pipeline |
+| Onboarded Truckers | `/truckers` (Onboarded tab) | **[wired]** `onboarded-truckers.md` | Subset of Truckers — fully onboarded only. Topbar auto-swaps slug when the Onboarded tab is active. |
+| Onboarding | `/onboarding` | **[wired]** `onboarding.md` | Document collection flow, required vs optional types |
+| Loads / Orders | `/loads` | **[wired]** `loads.md` | Status pipeline, document requirements, Edit Load lock rules |
 | Employee Commissions | `/commissions` | ☐ needs draft | Formula bar (Gross / Carrier / Net / Empl Rate / Empl Comm), This Month vs Lifetime, status flow (pending → approved → paid), 3-load threshold model for sales agents (dispatchers earn forever) |
 | Dashboard | `/` | ☐ needs draft | What each widget means (Commission Summary, Load Status, Invoice Overview, Trucker Pipeline, Communications) |
 | People | `/people` | ☐ needs draft | Employee types and what they map to as CRM roles; commission_value semantics; how dedupe-by-email works |
@@ -41,6 +41,15 @@ These are smaller — a single info paragraph inside the modal, not a full panel
 - **Per-truck vehicles** (parked) — full guide if/when built
 
 ---
+
+## How to wire a drafted page
+
+1. Drop the markdown at `docs/help/<slug>.md`.
+2. Add `<slug>.md` to the `sync:help` cp list in `client/package.json` (the prebuild script that copies drafts into `client/public/help/`).
+3. On the page component, pass `helpSlug="<slug>"` to `<Topbar>`. That's it — the `?` icon appears next to the title and opens the slide-out panel.
+4. Mark the row above as **[wired]**.
+
+`npm run dev` and `npm run build` both auto-run `sync:help`, so committing changes to `docs/help/*.md` is enough — no manual copy step.
 
 ## How to write a draft
 

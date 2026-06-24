@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Help markdown is sync'd from ../docs/help/ by `npm run sync:help`
+# (auto-runs on predev/prebuild). Source of truth lives in docs/help/.
+/public/help/
