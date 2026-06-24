@@ -435,7 +435,23 @@ export default function TruckersPage() {
     if (selectedIds.size === 0) return;
     if (!confirm(`Delete ${selectedIds.size} trucker(s)? This cannot be undone.`)) return;
     bulkDelete.mutate(Array.from(selectedIds), {
-      onSuccess: () => setSelectedIds(new Set()),
+      onSuccess: (res: any) => {
+        setSelectedIds(new Set());
+        // Surface partial failures (e.g. truckers blocked by FK constraints
+        // because they still have load_orders) so the user knows the action
+        // wasn't fully applied. Silent success would be misleading.
+        const requested = res?.requested ?? 0;
+        const deleted = res?.deleted ?? 0;
+        if (requested && deleted < requested) {
+          const failedCount = requested - deleted;
+          alert(
+            `${deleted} of ${requested} trucker(s) deleted. ${failedCount} couldn't be removed — they likely still have loads, commissions, or other history attached.`,
+          );
+        }
+      },
+      onError: (err: any) => {
+        alert(`Delete failed: ${err?.message || "unknown error"}`);
+      },
     });
   };
 
