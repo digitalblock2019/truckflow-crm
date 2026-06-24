@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "sync:help": "mkdir -p public/help && cp ../docs/help/loads.md ../docs/help/truckers.md ../docs/help/onboarded-truckers.md ../docs/help/onboarding.md public/help/",
+    "predev": "npm run sync:help",
+    "prebuild": "npm run sync:help",
     "dev": "next dev",
     "build": "next build",
     "start": "next start"
@@ -16,6 +19,7 @@
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "react-markdown": "^10.1.0",
     "socket.io-client": "^4.8.3",
     "xlsx": "^0.18.5",
     "zustand": "^5.0.11"

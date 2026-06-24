@@ -536,6 +536,7 @@ export default function TruckersPage() {
       <Topbar
         title="Truckers"
         subtitle="Manage trucker/carrier database"
+        helpSlug={tab === "fully_onboarded" ? "onboarded-truckers" : "truckers"}
         actions={
           <div className="flex gap-2">
             {isSup && selectedIds.size > 0 && (

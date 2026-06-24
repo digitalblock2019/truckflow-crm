@@ -220,6 +220,7 @@ export default function LoadsPage() {
       <Topbar
         title="Loads / Orders"
         subtitle="Manage load records and status pipeline"
+        helpSlug="loads"
         actions={
           canCreate ? <Button onClick={() => setShowCreate(true)}>+ New Load</Button> : undefined
         }
