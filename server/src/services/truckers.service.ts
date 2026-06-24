@@ -621,22 +621,35 @@ export class TruckersService {
 
   async bulkDelete(ids: string[], userId: string) {
     let deleted = 0;
+    const failures: { id: string; reason: string }[] = [];
     for (const id of ids) {
       try {
         await query('DELETE FROM trucker_status_history WHERE trucker_id = $1', [id]);
         await query('DELETE FROM agent_commission_thresholds WHERE trucker_id = $1', [id]);
         await query('DELETE FROM truckers WHERE id = $1', [id]);
         deleted++;
-      } catch { /* skip errors */ }
+      } catch (err: any) {
+        // Most likely cause: this trucker still has load_orders pointing at it
+        // (or another non-cascading FK). Surface that to the caller instead of
+        // silently dropping the failure so the user can investigate.
+        failures.push({ id, reason: err?.message || 'unknown error' });
+      }
     }
 
-    await query(
-      `INSERT INTO audit_log (user_id, user_role, action, entity_type, entity_id, description)
-       VALUES ($1, (SELECT role FROM users WHERE id=$1), 'delete', 'trucker', $2, $3)`,
-      [userId, 'bulk', `Bulk deleted ${deleted} truckers`]
-    );
+    // entity_id is UUID-typed in audit_log; the previous literal 'bulk' caused
+    // a Postgres syntax error and a 500. NULL is the right value for a bulk
+    // event that touched many entities — the description carries the count.
+    try {
+      await query(
+        `INSERT INTO audit_log (user_id, user_role, action, entity_type, entity_id, description)
+         VALUES ($1, (SELECT role FROM users WHERE id=$1), 'delete', 'trucker', NULL, $2)`,
+        [userId, `Bulk deleted ${deleted} of ${ids.length} truckers${failures.length ? ` (${failures.length} blocked by FK constraints)` : ''}`]
+      );
+    } catch (err: any) {
+      console.error('[bulkDelete] audit_log insert failed:', err?.message);
+    }
 
-    return { deleted };
+    return { deleted, requested: ids.length, failures };
   }
 
   async deleteBatch(batchId: string, userId: string) {
