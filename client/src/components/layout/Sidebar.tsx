@@ -14,6 +14,7 @@ interface NavItem {
   badge?: number;
   adminOnly?: boolean;
   supervisorOnly?: boolean;
+  external?: boolean;
 }
 
 const sections: { title: string; items: NavItem[] }[] = [
@@ -47,6 +48,7 @@ const sections: { title: string; items: NavItem[] }[] = [
     items: [
       { href: "/audit-log", label: "Audit Log", icon: "&#x1F50D;", supervisorOnly: true },
       { href: "/settings", label: "Settings", icon: "&#x2699;", adminOnly: true },
+      { href: "https://app.staffsense.io", label: "Monitoring", icon: "&#x1F6E1;", adminOnly: true, external: true },
     ],
   },
 ];
@@ -110,29 +112,46 @@ export default function Sidebar() {
                 {section.title}
               </div>
               {visibleItems.map((item) => {
-                const active = item.href.includes("?")
-                  ? pathname + (typeof window !== "undefined" ? window.location.search : "") === item.href
-                  : pathname === item.href || pathname.startsWith(item.href + "/");
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`flex items-center gap-2.5 px-[18px] py-[9px] text-[13px] border-l-[3px] transition-all duration-100
+                const active = item.external
+                  ? false
+                  : item.href.includes("?")
+                    ? pathname + (typeof window !== "undefined" ? window.location.search : "") === item.href
+                    : pathname === item.href || pathname.startsWith(item.href + "/");
+                const className = `flex items-center gap-2.5 px-[18px] py-[9px] text-[13px] border-l-[3px] transition-all duration-100
                       ${active
                         ? "border-accent bg-blue/30 text-white"
                         : "border-transparent text-white/55 hover:bg-white/[0.06] hover:text-white/80"
-                      }`}
-                  >
+                      }`;
+                const inner = (
+                  <>
                     <span
                       className="w-[18px] text-center text-[15px]"
                       dangerouslySetInnerHTML={{ __html: item.icon }}
                     />
                     <span className="font-medium">{item.label}</span>
-                    {item.badge !== undefined && item.badge > 0 && (
+                    {item.external && (
+                      <ArrowUpRight className="ml-auto h-3 w-3 text-white/30" />
+                    )}
+                    {!item.external && item.badge !== undefined && item.badge > 0 && (
                       <span className="ml-auto bg-accent text-white text-[10px] font-mono px-1.5 py-px rounded-[10px]">
                         {item.badge}
                       </span>
                     )}
+                  </>
+                );
+                return item.external ? (
+                  <a
+                    key={item.href}
+                    href={item.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={className}
+                  >
+                    {inner}
+                  </a>
+                ) : (
+                  <Link key={item.href} href={item.href} className={className}>
+                    {inner}
                   </Link>
                 );
               })}
