@@ -6,11 +6,9 @@ import { AppError } from '../utils/AppError';
 import { uploadFile } from '../config/storage';
 import { EmailService } from './email.service';
 import { NotificationsService } from './notifications.service';
-import { ChatService } from './chat.service';
 
 const emailService = new EmailService();
 const notificationsService = new NotificationsService();
-const chatService = new ChatService();
 
 const SELF_ONBOARDING_CHAT_GROUP_NAME = 'Self Onboarding Requests';
 
@@ -686,6 +684,10 @@ async function fireSubmissionNotifications(params: {
   }
 
   // ---- 3. Chat group post ----
+  // Written as an is_system=TRUE message so the UI renders it centered/pill
+  // (same convention as "X added Y" system messages). Skips chat.sendMessage
+  // deliberately — that path enforces membership, and we want the post to
+  // land even if the request's sent_by admin has left the group.
   const groupRes = await query(
     `SELECT id, created_by FROM chat_conversations
      WHERE type = 'group' AND name = $1 LIMIT 1`,
@@ -693,14 +695,22 @@ async function fireSubmissionNotifications(params: {
   );
   if ((groupRes.rowCount ?? 0) > 0) {
     const groupId = groupRes.rows[0].id as string;
+    const senderId = groupRes.rows[0].created_by as string;   // guaranteed users.id and member
     const chatContent = `🚛 ${t.legal_name} submitted their self-onboarding form. ` +
       `MC# ${t.mc_number ?? 'not provided'}, phone ${t.phone ?? 'not provided'}. ` +
       `Docs uploaded: ${params.docsUploaded}/${total}.`;
-    // Post as the trucker's assigned agent if we have one; otherwise the
-    // group's created_by user (usually an admin).
-    const senderId = t.assigned_sales_agent_id ?? groupRes.rows[0].created_by;
     try {
-      await chatService.sendMessage(groupId, chatContent, senderId);
+      await query(
+        `INSERT INTO chat_messages (conversation_id, sender_id, content, is_system)
+         VALUES ($1, $2, $3, TRUE)`,
+        [groupId, senderId, chatContent]
+      );
+      await query(
+        `UPDATE chat_conversations
+         SET updated_at = NOW(), last_message_at = NOW(), last_message_preview = $2
+         WHERE id = $1`,
+        [groupId, chatContent.substring(0, 100)]
+      );
     } catch (err) {
       console.error('[selfOnboarding] chat post failed:', err);
     }
