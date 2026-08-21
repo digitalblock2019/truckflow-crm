@@ -60,10 +60,24 @@ const allStatuses = [
   { value: "response_not_in_use", label: "Response - Not In Use" },
   { value: "interested", label: "Interested" },
   { value: "not_interested", label: "Not Interested" },
+  // Self-onboarding statuses:
+  //   'sent'      — allow manual set (agent may have sent a link outside the system,
+  //                 e.g. via WhatsApp, and wants to reflect that on the record)
+  //   'submitted' — system-only. Setting it manually would fake an e-signature +
+  //                 lose the audit trail. Kept in the list so the dropdown can
+  //                 display it when it IS the current value, but disabled.
+  //   'expired'   — allow manual set so an agent can force-expire a stale link
+  //                 or reset a trucker back to an "outreach" state.
+  { value: "self_onboarding_sent",       label: "Self-Onboarding Sent" },
+  { value: "self_onboarding_submitted",  label: "Self-Onboarding Submitted (system-set)", disabled: true },
+  { value: "self_onboarding_expired",    label: "Self-Onboarding Expired" },
   { value: "onboarded", label: "Start Onboarding" },
   // Not manually selectable — fully_onboarded is set from the Onboarding page
   // once all required documents are uploaded (enforced server-side too).
   { value: "fully_onboarded", label: "Fully Onboarded (set on Onboarding page)", disabled: true },
+  // System-only. Set by the submit path when an MC# collision is detected;
+  // requires the duplicate_of_trucker_id FK which the dropdown can't populate.
+  { value: "duplicate_of", label: "Duplicate of Another Record (system-set)", disabled: true },
 ];
 
 const statusLabels: Record<string, string> = {
