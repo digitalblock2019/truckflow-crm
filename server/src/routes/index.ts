@@ -17,6 +17,10 @@ import notificationsRouter from './notifications';
 import auditLogRouter from './auditLog';
 import settingsRouter from './settings';
 import dashboardRouter from './dashboard';
+import {
+  authenticatedRouter as selfOnboardingAuthedRouter,
+  publicRouter as selfOnboardingPublicRouter,
+} from './selfOnboarding';
 import { authenticate } from '../middleware/auth';
 import { CommissionsService } from '../services/commissions.service';
 
@@ -49,6 +53,8 @@ router.use('/employees', employeesRouter);
 router.use('/leave', leaveRouter);
 router.use('/truckers', truckersRouter);
 router.use('/truckers', truckerDocumentsRouter);
+router.use('/truckers', selfOnboardingAuthedRouter);
+router.use('/public/onboarding', selfOnboardingPublicRouter);
 router.use('/shippers', shippersRouter);
 router.use('/loads', loadsRouter);
 router.use('/loads', loadDocumentsRouter);

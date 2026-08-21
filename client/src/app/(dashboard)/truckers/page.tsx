@@ -23,6 +23,7 @@ import RoutesAndAvailabilityFields, {
   routesEqual,
   serializeRoutes,
 } from "@/components/features/RoutesAndAvailabilityFields";
+import SendSelfOnboardingModal from "@/components/features/SendSelfOnboardingModal";
 import type { Trucker } from "@/types";
 
 const statusColors: Record<string, "green" | "blue" | "orange" | "red" | "gray" | "purple"> = {
@@ -44,6 +45,10 @@ const statusColors: Record<string, "green" | "blue" | "orange" | "red" | "gray" 
   not_interested: "red",
   inactive: "gray",
   blacklisted: "red",
+  self_onboarding_sent: "blue",
+  self_onboarding_submitted: "green",
+  self_onboarding_expired: "orange",
+  duplicate_of: "red",
 };
 
 const allStatuses = [
@@ -69,6 +74,10 @@ const statusLabels: Record<string, string> = {
   response_no_answer: "no answer",
   response_not_in_use: "not in use",
   not_interested: "not interested",
+  self_onboarding_sent: "self-onboarding sent",
+  self_onboarding_submitted: "self-onboarding submitted",
+  self_onboarding_expired: "self-onboarding expired",
+  duplicate_of: "duplicate",
 };
 
 const TRUCK_KIND_OPTIONS = [
@@ -128,6 +137,7 @@ export default function TruckersPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [createTruckerErr, setCreateTruckerErr] = useState<string | null>(null);
   const [selectedTrucker, setSelectedTrucker] = useState<Trucker | null>(null);
+  const [sendOnboardingOpen, setSendOnboardingOpen] = useState(false);
   const [newStatus, setNewStatus] = useState("");
   const [newSalesAgentId, setNewSalesAgentId] = useState("");
   const [newDispatcherId, setNewDispatcherId] = useState("");
@@ -881,6 +891,20 @@ export default function TruckersPage() {
               </div>
             )}
 
+            <div className="border-t border-border pt-4 mb-4">
+              <div className="text-[10px] font-mono text-txt-light uppercase mb-2">Self-Onboarding</div>
+              <Button
+                variant="secondary"
+                onClick={() => setSendOnboardingOpen(true)}
+                className="w-full"
+              >
+                Send Self-Onboarding Request
+              </Button>
+              <p className="mt-1.5 text-[10px] text-txt-light">
+                Sends a secure link to the trucker to fill out their own onboarding form and upload documents.
+              </p>
+            </div>
+
             <div className="border-t border-border pt-4">
               <div className="text-[10px] font-mono text-txt-light uppercase mb-2">Current Status</div>
               <div className="mb-3">
@@ -1098,6 +1122,20 @@ export default function TruckersPage() {
           </Button>
         </div>
       </Modal>
+
+      {selectedTrucker && (
+        <SendSelfOnboardingModal
+          open={sendOnboardingOpen}
+          onClose={() => setSendOnboardingOpen(false)}
+          trucker={{
+            id: selectedTrucker.id,
+            legal_name: selectedTrucker.legal_name,
+            mc_number: selectedTrucker.mc_number ?? null,
+            email: selectedTrucker.email ?? null,
+            phone: selectedTrucker.phone ?? null,
+          }}
+        />
+      )}
     </>
   );
 }
