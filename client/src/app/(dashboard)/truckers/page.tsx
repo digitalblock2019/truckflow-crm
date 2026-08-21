@@ -894,9 +894,9 @@ export default function TruckersPage() {
             <div className="border-t border-border pt-4 mb-4">
               <div className="text-[10px] font-mono text-txt-light uppercase mb-2">Self-Onboarding</div>
               <Button
-                variant="secondary"
+                variant="accent"
                 onClick={() => setSendOnboardingOpen(true)}
-                className="w-full"
+                className="w-full justify-center"
               >
                 Send Self-Onboarding Request
               </Button>

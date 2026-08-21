@@ -167,7 +167,7 @@ async function sendOnboardingEmail(params: {
         Hi ${escapeHtml(params.legalName)} team,
       </p>
       <p style="color: #475569; font-size: 14px; line-height: 1.6;">
-        Please use the secure link below to complete your onboarding — fill in your
+        Please use the secure link below to complete your onboarding. You'll fill in your
         company details, contact info, equipment specs, and upload the required
         documents (MC Authority Letter, W-9, Certificate of Insurance,
         Carrier Agreement). If a document isn't ready, you can mark it
@@ -185,7 +185,7 @@ async function sendOnboardingEmail(params: {
       </p>
       <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
       <p style="color: #94a3b8; font-size: 11px; text-align: center;">
-        TruckFlow CRM &mdash; Carrier Management
+        TruckFlow CRM · Carrier Management
       </p>
     </div>
   `;
@@ -594,7 +594,7 @@ export async function submitOnboarding(
     // Status history — audit-facing.
     await client.query(
       `INSERT INTO trucker_status_history
-         (trucker_id, old_status_system, new_status_system, changed_by, notes)
+         (trucker_id, old_status_system, new_status_system, changed_by, comment)
        SELECT id, status_system, 'self_onboarding_submitted'::trucker_status, $2,
               'Submitted via self-onboarding link'
        FROM truckers WHERE id = $1`,
@@ -649,7 +649,7 @@ async function fireSubmissionNotifications(params: {
 
   const total = params.docsUploaded + params.docsDeferred;
   const title = `Onboarding submitted: ${t.legal_name}`;
-  const body = `MC# ${t.mc_number ?? '—'} · Docs uploaded ${params.docsUploaded}/${total}`;
+  const body = `MC# ${t.mc_number ?? 'not provided'} · Docs uploaded ${params.docsUploaded}/${total}`;
 
   // ---- 1. In-app to entire team ----
   await notificationsService.createForMultiple(
@@ -671,9 +671,9 @@ async function fireSubmissionNotifications(params: {
     <div style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px;">
       <h2 style="color: #0f172a; font-size: 18px;">${escapeHtml(t.legal_name)} completed self-onboarding</h2>
       <p style="color: #475569; font-size: 14px;">
-        MC#: <strong>${escapeHtml(t.mc_number ?? '—')}</strong><br/>
-        Phone: ${escapeHtml(t.phone ?? '—')}<br/>
-        Email: ${escapeHtml(t.email ?? '—')}<br/>
+        MC#: <strong>${escapeHtml(t.mc_number ?? 'not provided')}</strong><br/>
+        Phone: ${escapeHtml(t.phone ?? 'not provided')}<br/>
+        Email: ${escapeHtml(t.email ?? 'not provided')}<br/>
         Documents uploaded: <strong>${params.docsUploaded}</strong> of ${total}
         ${params.docsDeferred > 0 ? `(${params.docsDeferred} marked "provide later")` : ''}
       </p>
@@ -694,7 +694,7 @@ async function fireSubmissionNotifications(params: {
   if ((groupRes.rowCount ?? 0) > 0) {
     const groupId = groupRes.rows[0].id as string;
     const chatContent = `🚛 ${t.legal_name} submitted their self-onboarding form. ` +
-      `MC# ${t.mc_number ?? '—'}, phone ${t.phone ?? '—'}. ` +
+      `MC# ${t.mc_number ?? 'not provided'}, phone ${t.phone ?? 'not provided'}. ` +
       `Docs uploaded: ${params.docsUploaded}/${total}.`;
     // Post as the trucker's assigned agent if we have one; otherwise the
     // group's created_by user (usually an admin).

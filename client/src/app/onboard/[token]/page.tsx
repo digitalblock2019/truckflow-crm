@@ -71,6 +71,17 @@ const TRUCK_TYPE_OPTIONS = [
   { value: "other",      label: "Other" },
 ];
 
+// Matches fmcsa_entity_type enum in the schema. Last option ("other") reveals
+// a free-text input the trucker can fill.
+const ENTITY_TYPE_OPTIONS = [
+  { value: "",                label: "Select..." },
+  { value: "corporation",     label: "Corporation" },
+  { value: "llc",             label: "LLC" },
+  { value: "sole_proprietor", label: "Sole Proprietor" },
+  { value: "partnership",     label: "Partnership" },
+  { value: "other",           label: "Other" },
+];
+
 export default function OnboardPage() {
   const { token } = useParams<{ token: string }>();
   const [state, setState] = useState<"loading" | "loaded" | "error" | "submitted">("loading");
@@ -128,7 +139,7 @@ export default function OnboardPage() {
       } catch {
         if (cancelled) return;
         setState("error");
-        setErrorMessage("Network error — please refresh and try again");
+        setErrorMessage("Network error. Please refresh and try again.");
       }
     })();
     return () => { cancelled = true; };
@@ -166,11 +177,30 @@ export default function OnboardPage() {
       }
     }
 
+    // If entity_type = "other", require the freeform specification and bundle
+    // it into the notes field so the agent sees it (schema's entity_type is an
+    // enum so we can't put freeform text there directly).
+    if (fields.entity_type === "other") {
+      const other = String(fields.entity_type_other ?? "").trim();
+      if (!other) {
+        setSubmitError('Please specify the entity type or pick another option.');
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
       const form = new FormData();
+      // Strip client-only helper fields from the payload; merge entity_type_other
+      // into notes so the info survives without a schema change.
+      const { entity_type_other: entityOther, ...serverFields } = fields as { entity_type_other?: string } & Record<string, unknown>;
+      if (fields.entity_type === "other" && entityOther) {
+        const existingNotes = String(serverFields.notes ?? "").trim();
+        const suffix = `Entity type (other): ${entityOther}`;
+        serverFields.notes = existingNotes ? `${existingNotes}\n${suffix}` : suffix;
+      }
       const payload = {
-        fields,
+        fields: serverFields,
         provideLater: Object.entries(provideLater)
           .filter(([, v]) => v)
           .map(([slug]) => slug),
@@ -193,7 +223,7 @@ export default function OnboardPage() {
       }
       setState("submitted");
     } catch {
-      setSubmitError("Network error — please try again.");
+      setSubmitError("Network error. Please try again.");
       setSubmitting(false);
     }
   }
@@ -238,52 +268,62 @@ export default function OnboardPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 py-5">
-        <div className="max-w-3xl mx-auto px-6">
+      <header className="bg-white border-b border-slate-200 py-4 sm:py-5">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6">
           <div className="font-mono text-sm font-semibold tracking-widest text-slate-900">
             TRUCKFLOW <span className="text-blue-600">CRM</span>
           </div>
-          <div className="mt-2 text-xl font-semibold text-slate-900">
-            Carrier Onboarding — {trucker.legal_name}
+          <div className="mt-2 text-lg sm:text-xl font-semibold text-slate-900 leading-tight">
+            Carrier Onboarding
           </div>
-          <div className="mt-1 text-sm text-slate-500">
+          <div className="mt-0.5 text-sm sm:text-base text-slate-700 leading-tight">
+            {trucker.legal_name}
+          </div>
+          <div className="mt-2 text-xs sm:text-sm text-slate-500">
             This link expires {new Date(req.expiresAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
           </div>
         </div>
       </header>
 
       {req.customMessage && (
-        <div className="max-w-3xl mx-auto px-6 pt-6">
-          <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded text-sm text-slate-700">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 pt-4 sm:pt-6">
+          <div className="bg-blue-50 border-l-4 border-blue-500 p-3 sm:p-4 rounded text-sm text-slate-700">
             <div className="text-xs font-semibold text-blue-700 mb-1">Message from your agent</div>
             {req.customMessage}
           </div>
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="max-w-3xl mx-auto px-6 py-8 space-y-8">
+      <form onSubmit={handleSubmit} className="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 sm:space-y-8">
         {/* Company */}
         <Section title="Company">
-          <Row>
-            <ReadOnly label="Legal name"  value={trucker.legal_name} />
-            <ReadOnly label="DOT#"        value={trucker.dot_number ?? "—"} />
-          </Row>
+          <ReadOnly label="Legal name" value={trucker.legal_name} />
           <Row>
             <Field label="MC number" required disabled={!mcEditable}
               value={String(fields.mc_number ?? "")}
               onChange={(v) => setFields((f) => ({ ...f, mc_number: v }))}
-              hint={mcEditable ? "Federal MC number (required to complete)" : "MC# from FMCSA — not editable"}
+              hint={mcEditable ? "Federal MC number (required to complete)" : "MC# on file from FMCSA. Contact your agent to correct."}
             />
-            <Field label="DBA / trade name"
-              value={String(fields.dba_name ?? "")}
-              onChange={(v) => setFields((f) => ({ ...f, dba_name: v }))}
+            <Field label="DOT number"
+              value={String(fields.dot_number ?? "")}
+              onChange={(v) => setFields((f) => ({ ...f, dot_number: v }))}
             />
           </Row>
-          <Field label="Entity type"
-            value={String(fields.entity_type ?? "")}
-            onChange={(v) => setFields((f) => ({ ...f, entity_type: v }))}
-            hint="e.g. Carrier, Broker, Owner-Operator"
+          <Field label="DBA / trade name"
+            value={String(fields.dba_name ?? "")}
+            onChange={(v) => setFields((f) => ({ ...f, dba_name: v }))}
           />
+          <SelectField label="Entity type"
+            value={String(fields.entity_type ?? "")}
+            onChange={(v) => setFields((f) => ({ ...f, entity_type: v, entity_type_other: v === "other" ? f.entity_type_other ?? "" : undefined }))}
+            options={ENTITY_TYPE_OPTIONS}
+          />
+          {fields.entity_type === "other" && (
+            <Field label="Please specify entity type" required
+              value={String(fields.entity_type_other ?? "")}
+              onChange={(v) => setFields((f) => ({ ...f, entity_type_other: v }))}
+            />
+          )}
         </Section>
 
         {/* Contact */}
@@ -343,14 +383,14 @@ export default function OnboardPage() {
               })}
             </div>
           </div>
-          <Row>
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
             <Field label="Length (ft)" type="number" value={String(fields.truck_length_ft ?? "")}
               onChange={(v) => setFields((f) => ({ ...f, truck_length_ft: v }))} />
             <Field label="Width (ft)" type="number" value={String(fields.truck_width_ft ?? "")}
               onChange={(v) => setFields((f) => ({ ...f, truck_width_ft: v }))} />
             <Field label="Height (ft)" type="number" value={String(fields.truck_height_ft ?? "")}
               onChange={(v) => setFields((f) => ({ ...f, truck_height_ft: v }))} />
-          </Row>
+          </div>
           <Field label="Max payload (lbs)" type="number" value={String(fields.max_payload_lbs ?? "")}
             onChange={(v) => setFields((f) => ({ ...f, max_payload_lbs: v }))} />
         </Section>
@@ -386,24 +426,24 @@ export default function OnboardPage() {
         {/* Documents */}
         <Section title="Documents">
           <div className="text-xs text-slate-500 mb-3">
-            Accepted formats: PDF, JPG, PNG. Max 10 MB per file. Check "provide later" if the document isn't ready — your agent will follow up.
+            Accepted formats: PDF, JPG, PNG. Max 10 MB per file. If a document isn't ready, check "Provide later" and your agent will follow up.
           </div>
           <div className="space-y-3">
             {visibleDocTypes.map((dt) => {
               const later = Boolean(provideLater[dt.slug]);
               const file = docFiles[dt.slug];
               return (
-                <div key={dt.slug} className="border border-slate-200 rounded-lg p-4 bg-white">
-                  <div className="flex items-center justify-between gap-3 mb-2">
-                    <div>
-                      <div className="text-sm font-semibold text-slate-900">
+                <div key={dt.slug} className="border border-slate-200 rounded-lg p-3 sm:p-4 bg-white">
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold text-slate-900 flex items-center flex-wrap gap-2">
                         {dt.label}
-                        {dt.is_required && <span className="ml-2 text-xs text-red-600">required</span>}
-                        {dt.is_conditional && <span className="ml-2 text-xs text-amber-600">conditional</span>}
-                        {dt.is_optional && <span className="ml-2 text-xs text-slate-400">optional</span>}
+                        {dt.is_required && <span className="text-[10px] font-mono uppercase text-red-700 bg-red-100 border border-red-200 rounded px-1.5 py-0.5">Required</span>}
+                        {dt.is_conditional && <span className="text-[10px] font-mono uppercase text-amber-800 bg-amber-100 border border-amber-200 rounded px-1.5 py-0.5">Conditional</span>}
+                        {dt.is_optional && <span className="text-[10px] font-mono uppercase text-slate-500 bg-slate-100 border border-slate-200 rounded px-1.5 py-0.5">Optional</span>}
                       </div>
                     </div>
-                    <label className="flex items-center gap-1 text-xs text-slate-600 cursor-pointer">
+                    <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer whitespace-nowrap">
                       <input type="checkbox" checked={later}
                         onChange={(e) => {
                           setProvideLater((p) => ({ ...p, [dt.slug]: e.target.checked }));
@@ -413,14 +453,35 @@ export default function OnboardPage() {
                     </label>
                   </div>
                   {!later && (
-                    <input type="file" accept=".pdf,.jpg,.jpeg,.png"
-                      onChange={(e) => setDocFiles((d) => ({ ...d, [dt.slug]: e.target.files?.[0] ?? null }))}
-                      className="block w-full text-sm text-slate-700 file:mr-3 file:py-2 file:px-3 file:rounded file:border-0 file:bg-blue-50 file:text-blue-700 file:font-medium file:cursor-pointer" />
-                  )}
-                  {file && (
-                    <div className="mt-2 text-xs text-slate-500">
-                      Selected: {file.name} ({Math.round(file.size / 1024)} KB)
-                    </div>
+                    <>
+                      <label className="block cursor-pointer">
+                        <input
+                          type="file"
+                          accept=".pdf,.jpg,.jpeg,.png"
+                          onChange={(e) => setDocFiles((d) => ({ ...d, [dt.slug]: e.target.files?.[0] ?? null }))}
+                          className="sr-only"
+                        />
+                        <span className={`inline-flex items-center justify-center w-full sm:w-auto gap-2 px-4 py-2.5 rounded-md border-2 border-dashed cursor-pointer transition-colors ${file ? "border-green-400 bg-green-50 text-green-800 hover:bg-green-100" : "border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:border-blue-400"} font-medium text-sm`}>
+                          {file ? (
+                            <>
+                              <span aria-hidden>✓</span>
+                              <span>Change file</span>
+                            </>
+                          ) : (
+                            <>
+                              <span aria-hidden>↑</span>
+                              <span>Choose file to upload</span>
+                            </>
+                          )}
+                        </span>
+                      </label>
+                      {file && (
+                        <div className="mt-2 text-xs text-slate-600 break-all">
+                          <span className="font-semibold">{file.name}</span>
+                          <span className="text-slate-400"> ({Math.round(file.size / 1024)} KB)</span>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               );
@@ -447,16 +508,16 @@ export default function OnboardPage() {
           </div>
         )}
 
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3 pt-4 border-t border-slate-200">
           <button type="submit" disabled={submitting}
-            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm px-6 py-3 rounded">
+            className="bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm sm:text-base px-6 py-3 rounded w-full sm:w-auto">
             {submitting ? "Submitting…" : "Submit onboarding"}
           </button>
         </div>
       </form>
 
-      <footer className="text-center text-xs text-slate-400 pb-8">
-        TruckFlow CRM — Carrier Management
+      <footer className="text-center text-xs text-slate-400 pb-8 px-4">
+        TruckFlow CRM · Carrier Management
       </footer>
     </div>
   );
@@ -504,7 +565,36 @@ function Field({ label, value, onChange, type = "text", required, disabled, hint
       </label>
       <input type={type} value={value} required={required} disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
-        className={`w-full border rounded px-3 py-2 text-sm bg-white ${disabled ? "bg-slate-50 text-slate-500" : "border-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"}`} />
+        className={`w-full border rounded px-3 py-2.5 text-base sm:text-sm bg-white ${disabled ? "bg-slate-50 text-slate-500 border-slate-200" : "border-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"}`} />
+      {hint && <div className="mt-1 text-xs text-slate-400">{hint}</div>}
+    </div>
+  );
+}
+
+interface SelectFieldProps {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  required?: boolean;
+  hint?: string;
+}
+function SelectField({ label, value, onChange, options, required, hint }: SelectFieldProps) {
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+        {label}{required && <span className="text-red-500 ml-0.5">*</span>}
+      </label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        required={required}
+        className="w-full border border-slate-300 rounded px-3 py-2.5 text-base sm:text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+      >
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>{opt.label}</option>
+        ))}
+      </select>
       {hint && <div className="mt-1 text-xs text-slate-400">{hint}</div>}
     </div>
   );
@@ -514,7 +604,7 @@ function ReadOnly({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">{label}</label>
-      <div className="w-full border border-slate-200 bg-slate-50 rounded px-3 py-2 text-sm text-slate-700">{value}</div>
+      <div className="w-full border border-slate-200 bg-slate-50 rounded px-3 py-2.5 text-base sm:text-sm text-slate-700 break-words">{value}</div>
     </div>
   );
 }

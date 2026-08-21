@@ -1,10 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import Select from "@/components/ui/Select";
 import { apiFetch, ApiError } from "@/lib/api";
+
+// Default custom-message template. Agent can edit or clear before sending.
+// {legalName} is interpolated at open time.
+function defaultCustomMessage(legalName: string): string {
+  return `Hi ${legalName}, please take a few minutes to complete your onboarding using the secure link. Fill in your details and upload the required documents. If any document isn't ready, just mark it "provide later" and we'll follow up.`;
+}
 
 // Path A modal — send a self-onboarding link to an EXISTING trucker row.
 // (Path B — creating a new prospect record + sending in one flow — is a
@@ -52,6 +58,13 @@ export default function SendSelfOnboardingModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>("");
   const [result, setResult] = useState<SendResult | null>(null);
+
+  // Seed the default message when the modal opens (and reset on close/reopen).
+  useEffect(() => {
+    if (open && !result) {
+      setCustomMessage(defaultCustomMessage(trucker.legal_name));
+    }
+  }, [open, result, trucker.legal_name]);
 
   const hasEmail = Boolean(trucker.email?.trim());
   const hasPhone = Boolean(trucker.phone?.trim());
@@ -123,7 +136,7 @@ export default function SendSelfOnboardingModal({
             <span className="font-semibold">{trucker.legal_name}</span>
           </div>
           <div className="text-xs text-txt-light mb-4">
-            MC# {trucker.mc_number ?? "—"}
+            MC# {trucker.mc_number ?? "not provided"}
           </div>
 
           {bothMissing && (
@@ -151,12 +164,12 @@ export default function SendSelfOnboardingModal({
                   </div>
                 </div>
               </label>
-              <label className="flex items-center gap-2 p-2 rounded border border-slate-200 opacity-60 cursor-not-allowed" title="SMS coming soon">
+              <label className="flex items-center gap-2 p-2 rounded border border-slate-200 opacity-70 cursor-not-allowed bg-slate-50" title="SMS coming soon">
                 <input type="checkbox" checked={smsChecked} disabled />
                 <div className="flex-1">
                   <div className="text-sm flex items-center gap-2">
                     SMS
-                    <span className="text-[10px] font-mono uppercase text-txt-light bg-slate-100 rounded px-1.5 py-px">Coming soon</span>
+                    <span className="text-[10px] font-mono uppercase font-semibold text-amber-800 bg-amber-100 border border-amber-300 rounded px-1.5 py-0.5">Coming soon</span>
                   </div>
                   <div className="text-xs text-txt-light">
                     {hasPhone ? trucker.phone : "No phone on file"}
