@@ -627,12 +627,19 @@ async function fireSubmissionNotifications(params: {
   docsDeferred: number;
 }): Promise<void> {
   // Load trucker + assigned agent + admins.
+  //
+  // Agent email comes from users.email (via employees.crm_user_id) because
+  // employees.personal_email is optional and only the CRM login address is
+  // guaranteed to reach the person. Falls back to personal_email if the
+  // employee isn't a CRM user (crm_user_id IS NULL).
   const tRes = await query(
     `SELECT t.id, t.legal_name, t.mc_number, t.phone, t.email,
             t.assigned_sales_agent_id,
-            e.email AS agent_email, e.full_name AS agent_name
+            COALESCE(u.email, e.personal_email) AS agent_email,
+            e.full_name AS agent_name
      FROM truckers t
      LEFT JOIN employees e ON e.id = t.assigned_sales_agent_id
+     LEFT JOIN users     u ON u.id = e.crm_user_id
      WHERE t.id = $1`,
     [params.truckerId]
   );
