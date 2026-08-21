@@ -399,11 +399,18 @@ export default function OnboardPage() {
         <Section title="Operation">
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Operation type</label>
-            <div className="flex gap-2">
-              {["local","regional","otr"].map((opt) => (
-                <label key={opt} className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 border rounded cursor-pointer ${fields.operation_type === opt ? "border-blue-500 bg-blue-50" : "border-slate-200 bg-white"}`}>
-                  <input type="radio" name="op" checked={fields.operation_type === opt} onChange={() => setFields((f) => ({ ...f, operation_type: opt }))} />
-                  <span className="text-sm capitalize">{opt}</span>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {[
+                { value: "local",    label: "Local",    hint: "Within ~150 mi of base" },
+                { value: "regional", label: "Regional", hint: "Multi-state, ~500 mi radius" },
+                { value: "otr",      label: "OTR",      hint: "Over-the-road, long-haul" },
+              ].map((opt) => (
+                <label key={opt.value} className={`flex items-start gap-2 p-3 border rounded cursor-pointer ${fields.operation_type === opt.value ? "border-blue-500 bg-blue-50" : "border-slate-200 bg-white"}`}>
+                  <input type="radio" name="op" className="mt-0.5" checked={fields.operation_type === opt.value} onChange={() => setFields((f) => ({ ...f, operation_type: opt.value }))} />
+                  <div>
+                    <div className="text-sm font-medium">{opt.label}</div>
+                    <div className="text-xs text-slate-500">{opt.hint}</div>
+                  </div>
                 </label>
               ))}
             </div>
@@ -428,6 +435,14 @@ export default function OnboardPage() {
           <div className="text-xs text-slate-500 mb-3">
             Accepted formats: PDF, JPG, PNG. Max 10 MB per file. If a document isn't ready, check "Provide later" and your agent will follow up.
           </div>
+          {visibleDocTypes.length === 0 && (
+            <div className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded p-3">
+              No document types are configured yet. You can still submit the form and your agent will follow up about documents separately.
+              <div className="mt-1 text-xs text-slate-500">
+                (Loaded {data?.documentTypes?.length ?? 0} doc type(s) from server.)
+              </div>
+            </div>
+          )}
           <div className="space-y-3">
             {visibleDocTypes.map((dt) => {
               const later = Boolean(provideLater[dt.slug]);
