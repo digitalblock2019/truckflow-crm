@@ -918,7 +918,7 @@ export default function TruckersPage() {
                   <Button
                     variant="accent"
                     onClick={() => setSendOnboardingOpen(true)}
-                    className={`w-full justify-center ${alreadySent ? "!bg-yellow-500 hover:!bg-yellow-600 !text-slate-900" : ""}`}
+                    className={`w-full justify-center ${alreadySent ? "!bg-purple-400 hover:!bg-purple-500 !text-white" : ""}`}
                   >
                     {alreadySent ? "Resend Self-Onboarding Request" : "Send Self-Onboarding Request"}
                   </Button>
