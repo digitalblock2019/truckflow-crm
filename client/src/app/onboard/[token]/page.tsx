@@ -9,6 +9,16 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { formatOrdinalDate, formatOrdinalDateTime } from "@/lib/utils";
 
+interface PublicBranding {
+  company_name: string | null;
+  company_website: string | null;
+  logo_url: string | null;
+  us_legal_name: string | null;
+  us_address: string | null;
+  ca_legal_name: string | null;
+  ca_address: string | null;
+}
+
 // ---- Types (mirror the server's OnboardingFetchResult) ---------------------
 interface DocumentType {
   id: string;
@@ -97,6 +107,14 @@ export default function OnboardPage() {
   const [signedName, setSignedName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string>("");
+  const [branding, setBranding] = useState<PublicBranding | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/invoice/branding/public`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((b) => setBranding(b))
+      .catch(() => {});
+  }, []);
 
   // ---- Load token → prefill ------------------------------------------------
   useEffect(() => {
@@ -532,8 +550,27 @@ export default function OnboardPage() {
         </div>
       </form>
 
-      <footer className="text-center text-xs text-slate-400 pb-8 px-4">
-        TruckFlow CRM · Carrier Management
+      <footer className="text-center text-xs text-slate-400 pb-8 px-4 space-y-1">
+        <div>TruckFlow CRM · Carrier Management</div>
+        {branding?.us_legal_name || branding?.us_address ? (
+          <div>
+            {branding.us_legal_name && <span className="font-medium text-slate-500">{branding.us_legal_name}</span>}
+            {branding.us_legal_name && branding.us_address && " — "}
+            {branding.us_address}
+          </div>
+        ) : null}
+        {branding?.ca_legal_name || branding?.ca_address ? (
+          <div>
+            {branding.ca_legal_name && <span className="font-medium text-slate-500">{branding.ca_legal_name}</span>}
+            {branding.ca_legal_name && branding.ca_address && " — "}
+            {branding.ca_address}
+          </div>
+        ) : null}
+        {(branding?.us_legal_name || branding?.ca_legal_name) && (
+          <div>
+            &copy; {new Date().getFullYear()} {[branding?.us_legal_name, branding?.ca_legal_name].filter(Boolean).join(" · ")}. All rights reserved.
+          </div>
+        )}
       </footer>
     </div>
   );

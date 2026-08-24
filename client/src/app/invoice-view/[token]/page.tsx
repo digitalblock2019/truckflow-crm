@@ -20,6 +20,10 @@ interface Branding {
   logo_url?: string;
   invoice_footer_text?: string;
   wise_email?: string;
+  us_legal_name?: string;
+  us_address?: string;
+  ca_legal_name?: string;
+  ca_address?: string;
 }
 
 interface InvoiceData {
@@ -311,9 +315,18 @@ export default function PublicInvoiceView() {
         )}
       </div>
 
-      <p className="text-center text-[11px] text-gray-400 mt-6">
-        Powered by TruckFlow CRM
-      </p>
+      <div className="text-center text-[11px] text-gray-400 mt-6 space-y-1">
+        <p>Powered by TruckFlow CRM</p>
+        {(b?.us_legal_name || b?.us_address) && (
+          <p>{b.us_legal_name && <span className="font-medium text-gray-500">{b.us_legal_name}</span>}{b.us_legal_name && b.us_address ? " — " : ""}{b.us_address}</p>
+        )}
+        {(b?.ca_legal_name || b?.ca_address) && (
+          <p>{b.ca_legal_name && <span className="font-medium text-gray-500">{b.ca_legal_name}</span>}{b.ca_legal_name && b.ca_address ? " — " : ""}{b.ca_address}</p>
+        )}
+        {(b?.us_legal_name || b?.ca_legal_name) && (
+          <p>&copy; {new Date().getFullYear()} {[b?.us_legal_name, b?.ca_legal_name].filter(Boolean).join(" · ")}. All rights reserved.</p>
+        )}
+      </div>
     </div>
   );
 }

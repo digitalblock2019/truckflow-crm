@@ -173,38 +173,30 @@ async function sendOnboardingEmail(params: {
     ? `<p style="color: #475569; font-size: 14px; line-height: 1.6; background: #f8fafc; padding: 16px; border-left: 3px solid #2563eb; border-radius: 4px;">${escapeHtml(params.customMessage.trim())}</p>`
     : '';
 
-  const html = `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px;">
-      <div style="text-align: center; margin-bottom: 32px;">
-        <h1 style="font-family: monospace; font-size: 24px; color: #0f172a; letter-spacing: 2px;">TRUCKFLOW</h1>
-      </div>
-      <h2 style="color: #0f172a; font-size: 18px;">Complete your carrier onboarding</h2>
-      <p style="color: #475569; font-size: 14px; line-height: 1.6;">
-        Hi ${escapeHtml(params.legalName)} team,
-      </p>
-      <p style="color: #475569; font-size: 14px; line-height: 1.6;">
-        Please use the secure link below to complete your onboarding. You'll fill in your
-        company details, contact info, equipment specs, and upload the required
-        documents (MC Authority Letter, W-9, Certificate of Insurance,
-        Carrier Agreement). If a document isn't ready, you can mark it
-        "provide later" and submit it separately.
-      </p>
-      ${customBlock}
-      <div style="text-align: center; margin: 32px 0;">
-        <a href="${params.onboardingUrl}" style="background: #2563eb; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px;">
-          Complete Onboarding
-        </a>
-      </div>
-      <p style="color: #94a3b8; font-size: 12px; line-height: 1.5;">
-        This link expires on ${expiresLabel} and can only be submitted once.
-        If you have questions, reply to this email to reach your assigned agent.
-      </p>
-      <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
-      <p style="color: #94a3b8; font-size: 11px; text-align: center;">
-        TruckFlow CRM · Carrier Management
-      </p>
+  const body = `
+    <h2 style="color: #0f172a; font-size: 18px;">Complete your carrier onboarding</h2>
+    <p style="color: #475569; font-size: 14px; line-height: 1.6;">
+      Hi ${escapeHtml(params.legalName)} team,
+    </p>
+    <p style="color: #475569; font-size: 14px; line-height: 1.6;">
+      Please use the secure link below to complete your onboarding. You'll fill in your
+      company details, contact info, equipment specs, and upload the required
+      documents (MC Authority Letter, W-9, Certificate of Insurance,
+      Carrier Agreement). If a document isn't ready, you can mark it
+      "provide later" and submit it separately.
+    </p>
+    ${customBlock}
+    <div style="text-align: center; margin: 32px 0;">
+      <a href="${params.onboardingUrl}" style="background: #2563eb; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px;">
+        Complete Onboarding
+      </a>
     </div>
+    <p style="color: #94a3b8; font-size: 12px; line-height: 1.5;">
+      This link expires on ${expiresLabel} and can only be submitted once.
+      If you have questions, reply to this email to reach your assigned agent.
+    </p>
   `;
+  const html = await emailService.wrapEmailBody(body);
   await emailService.sendEmail(params.to, 'Complete your TruckFlow carrier onboarding', html);
 }
 
@@ -690,19 +682,18 @@ async function fireSubmissionNotifications(params: {
 
   const appUrl = process.env.APP_URL || 'https://www.truckflowcrm.com';
   const truckerLink = `${appUrl}/truckers/${t.id}`;
-  const emailHtml = `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px;">
-      <h2 style="color: #0f172a; font-size: 18px;">${escapeHtml(t.legal_name)} completed self-onboarding</h2>
-      <p style="color: #475569; font-size: 14px;">
-        MC#: <strong>${escapeHtml(t.mc_number ?? 'not provided')}</strong><br/>
-        Phone: ${escapeHtml(t.phone ?? 'not provided')}<br/>
-        Email: ${escapeHtml(t.email ?? 'not provided')}<br/>
-        Documents uploaded: <strong>${params.docsUploaded}</strong> of ${total}
-        ${params.docsDeferred > 0 ? `(${params.docsDeferred} marked "provide later")` : ''}
-      </p>
-      <p><a href="${truckerLink}" style="background: #2563eb; color: white; padding: 10px 24px; border-radius: 6px; text-decoration: none; font-weight: 600;">Open trucker record</a></p>
-    </div>
+  const emailBody = `
+    <h2 style="color: #0f172a; font-size: 18px;">${escapeHtml(t.legal_name)} completed self-onboarding</h2>
+    <p style="color: #475569; font-size: 14px;">
+      MC#: <strong>${escapeHtml(t.mc_number ?? 'not provided')}</strong><br/>
+      Phone: ${escapeHtml(t.phone ?? 'not provided')}<br/>
+      Email: ${escapeHtml(t.email ?? 'not provided')}<br/>
+      Documents uploaded: <strong>${params.docsUploaded}</strong> of ${total}
+      ${params.docsDeferred > 0 ? `(${params.docsDeferred} marked "provide later")` : ''}
+    </p>
+    <p><a href="${truckerLink}" style="background: #2563eb; color: white; padding: 10px 24px; border-radius: 6px; text-decoration: none; font-weight: 600;">Open trucker record</a></p>
   `;
+  const emailHtml = await emailService.wrapEmailBody(emailBody);
   for (const to of emailRecipients) {
     emailService.sendEmail(to, `Self-onboarding submitted: ${t.legal_name}`, emailHtml)
       .catch((e) => console.error('[selfOnboarding] email notify failed for', to, e));

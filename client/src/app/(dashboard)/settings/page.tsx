@@ -25,6 +25,11 @@ function InvoiceBrandingCard() {
     invoice_footer_text: "",
     invoice_notes_default: "",
     wise_email: "",
+    us_legal_name: "",
+    us_address: "",
+    ca_legal_name: "",
+    ca_address: "",
+    whatsapp_number: "",
   });
   const [dirty, setDirty] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -43,6 +48,11 @@ function InvoiceBrandingCard() {
         invoice_footer_text: b.invoice_footer_text || "",
         invoice_notes_default: b.invoice_notes_default || "",
         wise_email: b.wise_email || "",
+        us_legal_name: b.us_legal_name || "",
+        us_address: b.us_address || "",
+        ca_legal_name: b.ca_legal_name || "",
+        ca_address: b.ca_address || "",
+        whatsapp_number: b.whatsapp_number || "",
       });
     }
   }, [branding]);
@@ -72,8 +82,8 @@ function InvoiceBrandingCard() {
   return (
     <Card>
       <CardHeader
-        title="Invoice Branding"
-        subtitle="Logo and company info shown on invoices"
+        title="Company Branding"
+        subtitle="Logo and company info shown on invoices and all transactional emails"
         action={
           <Button onClick={handleSave} disabled={!dirty || updateBranding.isPending}>
             {updateBranding.isPending ? "Saving..." : "Save Branding"}
@@ -162,6 +172,43 @@ function InvoiceBrandingCard() {
             value={form.wise_email}
             onChange={(e) => { setForm({ ...form, wise_email: e.target.value }); setDirty(true); }}
             placeholder="payments@yourcompany.com"
+          />
+        </div>
+        <div className="col-span-2">
+          <Input
+            label="WhatsApp Number"
+            value={form.whatsapp_number}
+            onChange={(e) => { setForm({ ...form, whatsapp_number: e.target.value }); setDirty(true); }}
+            placeholder="Number pending approval — not shown anywhere yet"
+          />
+        </div>
+      </div>
+
+      <div className="mt-6 pt-5 border-t border-border">
+        <div className="text-xs font-semibold text-txt mb-1">Email Footer — Legal Entities</div>
+        <div className="text-[10px] text-txt-light mb-3">Shown at the bottom of every transactional email (password reset, welcome, invoices, onboarding, etc.)</div>
+        <div className="grid grid-cols-2 gap-3">
+          <Input
+            label="US Legal Name"
+            value={form.us_legal_name}
+            onChange={(e) => { setForm({ ...form, us_legal_name: e.target.value }); setDirty(true); }}
+            placeholder="e.g. TruckFlow LLC"
+          />
+          <Input
+            label="US Address"
+            value={form.us_address}
+            onChange={(e) => { setForm({ ...form, us_address: e.target.value }); setDirty(true); }}
+          />
+          <Input
+            label="Canadian Legal Name"
+            value={form.ca_legal_name}
+            onChange={(e) => { setForm({ ...form, ca_legal_name: e.target.value }); setDirty(true); }}
+            placeholder="e.g. TruckFlow Inc."
+          />
+          <Input
+            label="Canadian Address"
+            value={form.ca_address}
+            onChange={(e) => { setForm({ ...form, ca_address: e.target.value }); setDirty(true); }}
           />
         </div>
       </div>

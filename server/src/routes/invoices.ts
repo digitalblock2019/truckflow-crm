@@ -56,6 +56,33 @@ router.get('/branding/logo-image', async (req: Request, res: Response) => {
   }
 });
 
+// Public display-safe branding — used by unauthenticated public pages
+// (carrier self-onboarding form, invoice view) for the logo + legal footer.
+// Excludes internal-only fields like wise_email.
+router.get('/branding/public', async (req: Request, res: Response) => {
+  try {
+    const apiUrl = process.env.API_URL || 'https://api.truckflowcrm.com';
+    const result = await query(
+      `SELECT company_name, company_website, logo_file_path,
+              us_legal_name, us_address, ca_legal_name, ca_address
+       FROM invoice_branding LIMIT 1`
+    );
+    const b = result.rows[0] || {};
+    res.json({
+      company_name: b.company_name || null,
+      company_website: b.company_website || null,
+      logo_url: b.logo_file_path ? `${apiUrl}/api/invoice/branding/logo-image` : null,
+      us_legal_name: b.us_legal_name || null,
+      us_address: b.us_address || null,
+      ca_legal_name: b.ca_legal_name || null,
+      ca_address: b.ca_address || null,
+    });
+  } catch (err) {
+    console.error('[BrandingPublic] Error:', err);
+    res.status(500).json({ error: 'Failed to load branding' });
+  }
+});
+
 // Stripe webhook (public, needs raw body)
 router.post('/webhook/stripe', express.raw({ type: 'application/json' }), async (req: Request, res: Response) => {
   const stripe = getStripeInstance();

@@ -1,16 +1,112 @@
 import { Resend } from 'resend';
+import { query } from '../config/database';
 
 const resend = new Resend(process.env.RESEND_API_KEY || '');
 const FROM_EMAIL = 'TruckFlow CRM <noreply@truckflowcrm.com>';
 
+interface EmailBranding {
+  companyName: string;
+  logoUrl: string | null;
+  usLegalName: string;
+  usAddress: string;
+  caLegalName: string;
+  caAddress: string;
+}
+
+// Converts our template HTML to a readable plaintext fallback. Resend's own
+// auto-derivation strips tags without inserting line breaks first, producing
+// a run-on wall of text that reads as spam-bait to filters.
+function htmlToPlainText(html: string): string {
+  return html
+    .replace(/<(br|\/p|\/div|\/h[1-6]|\/tr|\/li|hr)\s*\/?>/gi, '\n')
+    .replace(/<li[^>]*>/gi, '- ')
+    .replace(/<a\s+[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gi, '$2 ($1)')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .split('\n').map((l) => l.trim()).join('\n')
+    .trim();
+}
+
+async function getEmailBranding(): Promise<EmailBranding> {
+  const apiUrl = process.env.API_URL || 'https://api.truckflowcrm.com';
+  try {
+    const res = await query(
+      `SELECT company_name, logo_file_path, us_legal_name, us_address, ca_legal_name, ca_address
+       FROM invoice_branding LIMIT 1`
+    );
+    const b = res.rows[0] || {};
+    return {
+      companyName: b.company_name || 'TruckFlow',
+      logoUrl: b.logo_file_path ? `${apiUrl}/api/invoice/branding/logo-image` : null,
+      usLegalName: b.us_legal_name || '',
+      usAddress: b.us_address || '',
+      caLegalName: b.ca_legal_name || '',
+      caAddress: b.ca_address || '',
+    };
+  } catch {
+    return { companyName: 'TruckFlow', logoUrl: null, usLegalName: '', usAddress: '', caLegalName: '', caAddress: '' };
+  }
+}
+
+function emailHeaderHtml(b: EmailBranding): string {
+  return b.logoUrl
+    ? `<div style="text-align: center; margin-bottom: 32px;">
+         <img src="${b.logoUrl}" alt="${b.companyName}" style="max-height: 64px; max-width: 280px; object-fit: contain;" />
+       </div>`
+    : `<div style="text-align: center; margin-bottom: 32px;">
+         <h1 style="font-family: monospace; font-size: 24px; color: #0f172a; letter-spacing: 2px;">${b.companyName.toUpperCase()}</h1>
+       </div>`;
+}
+
+function emailFooterHtml(b: EmailBranding): string {
+  const lines: string[] = [];
+  if (b.usLegalName || b.usAddress) {
+    lines.push(`${b.usLegalName ? `<strong>${b.usLegalName}</strong>` : ''}${b.usLegalName && b.usAddress ? ' &mdash; ' : ''}${b.usAddress}`);
+  }
+  if (b.caLegalName || b.caAddress) {
+    lines.push(`${b.caLegalName ? `<strong>${b.caLegalName}</strong>` : ''}${b.caLegalName && b.caAddress ? ' &mdash; ' : ''}${b.caAddress}`);
+  }
+  if (!lines.length) lines.push(`${b.companyName} &mdash; Operations Management Platform`);
+
+  const year = new Date().getFullYear();
+  const copyrightNames = [b.usLegalName, b.caLegalName].filter(Boolean).join(' &middot; ');
+
+  return `
+    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+    <div style="color: #94a3b8; font-size: 11px; text-align: center; line-height: 1.6;">
+      ${lines.join('<br/>')}
+      ${copyrightNames ? `<div style="margin-top: 10px;">&copy; ${year} ${copyrightNames}. All rights reserved.</div>` : ''}
+    </div>
+  `;
+}
+
 export class EmailService {
+  // Wraps a template body with the shared branded header + footer, pulling
+  // logo and dual US/Canada entity info from invoice_branding.
+  async wrapEmailBody(bodyHtml: string): Promise<string> {
+    const branding = await getEmailBranding();
+    return `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px;">
+        ${emailHeaderHtml(branding)}
+        ${bodyHtml}
+        ${emailFooterHtml(branding)}
+      </div>
+    `;
+  }
+
   async sendEmail(to: string, subject: string, html: string, attachments?: { filename: string; content: Buffer }[], fromName?: string) {
     if (!process.env.RESEND_API_KEY) {
       console.warn('[EmailService] RESEND_API_KEY not set — skipping email to', to);
       return;
     }
     const from = fromName ? `${fromName} <noreply@truckflowcrm.com>` : FROM_EMAIL;
-    const payload: any = { from, to, subject, html };
+    const payload: any = { from, to, subject, html, text: htmlToPlainText(html) };
     if (attachments?.length) {
       payload.attachments = attachments.map((a) => ({
         filename: a.filename,
@@ -25,73 +121,55 @@ export class EmailService {
   }
 
   async sendPasswordResetEmail(email: string, fullName: string, resetLink: string) {
-    const html = `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px;">
-        <div style="text-align: center; margin-bottom: 32px;">
-          <h1 style="font-family: monospace; font-size: 24px; color: #0f172a; letter-spacing: 2px;">TRUCKFLOW</h1>
-        </div>
-        <h2 style="color: #0f172a; font-size: 18px;">Password Reset Request</h2>
-        <p style="color: #475569; font-size: 14px; line-height: 1.6;">
-          Hi ${fullName},
-        </p>
-        <p style="color: #475569; font-size: 14px; line-height: 1.6;">
-          We received a request to reset your password. Click the button below to set a new password. This link expires in 1 hour.
-        </p>
-        <div style="text-align: center; margin: 32px 0;">
-          <a href="${resetLink}" style="background: #2563eb; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px;">
-            Reset Password
-          </a>
-        </div>
-        <p style="color: #94a3b8; font-size: 12px; line-height: 1.5;">
-          If you didn't request this, you can safely ignore this email. Your password will remain unchanged.
-        </p>
-        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
-        <p style="color: #94a3b8; font-size: 11px; text-align: center;">
-          TruckFlow CRM &mdash; Operations Management Platform
-        </p>
+    const body = `
+      <h2 style="color: #0f172a; font-size: 18px;">Password Reset Request</h2>
+      <p style="color: #475569; font-size: 14px; line-height: 1.6;">
+        Hi ${fullName},
+      </p>
+      <p style="color: #475569; font-size: 14px; line-height: 1.6;">
+        We received a request to reset your password. Click the button below to set a new password. This link expires in 1 hour.
+      </p>
+      <div style="text-align: center; margin: 32px 0;">
+        <a href="${resetLink}" style="background: #2563eb; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px;">
+          Reset Password
+        </a>
       </div>
+      <p style="color: #94a3b8; font-size: 12px; line-height: 1.5;">
+        If you didn't request this, you can safely ignore this email. Your password will remain unchanged.
+      </p>
     `;
-    await this.sendEmail(email, 'Reset Your TruckFlow Password', html);
+    await this.sendEmail(email, 'Reset Your TruckFlow Password', await this.wrapEmailBody(body));
   }
 
   async sendWelcomeEmail(email: string, fullName: string, password: string, loginUrl: string) {
-    const html = `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px;">
-        <div style="text-align: center; margin-bottom: 32px;">
-          <h1 style="font-family: monospace; font-size: 24px; color: #0f172a; letter-spacing: 2px;">TRUCKFLOW</h1>
+    const body = `
+      <h2 style="color: #0f172a; font-size: 18px;">Welcome to TruckFlow CRM!</h2>
+      <p style="color: #475569; font-size: 14px; line-height: 1.6;">
+        Hi ${fullName},
+      </p>
+      <p style="color: #475569; font-size: 14px; line-height: 1.6;">
+        Your CRM account has been created. Here are your login credentials:
+      </p>
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 24px 0;">
+        <div style="margin-bottom: 12px;">
+          <div style="color: #94a3b8; font-size: 11px; text-transform: uppercase; font-family: monospace;">Email</div>
+          <div style="color: #0f172a; font-size: 14px; font-weight: 600; margin-top: 4px;">${email}</div>
         </div>
-        <h2 style="color: #0f172a; font-size: 18px;">Welcome to TruckFlow CRM!</h2>
-        <p style="color: #475569; font-size: 14px; line-height: 1.6;">
-          Hi ${fullName},
-        </p>
-        <p style="color: #475569; font-size: 14px; line-height: 1.6;">
-          Your CRM account has been created. Here are your login credentials:
-        </p>
-        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 24px 0;">
-          <div style="margin-bottom: 12px;">
-            <div style="color: #94a3b8; font-size: 11px; text-transform: uppercase; font-family: monospace;">Email</div>
-            <div style="color: #0f172a; font-size: 14px; font-weight: 600; margin-top: 4px;">${email}</div>
-          </div>
-          <div>
-            <div style="color: #94a3b8; font-size: 11px; text-transform: uppercase; font-family: monospace;">Password</div>
-            <div style="color: #0f172a; font-size: 14px; font-weight: 600; margin-top: 4px; font-family: monospace;">${password}</div>
-          </div>
+        <div>
+          <div style="color: #94a3b8; font-size: 11px; text-transform: uppercase; font-family: monospace;">Password</div>
+          <div style="color: #0f172a; font-size: 14px; font-weight: 600; margin-top: 4px; font-family: monospace;">${password}</div>
         </div>
-        <div style="text-align: center; margin: 32px 0;">
-          <a href="${loginUrl}" style="background: #2563eb; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px;">
-            Sign In to TruckFlow
-          </a>
-        </div>
-        <p style="color: #ef4444; font-size: 13px; font-weight: 600;">
-          Please change your password after your first login.
-        </p>
-        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
-        <p style="color: #94a3b8; font-size: 11px; text-align: center;">
-          TruckFlow CRM &mdash; Operations Management Platform
-        </p>
       </div>
+      <div style="text-align: center; margin: 32px 0;">
+        <a href="${loginUrl}" style="background: #2563eb; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px;">
+          Sign In to TruckFlow
+        </a>
+      </div>
+      <p style="color: #ef4444; font-size: 13px; font-weight: 600;">
+        Please change your password after your first login.
+      </p>
     `;
-    await this.sendEmail(email, 'Welcome to TruckFlow CRM — Your Account Details', html);
+    await this.sendEmail(email, 'Welcome to TruckFlow CRM — Your Account Details', await this.wrapEmailBody(body));
   }
 
   async sendInvoiceEmail(
@@ -174,10 +252,7 @@ export class EmailService {
           <div style="color: #166534; font-size: 14px; font-weight: 600; font-family: monospace;">${wiseEmail}</div>
           <div style="color: #16a34a; font-size: 11px; margin-top: 4px;">Send the total to this Wise email address.</div>
         </div>` : ''}
-        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
-        <p style="color: #94a3b8; font-size: 11px; text-align: center;">
-          TruckFlow CRM &mdash; Operations Management Platform
-        </p>
+        ${emailFooterHtml(await getEmailBranding())}
       </div>
     `;
     const attachments = pdfBuffer
@@ -234,10 +309,7 @@ export class EmailService {
             View Invoice
           </a>
         </div>
-        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
-        <p style="color: #94a3b8; font-size: 11px; text-align: center;">
-          TruckFlow CRM &mdash; Operations Management Platform
-        </p>
+        ${emailFooterHtml(await getEmailBranding())}
       </div>
     `;
 
@@ -253,42 +325,33 @@ export class EmailService {
   }
 
   async sendPasswordResetByAdmin(email: string, fullName: string, newPassword: string, loginUrl: string) {
-    const html = `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px;">
-        <div style="text-align: center; margin-bottom: 32px;">
-          <h1 style="font-family: monospace; font-size: 24px; color: #0f172a; letter-spacing: 2px;">TRUCKFLOW</h1>
+    const body = `
+      <h2 style="color: #0f172a; font-size: 18px;">Your Password Has Been Reset</h2>
+      <p style="color: #475569; font-size: 14px; line-height: 1.6;">
+        Hi ${fullName},
+      </p>
+      <p style="color: #475569; font-size: 14px; line-height: 1.6;">
+        An administrator has reset your password. Here are your new login credentials:
+      </p>
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 24px 0;">
+        <div style="margin-bottom: 12px;">
+          <div style="color: #94a3b8; font-size: 11px; text-transform: uppercase; font-family: monospace;">Email</div>
+          <div style="color: #0f172a; font-size: 14px; font-weight: 600; margin-top: 4px;">${email}</div>
         </div>
-        <h2 style="color: #0f172a; font-size: 18px;">Your Password Has Been Reset</h2>
-        <p style="color: #475569; font-size: 14px; line-height: 1.6;">
-          Hi ${fullName},
-        </p>
-        <p style="color: #475569; font-size: 14px; line-height: 1.6;">
-          An administrator has reset your password. Here are your new login credentials:
-        </p>
-        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 24px 0;">
-          <div style="margin-bottom: 12px;">
-            <div style="color: #94a3b8; font-size: 11px; text-transform: uppercase; font-family: monospace;">Email</div>
-            <div style="color: #0f172a; font-size: 14px; font-weight: 600; margin-top: 4px;">${email}</div>
-          </div>
-          <div>
-            <div style="color: #94a3b8; font-size: 11px; text-transform: uppercase; font-family: monospace;">New Password</div>
-            <div style="color: #0f172a; font-size: 14px; font-weight: 600; margin-top: 4px; font-family: monospace;">${newPassword}</div>
-          </div>
+        <div>
+          <div style="color: #94a3b8; font-size: 11px; text-transform: uppercase; font-family: monospace;">New Password</div>
+          <div style="color: #0f172a; font-size: 14px; font-weight: 600; margin-top: 4px; font-family: monospace;">${newPassword}</div>
         </div>
-        <div style="text-align: center; margin: 32px 0;">
-          <a href="${loginUrl}" style="background: #2563eb; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px;">
-            Sign In to TruckFlow
-          </a>
-        </div>
-        <p style="color: #ef4444; font-size: 13px; font-weight: 600;">
-          Please change your password after logging in.
-        </p>
-        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
-        <p style="color: #94a3b8; font-size: 11px; text-align: center;">
-          TruckFlow CRM &mdash; Operations Management Platform
-        </p>
       </div>
+      <div style="text-align: center; margin: 32px 0;">
+        <a href="${loginUrl}" style="background: #2563eb; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px;">
+          Sign In to TruckFlow
+        </a>
+      </div>
+      <p style="color: #ef4444; font-size: 13px; font-weight: 600;">
+        Please change your password after logging in.
+      </p>
     `;
-    await this.sendEmail(email, 'TruckFlow CRM — Your Password Has Been Reset', html);
+    await this.sendEmail(email, 'TruckFlow CRM — Your Password Has Been Reset', await this.wrapEmailBody(body));
   }
 }
