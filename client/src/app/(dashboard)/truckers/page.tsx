@@ -860,18 +860,21 @@ export default function TruckersPage() {
               />
             </div>
 
-            {/* Save edits button */}
-            {detailDirty && (
-              <div className="mb-4">
-                <Button
-                  onClick={handleSaveDetails}
-                  disabled={updateTrucker.isPending}
-                  className="w-full"
-                >
-                  {updateTrucker.isPending ? "Saving..." : "Save Changes"}
-                </Button>
-              </div>
-            )}
+            {/* Save edits button — always rendered so users know it's there.
+                Disabled (not hidden) until a field actually changes. */}
+            <div className="mb-4">
+              <Button
+                onClick={handleSaveDetails}
+                disabled={updateTrucker.isPending || !detailDirty}
+                className="w-full justify-center"
+              >
+                {updateTrucker.isPending
+                  ? "Saving..."
+                  : detailDirty
+                    ? "Save Changes"
+                    : "No changes to save"}
+              </Button>
+            </div>
 
             {isSup && (
               <div className="border-t border-border pt-4 mb-4">
