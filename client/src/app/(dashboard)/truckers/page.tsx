@@ -910,17 +910,20 @@ export default function TruckersPage() {
 
             <div className="border-t border-border pt-4 mb-4">
               <div className="text-[10px] font-mono text-txt-light uppercase mb-2">Self-Onboarding</div>
-              <Button
-                variant="accent"
-                onClick={() => setSendOnboardingOpen(true)}
-                className="w-full justify-center"
-              >
-                {["self_onboarding_sent", "self_onboarding_submitted", "self_onboarding_expired"].includes(
+              {(() => {
+                const alreadySent = ["self_onboarding_sent", "self_onboarding_submitted", "self_onboarding_expired"].includes(
                   selectedTrucker.status_system ?? ""
-                )
-                  ? "Resend Self-Onboarding Request"
-                  : "Send Self-Onboarding Request"}
-              </Button>
+                );
+                return (
+                  <Button
+                    variant="accent"
+                    onClick={() => setSendOnboardingOpen(true)}
+                    className={`w-full justify-center ${alreadySent ? "!bg-yellow-500 hover:!bg-yellow-600 !text-slate-900" : ""}`}
+                  >
+                    {alreadySent ? "Resend Self-Onboarding Request" : "Send Self-Onboarding Request"}
+                  </Button>
+                );
+              })()}
               <p className="mt-1.5 text-[10px] text-txt-light">
                 Sends a secure link to the trucker to fill out their own onboarding form and upload documents.
               </p>
