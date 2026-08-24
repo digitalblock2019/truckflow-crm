@@ -24,6 +24,26 @@ function hashToken(raw: string): string {
   return createHash('sha256').update(raw).digest('hex');
 }
 
+// "12th Sep 2026" — matches client formatOrdinalDate. Duplicated here rather
+// than pulled from client/lib because the server has no path alias into it
+// and this is the only server-side date formatter we need.
+function formatOrdinalDate(d: Date | string): string {
+  const date = typeof d === 'string' ? new Date(d) : d;
+  if (Number.isNaN(date.getTime())) return '';
+  const day = date.getDate();
+  const mod100 = day % 100;
+  let suffix: string;
+  if (mod100 >= 11 && mod100 <= 13) suffix = 'th';
+  else switch (day % 10) {
+    case 1:  suffix = 'st'; break;
+    case 2:  suffix = 'nd'; break;
+    case 3:  suffix = 'rd'; break;
+    default: suffix = 'th';
+  }
+  const month = date.toLocaleString('en-US', { month: 'short' });
+  return `${day}${suffix} ${month} ${date.getFullYear()}`;
+}
+
 // -----------------------------------------------------------------------------
 // SEND — admin/agent clicks "Send self-onboarding" on a trucker row.
 // -----------------------------------------------------------------------------
@@ -147,9 +167,7 @@ async function sendOnboardingEmail(params: {
   customMessage?: string;
   expiresAt: string | Date;
 }): Promise<void> {
-  const expiresLabel = new Date(params.expiresAt).toLocaleDateString('en-US', {
-    year: 'numeric', month: 'long', day: 'numeric',
-  });
+  const expiresLabel = formatOrdinalDate(params.expiresAt);
 
   const customBlock = params.customMessage?.trim()
     ? `<p style="color: #475569; font-size: 14px; line-height: 1.6; background: #f8fafc; padding: 16px; border-left: 3px solid #2563eb; border-radius: 4px;">${escapeHtml(params.customMessage.trim())}</p>`

@@ -32,3 +32,38 @@ export function initials(name: string | null | undefined): string {
     .slice(0, 2)
     .toUpperCase();
 }
+
+// "12th Sep 2026" style formatter. Used in customer-facing surfaces
+// (self-onboarding form, emails) where a friendlier date reads better than
+// ISO or the default en-US long form.
+function ordinalSuffix(n: number): string {
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 13) return "th";
+  switch (n % 10) {
+    case 1:  return "st";
+    case 2:  return "nd";
+    case 3:  return "rd";
+    default: return "th";
+  }
+}
+export function formatOrdinalDate(d: Date | string | number): string {
+  const date = d instanceof Date ? d : new Date(d);
+  if (Number.isNaN(date.getTime())) return "";
+  const day = date.getDate();
+  const month = date.toLocaleString("en-US", { month: "short" });
+  const year = date.getFullYear();
+  return `${day}${ordinalSuffix(day)} ${month} ${year}`;
+}
+
+// Same day/month/year as formatOrdinalDate, plus time (12h clock).
+// e.g. "12th Sep 2026, 3:45 PM"
+export function formatOrdinalDateTime(d: Date | string | number): string {
+  const date = d instanceof Date ? d : new Date(d);
+  if (Number.isNaN(date.getTime())) return "";
+  const time = date.toLocaleString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+  return `${formatOrdinalDate(date)}, ${time}`;
+}

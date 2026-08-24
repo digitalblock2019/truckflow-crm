@@ -5,6 +5,7 @@ import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import Select from "@/components/ui/Select";
 import { apiFetch, ApiError } from "@/lib/api";
+import { formatOrdinalDate } from "@/lib/utils";
 
 // Default custom-message template. Agent can edit or clear before sending.
 // {legalName} is interpolated at open time.
@@ -116,7 +117,7 @@ export default function SendSelfOnboardingModal({
             <div className="mt-1 text-sm text-txt-light">
               Sent to {result.sentTo.email}
               {result.expiresAt && (
-                <> · expires {new Date(result.expiresAt).toLocaleDateString()}</>
+                <> · expires {formatOrdinalDate(result.expiresAt)}</>
               )}
             </div>
           </div>

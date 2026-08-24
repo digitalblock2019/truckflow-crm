@@ -7,6 +7,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import { formatOrdinalDate, formatOrdinalDateTime } from "@/lib/utils";
 
 // ---- Types (mirror the server's OnboardingFetchResult) ---------------------
 interface DocumentType {
@@ -280,7 +281,7 @@ export default function OnboardPage() {
             {trucker.legal_name}
           </div>
           <div className="mt-2 text-xs sm:text-sm text-slate-500">
-            This link expires {new Date(req.expiresAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
+            This link expires {formatOrdinalDate(req.expiresAt)}
           </div>
         </div>
       </header>
@@ -513,7 +514,7 @@ export default function OnboardPage() {
           <Field label="Type your full name" required
             value={signedName}
             onChange={setSignedName}
-            hint={`Signed on ${new Date().toLocaleString()}`}
+            hint={`Signed on ${formatOrdinalDateTime(new Date())}`}
           />
         </Section>
 
