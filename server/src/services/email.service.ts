@@ -41,7 +41,7 @@ async function getEmailBranding(): Promise<EmailBranding> {
     );
     const b = res.rows[0] || {};
     return {
-      companyName: b.company_name || 'TruckFlow',
+      companyName: b.company_name || 'Universal Dispatchers',
       logoUrl: b.logo_file_path ? `${apiUrl}/api/invoice/branding/logo-image` : null,
       usLegalName: b.us_legal_name || '',
       usAddress: b.us_address || '',
@@ -49,11 +49,19 @@ async function getEmailBranding(): Promise<EmailBranding> {
       caAddress: b.ca_address || '',
     };
   } catch {
-    return { companyName: 'TruckFlow', logoUrl: null, usLegalName: '', usAddress: '', caLegalName: '', caAddress: '' };
+    return { companyName: 'Universal Dispatchers', logoUrl: null, usLegalName: '', usAddress: '', caLegalName: '', caAddress: '' };
   }
 }
 
-function emailHeaderHtml(b: EmailBranding): string {
+// headerTextOverride forces a plain-text header (skips the logo) — used for
+// internal-employee emails (login/password), which should always read as
+// "TruckFlow CRM" regardless of the customer-facing company branding.
+function emailHeaderHtml(b: EmailBranding, headerTextOverride?: string): string {
+  if (headerTextOverride) {
+    return `<div style="text-align: center; margin-bottom: 32px;">
+         <h1 style="font-family: monospace; font-size: 24px; color: #0f172a; letter-spacing: 2px;">${headerTextOverride.toUpperCase()}</h1>
+       </div>`;
+  }
   return b.logoUrl
     ? `<div style="text-align: center; margin-bottom: 32px;">
          <img src="${b.logoUrl}" alt="${b.companyName}" style="max-height: 64px; max-width: 280px; object-fit: contain;" />
@@ -87,12 +95,14 @@ function emailFooterHtml(b: EmailBranding): string {
 
 export class EmailService {
   // Wraps a template body with the shared branded header + footer, pulling
-  // logo and dual US/Canada entity info from invoice_branding.
-  async wrapEmailBody(bodyHtml: string): Promise<string> {
+  // logo and dual US/Canada entity info from invoice_branding. Pass
+  // headerTextOverride for internal-employee emails that should always show
+  // "TruckFlow CRM" regardless of customer-facing branding settings.
+  async wrapEmailBody(bodyHtml: string, headerTextOverride?: string): Promise<string> {
     const branding = await getEmailBranding();
     return `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px;">
-        ${emailHeaderHtml(branding)}
+        ${emailHeaderHtml(branding, headerTextOverride)}
         ${bodyHtml}
         ${emailFooterHtml(branding)}
       </div>
@@ -138,7 +148,7 @@ export class EmailService {
         If you didn't request this, you can safely ignore this email. Your password will remain unchanged.
       </p>
     `;
-    await this.sendEmail(email, 'Reset Your TruckFlow Password', await this.wrapEmailBody(body));
+    await this.sendEmail(email, 'Reset Your TruckFlow Password', await this.wrapEmailBody(body, 'TruckFlow CRM'), undefined, 'TruckFlow CRM');
   }
 
   async sendWelcomeEmail(email: string, fullName: string, password: string, loginUrl: string) {
@@ -169,7 +179,7 @@ export class EmailService {
         Please change your password after your first login.
       </p>
     `;
-    await this.sendEmail(email, 'Welcome to TruckFlow CRM — Your Account Details', await this.wrapEmailBody(body));
+    await this.sendEmail(email, 'Welcome to TruckFlow CRM — Your Account Details', await this.wrapEmailBody(body, 'TruckFlow CRM'), undefined, 'TruckFlow CRM');
   }
 
   async sendInvoiceEmail(
@@ -212,7 +222,7 @@ export class EmailService {
            <img src="${logoUrl}" alt="${companyName || 'Logo'}" style="max-height: 120px; max-width: 400px; object-fit: contain;" />
          </div>`
       : `<div style="text-align: center; margin-bottom: 32px;">
-           <h1 style="font-family: monospace; font-size: 24px; color: #0f172a; letter-spacing: 2px;">${companyName || 'TRUCKFLOW'}</h1>
+           <h1 style="font-family: monospace; font-size: 24px; color: #0f172a; letter-spacing: 2px;">${companyName || 'UNIVERSAL DISPATCHERS'}</h1>
          </div>`;
 
     const html = `
@@ -279,7 +289,7 @@ export class EmailService {
            <img src="${logoUrl}" alt="${companyName || 'Logo'}" style="max-height: 120px; max-width: 400px; object-fit: contain;" />
          </div>`
       : `<div style="text-align: center; margin-bottom: 32px;">
-           <h1 style="font-family: monospace; font-size: 24px; color: #0f172a; letter-spacing: 2px;">${companyName || 'TRUCKFLOW'}</h1>
+           <h1 style="font-family: monospace; font-size: 24px; color: #0f172a; letter-spacing: 2px;">${companyName || 'UNIVERSAL DISPATCHERS'}</h1>
          </div>`;
 
     const message = audience === 'recipient'
@@ -352,6 +362,6 @@ export class EmailService {
         Please change your password after logging in.
       </p>
     `;
-    await this.sendEmail(email, 'TruckFlow CRM — Your Password Has Been Reset', await this.wrapEmailBody(body));
+    await this.sendEmail(email, 'TruckFlow CRM — Your Password Has Been Reset', await this.wrapEmailBody(body, 'TruckFlow CRM'), undefined, 'TruckFlow CRM');
   }
 }

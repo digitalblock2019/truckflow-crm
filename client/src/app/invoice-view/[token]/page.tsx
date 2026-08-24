@@ -138,7 +138,7 @@ export default function PublicInvoiceView() {
                 <img src={b.logo_url} alt="Logo" className="h-24 mb-3 object-contain" />
               ) : (
                 <h1 className="text-xl font-bold text-gray-900 mb-1 font-mono tracking-wider">
-                  {b?.company_name || "TRUCKFLOW"}
+                  {b?.company_name || "UNIVERSAL DISPATCHERS"}
                 </h1>
               )}
               {b?.company_address && (
@@ -316,7 +316,7 @@ export default function PublicInvoiceView() {
       </div>
 
       <div className="text-center text-[11px] text-gray-400 mt-6 space-y-1">
-        <p>Powered by TruckFlow CRM</p>
+        <p>Powered by {b?.company_name || "Universal Dispatchers"}</p>
         {(b?.us_legal_name || b?.us_address) && (
           <p>{b.us_legal_name && <span className="font-medium text-gray-500">{b.us_legal_name}</span>}{b.us_legal_name && b.us_address ? " — " : ""}{b.us_address}</p>
         )}

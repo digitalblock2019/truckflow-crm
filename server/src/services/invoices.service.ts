@@ -502,7 +502,7 @@ export class InvoicesService {
         [storagePath, userId, existing.rows[0].id]);
     } else {
       await query('INSERT INTO invoice_branding (company_name, logo_file_path, updated_by) VALUES ($1, $2, $3)',
-        ['TruckFlow', storagePath, userId]);
+        ['Universal Dispatchers', storagePath, userId]);
     }
 
     const signedUrl = await getSignedUrl(storagePath);

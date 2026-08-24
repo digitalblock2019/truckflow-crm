@@ -289,9 +289,13 @@ export default function OnboardPage() {
       {/* Header */}
       <header className="bg-white border-b border-slate-200 py-4 sm:py-5">
         <div className="max-w-3xl mx-auto px-4 sm:px-6">
-          <div className="font-mono text-sm font-semibold tracking-widest text-slate-900">
-            TRUCKFLOW <span className="text-blue-600">CRM</span>
-          </div>
+          {branding?.logo_url ? (
+            <img src={branding.logo_url} alt={branding.company_name ?? "Company logo"} className="h-8 max-w-[200px] object-contain" />
+          ) : (
+            <div className="font-mono text-sm font-semibold tracking-widest text-slate-900">
+              {(branding?.company_name ?? "UNIVERSAL DISPATCHERS").toUpperCase()}
+            </div>
+          )}
           <div className="mt-2 text-lg sm:text-xl font-semibold text-slate-900 leading-tight">
             Carrier Onboarding
           </div>
@@ -527,7 +531,7 @@ export default function OnboardPage() {
         <Section title="E-signature">
           <div className="text-xs text-slate-600 mb-3">
             By typing my full name, I certify the information provided is accurate
-            and I authorize TruckFlow CRM to use it for onboarding and dispatch.
+            and I authorize {branding?.company_name ?? "Universal Dispatchers"} to use it for onboarding and dispatch.
           </div>
           <Field label="Type your full name" required
             value={signedName}
@@ -551,7 +555,7 @@ export default function OnboardPage() {
       </form>
 
       <footer className="text-center text-xs text-slate-400 pb-8 px-4 space-y-1">
-        <div>TruckFlow CRM · Carrier Management</div>
+        <div>{branding?.company_name ?? "Universal Dispatchers"} · Carrier Management</div>
         {branding?.us_legal_name || branding?.us_address ? (
           <div>
             {branding.us_legal_name && <span className="font-medium text-slate-500">{branding.us_legal_name}</span>}

@@ -197,7 +197,7 @@ async function sendOnboardingEmail(params: {
     </p>
   `;
   const html = await emailService.wrapEmailBody(body);
-  await emailService.sendEmail(params.to, 'Complete your TruckFlow carrier onboarding', html);
+  await emailService.sendEmail(params.to, 'Complete your carrier onboarding - Universal Dispatchers', html);
 }
 
 function escapeHtml(s: string): string {
