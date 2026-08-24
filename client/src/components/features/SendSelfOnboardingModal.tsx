@@ -6,6 +6,15 @@ import Button from "@/components/ui/Button";
 import Select from "@/components/ui/Select";
 import { apiFetch, ApiError } from "@/lib/api";
 import { formatOrdinalDate } from "@/lib/utils";
+import { useAuthStore } from "@/lib/auth";
+
+// SMS integration isn't wired up yet (Phase C) — this gives agents a
+// ready-to-paste template so they can send the link manually from whatever
+// SMS/dialer tool they already use.
+function buildSmsTemplate(legalName: string, url: string, agentName: string): string {
+  const greeting = legalName.trim() ? `Hi ${legalName.trim()}` : "Hello";
+  return `${greeting},\n\nPlease complete your carrier onboarding using this secure link: ${url}\n\nIt only takes a few minutes. Let me know if you have any questions.\n\nThanks,\n${agentName || "Your dispatch team"}`;
+}
 
 // Default custom-message template. Agent can edit or clear before sending.
 // {legalName} is interpolated at open time.
@@ -61,6 +70,27 @@ export default function SendSelfOnboardingModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>("");
   const [result, setResult] = useState<SendResult | null>(null);
+  const [smsTemplate, setSmsTemplate] = useState("");
+  const [smsCopied, setSmsCopied] = useState(false);
+  const currentUser = useAuthStore((s) => s.user);
+
+  // Seed the SMS template once we have the link to put in it.
+  useEffect(() => {
+    if (result) {
+      setSmsTemplate(buildSmsTemplate(trucker.legal_name, result.onboardingUrl, currentUser?.full_name ?? ""));
+      setSmsCopied(false);
+    }
+  }, [result, trucker.legal_name, currentUser?.full_name]);
+
+  async function handleCopySms() {
+    try {
+      await navigator.clipboard.writeText(smsTemplate);
+      setSmsCopied(true);
+      setTimeout(() => setSmsCopied(false), 2000);
+    } catch {
+      // Clipboard API can fail (permissions, insecure context) — fall back silently.
+    }
+  }
 
   // Seed the default message when the modal opens (and reset on close/reopen).
   useEffect(() => {
@@ -129,6 +159,27 @@ export default function SendSelfOnboardingModal({
           <div className="text-xs text-txt-light mb-4">
             You can copy this URL to share manually as a backup.
           </div>
+
+          <div className="border-t border-border pt-4 mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-[10px] font-mono uppercase tracking-wider text-txt-light">
+                SMS template (copy &amp; send manually until SMS is integrated)
+              </label>
+              <Button size="sm" variant="secondary" onClick={handleCopySms}>
+                {smsCopied ? "Copied!" : "Copy"}
+              </Button>
+            </div>
+            <textarea
+              value={smsTemplate}
+              onChange={(e) => setSmsTemplate(e.target.value)}
+              rows={6}
+              className="w-full border border-slate-300 rounded px-3 py-2 text-sm font-mono focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            />
+            <div className="mt-1 text-[10px] text-txt-light">
+              Paste this into your SMS/dialer tool in another tab. Feel free to edit before sending.
+            </div>
+          </div>
+
           <div className="flex justify-end">
             <Button onClick={handleClose}>Done</Button>
           </div>
