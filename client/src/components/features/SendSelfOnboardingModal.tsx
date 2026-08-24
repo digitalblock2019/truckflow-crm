@@ -44,11 +44,13 @@ export default function SendSelfOnboardingModal({
   onClose,
   trucker,
   onSent,
+  isResend = false,
 }: {
   open: boolean;
   onClose: () => void;
   trucker: Trucker;
   onSent?: (result: SendResult) => void;
+  isResend?: boolean;
 }) {
   const [emailChecked, setEmailChecked] = useState(true);
   // SMS is Phase 1-deferred. Checkbox is greyed out; kept in state to preserve
@@ -108,7 +110,7 @@ export default function SendSelfOnboardingModal({
   }
 
   return (
-    <Modal open={open} onClose={handleClose} title="Send self-onboarding request" width="520px" closeOnOverlay={false}>
+    <Modal open={open} onClose={handleClose} title={isResend ? "Resend self-onboarding request" : "Send self-onboarding request"} width="520px" closeOnOverlay={false}>
       {result ? (
         <div>
           <div className="text-center mb-4">
@@ -214,7 +216,7 @@ export default function SendSelfOnboardingModal({
           <div className="flex justify-end gap-2 pt-2 border-t border-border">
             <Button variant="secondary" onClick={handleClose} disabled={submitting}>Cancel</Button>
             <Button onClick={handleSend} disabled={!canSend || submitting}>
-              {submitting ? "Sending…" : "Send request"}
+              {submitting ? "Sending…" : isResend ? "Resend request" : "Send request"}
             </Button>
           </div>
         </div>

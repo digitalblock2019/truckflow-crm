@@ -915,7 +915,11 @@ export default function TruckersPage() {
                 onClick={() => setSendOnboardingOpen(true)}
                 className="w-full justify-center"
               >
-                Send Self-Onboarding Request
+                {["self_onboarding_sent", "self_onboarding_submitted", "self_onboarding_expired"].includes(
+                  selectedTrucker.status_system ?? ""
+                )
+                  ? "Resend Self-Onboarding Request"
+                  : "Send Self-Onboarding Request"}
               </Button>
               <p className="mt-1.5 text-[10px] text-txt-light">
                 Sends a secure link to the trucker to fill out their own onboarding form and upload documents.
@@ -1151,6 +1155,9 @@ export default function TruckersPage() {
             email: selectedTrucker.email ?? null,
             phone: selectedTrucker.phone ?? null,
           }}
+          isResend={["self_onboarding_sent", "self_onboarding_submitted", "self_onboarding_expired"].includes(
+            selectedTrucker.status_system ?? ""
+          )}
         />
       )}
     </>
