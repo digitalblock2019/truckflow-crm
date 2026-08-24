@@ -2,7 +2,6 @@ import { Resend } from 'resend';
 import { query } from '../config/database';
 
 const resend = new Resend(process.env.RESEND_API_KEY || '');
-const FROM_EMAIL = 'TruckFlow CRM <noreply@truckflowcrm.com>';
 
 interface EmailBranding {
   companyName: string;
@@ -105,7 +104,8 @@ export class EmailService {
       console.warn('[EmailService] RESEND_API_KEY not set — skipping email to', to);
       return;
     }
-    const from = fromName ? `${fromName} <noreply@truckflowcrm.com>` : FROM_EMAIL;
+    const displayName = fromName || (await getEmailBranding()).companyName;
+    const from = `${displayName} <noreply@truckflowcrm.com>`;
     const payload: any = { from, to, subject, html, text: htmlToPlainText(html) };
     if (attachments?.length) {
       payload.attachments = attachments.map((a) => ({
