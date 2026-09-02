@@ -36,7 +36,13 @@ interface Props {
 
 export default function MessageList({ conversationId, conversation, userId }: Props) {
   const { data, isLoading } = useMessages(conversationId);
+  // `cursor` is the value currently being requested from useOlderMessages.
+  // `nextCursor` is the boundary to use for the *next* older-page request —
+  // it must advance to olderData.nextCursor after each fetch, otherwise
+  // "Load older messages" keeps re-requesting the same page forever and the
+  // user can never scroll back past the first older page.
   const [cursor, setCursor] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const { data: olderData } = useOlderMessages(conversationId, cursor);
   const [allMessages, setAllMessages] = useState<ChatMessage[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -51,6 +57,7 @@ export default function MessageList({ conversationId, conversation, userId }: Pr
     const msgs = data?.messages ?? [];
     setAllMessages(msgs);
     setCursor(null); // Reset cursor on conversation change
+    setNextCursor(data?.nextCursor ?? null);
   }, [data]);
 
   useEffect(() => {
@@ -60,6 +67,9 @@ export default function MessageList({ conversationId, conversation, userId }: Pr
         const newMsgs = olderData.messages.filter((m: ChatMessage) => !ids.has(m.id));
         return [...prev, ...newMsgs];
       });
+      // Advance the boundary so the next fetch continues further back
+      // instead of re-requesting this same page.
+      setNextCursor(olderData.nextCursor ?? null);
     }
   }, [olderData]);
 
@@ -82,8 +92,8 @@ export default function MessageList({ conversationId, conversation, userId }: Pr
   const handleScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
-    if (el.scrollTop < 100 && data?.nextCursor && !cursor) {
-      setCursor(data.nextCursor);
+    if (el.scrollTop < 100 && nextCursor && cursor !== nextCursor) {
+      setCursor(nextCursor);
     }
   };
 
@@ -100,10 +110,10 @@ export default function MessageList({ conversationId, conversation, userId }: Pr
 
   return (
     <div ref={scrollRef} onScroll={handleScroll} className="flex-1 min-h-0 overflow-y-auto py-4 space-y-2">
-      {data?.nextCursor && (
+      {nextCursor && (
         <div className="text-center py-2">
           <button
-            onClick={() => setCursor(data.nextCursor)}
+            onClick={() => setCursor(nextCursor)}
             className="text-[11px] text-blue hover:underline"
           >
             Load older messages
