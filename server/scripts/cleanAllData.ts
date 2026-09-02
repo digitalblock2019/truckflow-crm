@@ -1,11 +1,34 @@
 import { query } from '../src/config/database';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
+import * as readline from 'readline';
 
 dotenv.config();
 
+// This is the only DB TruckFlow has — there is no separate staging/local
+// database, so every run of this script targets real data. It used to also
+// wipe chat_* tables and the entire storage bucket (including chat images)
+// with zero confirmation, which is how chat history got destroyed. Chat is
+// now permanently excluded (see CHAT PROTECTION below) and a typed
+// confirmation is required before anything else is touched.
+const CONFIRM_PHRASE = 'DELETE ALL DATA';
+
+function ask(question: string): Promise<string> {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve) => rl.question(question, (answer) => { rl.close(); resolve(answer); }));
+}
+
 async function cleanAll() {
   console.log('=== TruckFlow Data Cleanup ===\n');
+  console.log('This wipes truckers, invoices, loads, employees, and related records.');
+  console.log('Chat messages/conversations and their attachments are NEVER touched by this script.\n');
+
+  const answer = await ask(`Type "${CONFIRM_PHRASE}" to continue (anything else aborts): `);
+  if (answer.trim() !== CONFIRM_PHRASE) {
+    console.log('\nConfirmation did not match. Aborting — nothing was deleted.');
+    process.exit(1);
+  }
+  console.log('');
 
   // 1. Find admin users to preserve — explicit whitelist by email
   const PROTECTED_ADMIN_EMAILS = [
@@ -48,15 +71,13 @@ async function cleanAll() {
   await query('DROP RULE IF EXISTS no_delete_audit ON audit_log');
 
   // 2. Delete in dependency order (children first)
+  //
+  // CHAT PROTECTION: chat_messages, chat_conversations, chat_members,
+  // chat_member_state, chat_message_attachments, chat_message_reactions are
+  // deliberately absent from this list. Chat is real business communication,
+  // not test/demo data, and this script must never be able to delete it —
+  // that's exactly what happened before this file was hardened.
   const deletions = [
-    // Chat
-    "DELETE FROM chat_message_reactions",
-    "DELETE FROM chat_message_attachments",
-    "DELETE FROM chat_messages",
-    "DELETE FROM chat_member_state",
-    "DELETE FROM chat_members",
-    "DELETE FROM chat_conversations",
-
     // Invoices
     "DELETE FROM invoice_activity",
     "DELETE FROM invoice_reminder_rules",
@@ -171,17 +192,21 @@ async function cleanAll() {
           continue;
         }
 
-        // List all files recursively
-        const allFiles = await listAllFiles(supabase, bucket, '');
+        // List all files recursively, then exclude chat/ — chat images and
+        // attachments live in this same bucket and must never be deleted by
+        // this script (see CHAT PROTECTION note above the deletions list).
+        const allFiles = (await listAllFiles(supabase, bucket, '')).filter(
+          (f) => !f.startsWith('chat/')
+        );
         if (allFiles.length > 0) {
           const { error: delError } = await supabase.storage.from(bucket).remove(allFiles);
           if (delError) {
             console.log(`  ⚠ ${bucket}: delete error — ${delError.message}`);
           } else {
-            console.log(`  ✓ ${bucket}: ${allFiles.length} files deleted`);
+            console.log(`  ✓ ${bucket}: ${allFiles.length} files deleted (chat/ preserved)`);
           }
         } else {
-          console.log(`  ✓ ${bucket}: no files`);
+          console.log(`  ✓ ${bucket}: no files to delete (chat/ preserved)`);
         }
       } catch (err: any) {
         console.log(`  ⚠ ${bucket}: ${err.message}`);
