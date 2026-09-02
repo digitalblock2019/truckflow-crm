@@ -1,0 +1,91 @@
+name: Database + storage backup
+
+# Free, self-hosted backup — Supabase's free plan has no backups at all, so
+# this is the only safety net for the whole DB (chat history included) and
+# the Storage bucket (chat images, trucker documents). Runs on the 1st and
+# 15th of each month (~biweekly) and can also be triggered manually.
+#
+# Requires these repo secrets (Settings -> Secrets and variables -> Actions):
+#   DATABASE_URL, SUPABASE_URL, SUPABASE_SERVICE_KEY  (same values as server/.env)
+
+on:
+  schedule:
+    - cron: '0 4 1,15 * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install postgresql-client
+        run: sudo apt-get update && sudo apt-get install --yes postgresql-client
+
+      - name: Dump database
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          pg_dump "$DATABASE_URL" --no-owner --no-privileges --clean --if-exists > db.sql
+          gzip db.sql
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install server deps
+        working-directory: server
+        run: npm ci
+
+      - name: Mirror Supabase Storage bucket
+        working-directory: server
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: npx ts-node scripts/backup/mirrorStorage.ts ../storage-mirror
+
+      - name: Archive storage mirror
+        run: |
+          if [ -d storage-mirror ] && [ "$(ls -A storage-mirror)" ]; then
+            tar -czf storage.tar.gz -C storage-mirror .
+          else
+            echo "Storage mirror empty — skipping archive"
+          fi
+
+      - name: Commit backup to db-backups branch
+        run: |
+          set -e
+          STAMP=$(date -u +%Y-%m-%d)
+          git config user.name "backup-bot"
+          git config user.email "backup-bot@users.noreply.github.com"
+
+          git fetch origin db-backups || true
+          if git show-ref --verify --quiet refs/remotes/origin/db-backups; then
+            git checkout db-backups
+          else
+            git checkout --orphan db-backups
+            git rm -rf . > /dev/null 2>&1 || true
+          fi
+
+          mkdir -p "backups/$STAMP"
+          mv db.sql.gz "backups/$STAMP/db.sql.gz"
+          if [ -f storage.tar.gz ]; then
+            mv storage.tar.gz "backups/$STAMP/storage.tar.gz"
+          fi
+
+          # Keep at least a year of history — prune anything older than 400 days.
+          find backups -maxdepth 1 -type d -name '20*' | while read -r dir; do
+            dirdate=$(basename "$dir")
+            age_days=$(( ( $(date -u +%s) - $(date -u -d "$dirdate" +%s) ) / 86400 ))
+            if [ "$age_days" -gt 400 ]; then
+              echo "Pruning old backup: $dir ($age_days days old)"
+              git rm -rf "$dir" > /dev/null
+            fi
+          done
+
+          git add -A
+          git commit -m "Backup $STAMP" || echo "Nothing to commit"
+          git push origin db-backups
