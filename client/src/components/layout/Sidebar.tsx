@@ -15,6 +15,10 @@ interface NavItem {
   adminOnly?: boolean;
   supervisorOnly?: boolean;
   external?: boolean;
+  // StaffSense has no login of its own — it trusts the TruckFlow JWT handed
+  // off via ?token=, validated against its own /dashboard/me. See
+  // StaffSense repo docs/todo.md Stage 7.
+  ssoHandoff?: boolean;
 }
 
 const sections: { title: string; items: NavItem[] }[] = [
@@ -48,7 +52,7 @@ const sections: { title: string; items: NavItem[] }[] = [
     items: [
       { href: "/audit-log", label: "Audit Log", icon: "&#x1F50D;", supervisorOnly: true },
       { href: "/settings", label: "Settings", icon: "&#x2699;", adminOnly: true },
-      { href: "https://app.staffsense.io", label: "Monitoring", icon: "&#x1F6E1;", adminOnly: true, external: true },
+      { href: "https://app.staffsense.io", label: "Monitoring", icon: "&#x1F6E1;", adminOnly: true, external: true, ssoHandoff: true },
     ],
   },
 ];
@@ -56,6 +60,7 @@ const sections: { title: string; items: NavItem[] }[] = [
 export default function Sidebar() {
   const pathname = usePathname();
   const user = useAuthStore((s) => s.user);
+  const tokens = useAuthStore((s) => s.tokens);
   const { data: me } = useMe();
   const role = user?.role ?? "viewer";
   const profileImageUrl = (me as Record<string, unknown> | undefined)?.profile_image_url as string | undefined;
@@ -117,6 +122,13 @@ export default function Sidebar() {
                   : item.href.includes("?")
                     ? pathname + (typeof window !== "undefined" ? window.location.search : "") === item.href
                     : pathname === item.href || pathname.startsWith(item.href + "/");
+                // Monitoring has no login of its own — hand off the current
+                // TruckFlow JWT so one click opens straight into an
+                // authenticated StaffSense dashboard instead of a login wall.
+                const href =
+                  item.ssoHandoff && tokens?.access_token
+                    ? `${item.href}?token=${encodeURIComponent(tokens.access_token)}`
+                    : item.href;
                 const className = `flex items-center gap-2.5 px-[18px] py-[9px] text-[13px] border-l-[3px] transition-all duration-100
                       ${active
                         ? "border-accent bg-blue/30 text-white"
@@ -142,7 +154,7 @@ export default function Sidebar() {
                 return item.external ? (
                   <a
                     key={item.href}
-                    href={item.href}
+                    href={href}
                     target="_blank"
                     rel="noopener noreferrer"
                     className={className}
@@ -150,7 +162,7 @@ export default function Sidebar() {
                     {inner}
                   </a>
                 ) : (
-                  <Link key={item.href} href={item.href} className={className}>
+                  <Link key={item.href} href={href} className={className}>
                     {inner}
                   </Link>
                 );
