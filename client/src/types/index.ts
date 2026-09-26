@@ -85,7 +85,23 @@ export interface Trucker {
   is_new_authority: boolean;
   uses_quick_pay: boolean;
   created_at: string;
+  updated_at: string | null;
+  // NULL when the change came from the public self-onboarding form rather
+  // than a CRM user.
+  updated_by_name: string | null;
+  // Most recent trucker_status_history.comment, surfaced so agents can scan
+  // reasons from the list without opening each record.
+  latest_status_comment: string | null;
   [key: string]: unknown;
+}
+
+export interface TruckerStatusHistoryEntry {
+  id: string;
+  old_status_system: string | null;
+  new_status_system: string | null;
+  comment: string | null;
+  changed_at: string;
+  changed_by_name: string | null;
 }
 
 export interface Load {

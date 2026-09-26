@@ -11,9 +11,9 @@ import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
-import { useTruckers, useCreateTrucker, useUpdateTrucker, useDeleteTrucker, useBulkDeleteTruckers, useBulkAssignTruckers, useInitiateOnboarding, useEmployees, useTruckerDocuments, useUploadDocument, useMe } from "@/lib/hooks";
+import { useTruckers, useCreateTrucker, useUpdateTrucker, useDeleteTrucker, useBulkDeleteTruckers, useBulkAssignTruckers, useInitiateOnboarding, useEmployees, useTruckerDocuments, useTruckerStatusHistory, useUploadDocument, useMe } from "@/lib/hooks";
 import { useAuthStore } from "@/lib/auth";
-import { totalPages, employeeTypeLabel } from "@/lib/utils";
+import { totalPages, employeeTypeLabel, formatOrdinalDate, formatOrdinalDateTime } from "@/lib/utils";
 import ProgressBar from "@/components/ui/ProgressBar";
 import DocSlot from "@/components/features/DocSlot";
 import RoutesAndAvailabilityFields, {
@@ -43,6 +43,7 @@ const statusColors: Record<string, "green" | "blue" | "orange" | "red" | "gray" 
   response_not_in_use: "red",
   interested: "green",
   not_interested: "red",
+  sleeping_lead: "purple",
   inactive: "gray",
   blacklisted: "red",
   self_onboarding_sent: "blue",
@@ -60,6 +61,9 @@ const allStatuses = [
   { value: "response_not_in_use", label: "Response - Not In Use" },
   { value: "interested", label: "Interested" },
   { value: "not_interested", label: "Not Interested" },
+  // Replies sometimes / goes quiet — warm but not workable right now. Used to
+  // live in a separate Google Sheet before this became a real status.
+  { value: "sleeping_lead", label: "Sleeping Lead" },
   // Self-onboarding statuses:
   //   'sent'      — allow manual set (agent may have sent a link outside the system,
   //                 e.g. via WhatsApp, and wants to reflect that on the record)
@@ -80,6 +84,11 @@ const allStatuses = [
   { value: "duplicate_of", label: "Duplicate of Another Record (system-set)", disabled: true },
 ];
 
+// Statuses that can't be set without saying why. Kept in sync with
+// COMMENT_REQUIRED_STATUSES in server/src/services/truckers.service.ts, which
+// is the actual enforcement point.
+const COMMENT_REQUIRED_STATUSES = ["interested", "not_interested"];
+
 const statusLabels: Record<string, string> = {
   onboarded: "onboarding",
   fully_onboarded: "fully onboarded",
@@ -88,6 +97,7 @@ const statusLabels: Record<string, string> = {
   response_no_answer: "no answer",
   response_not_in_use: "not in use",
   not_interested: "not interested",
+  sleeping_lead: "sleeping lead",
   self_onboarding_sent: "self-onboarding sent",
   self_onboarding_submitted: "self-onboarding submitted",
   self_onboarding_expired: "self-onboarding expired",
@@ -126,14 +136,18 @@ const STATE_PROVINCE_OPTIONS = [
 const truckKindLabel = (value: string) =>
   TRUCK_KIND_OPTIONS.find((o) => o.value === value)?.label ?? value;
 
+// Ordered cold → hot along the lead journey: raw import, first contact, the
+// two "didn't convert" outcomes that contact produces, then the positive path
+// through onboarding.
 const tabs = [
   { key: "", label: "All" },
   { key: "imported", label: "Imported" },
   { key: "called,sms_sent", label: "Called / SMS Sent" },
+  { key: "not_interested", label: "Not Interested" },
+  { key: "sleeping_lead", label: "Sleeping Leads" },
   { key: "interested", label: "Interested" },
   { key: "onboarded", label: "Ready For Onboarding" },
   { key: "fully_onboarded", label: "Fully Onboarded" },
-  { key: "not_interested", label: "Not Interested" },
   // Special tabs: use *_unassigned_* filters instead of a status enum value.
   // Handled in queryParams below — the key values are sentinels.
   { key: "__unassigned_sales_agent__", label: "Unassigned (no sales rep)" },
@@ -273,6 +287,7 @@ export default function TruckersPage() {
     });
   };
   const { data: truckerDocs } = useTruckerDocuments(selectedTrucker?.id ?? "");
+  const { data: statusHistory } = useTruckerStatusHistory(selectedTrucker?.id ?? "");
   const uploadDoc = useUploadDocument();
 
   const modalDocsArr = truckerDocs ?? [];
@@ -358,6 +373,29 @@ export default function TruckersPage() {
     { key: "phone", header: "Phone" },
     { key: "sales_agent_name", header: "Sales Agent", render: (r) => <span className="text-xs">{r.sales_agent_name || "—"}</span> },
     { key: "dispatcher_name", header: "Dispatcher", render: (r) => <span className="text-xs">{r.dispatcher_name || "—"}</span> },
+    {
+      key: "latest_status_comment",
+      header: "Last Comment",
+      render: (r) => (
+        <span className="text-xs text-txt-light block max-w-[220px] truncate" title={r.latest_status_comment || ""}>
+          {r.latest_status_comment || "—"}
+        </span>
+      ),
+    },
+    {
+      key: "updated_at",
+      header: "Last Updated",
+      render: (r) => (
+        <span className="text-xs text-txt-light whitespace-nowrap">
+          {r.updated_at ? formatOrdinalDate(r.updated_at) : "—"}
+          {/* No updated_by means the trucker changed it themselves via the
+              public self-onboarding form, not a CRM user. */}
+          <span className="block text-[10px]">
+            {r.updated_by_name || (r.updated_at ? "self-onboarding" : "")}
+          </span>
+        </span>
+      ),
+    },
   ];
 
   const handleCreate = (force = false) => {
@@ -422,13 +460,25 @@ export default function TruckersPage() {
   };
 
   const [statusError, setStatusError] = useState<string | null>(null);
+  const [statusComment, setStatusComment] = useState("");
+  // Mirrors COMMENT_REQUIRED_STATUSES on the server — the server rejects these
+  // without a comment regardless, this just stops the round-trip.
+  const commentRequired = COMMENT_REQUIRED_STATUSES.includes(newStatus);
+
   const handleStatusChange = () => {
     if (!selectedTrucker || !newStatus) return;
+    if (commentRequired && !statusComment.trim()) return;
     setStatusError(null);
     updateTrucker.mutate(
-      { id: selectedTrucker.id, status_system: newStatus } as Partial<Trucker> & { id: string },
       {
-        onSuccess: () => { setSelectedTrucker(null); setNewStatus(""); setStatusError(null); },
+        id: selectedTrucker.id,
+        status_system: newStatus,
+        ...(statusComment.trim() ? { status_comment: statusComment.trim() } : {}),
+      } as Partial<Trucker> & { id: string },
+      {
+        onSuccess: () => {
+          setSelectedTrucker(null); setNewStatus(""); setStatusComment(""); setStatusError(null);
+        },
         onError: (err) => setStatusError((err as Error)?.message || "Status change failed"),
       }
     );
@@ -634,7 +684,7 @@ export default function TruckersPage() {
       {/* Trucker Detail Modal */}
       <Modal
         open={!!selectedTrucker}
-        onClose={() => { setSelectedTrucker(null); setNewStatus(""); setNewSalesAgentId(""); setNewDispatcherId(""); setModalTab("details"); }}
+        onClose={() => { setSelectedTrucker(null); setNewStatus(""); setStatusComment(""); setStatusError(null); setNewSalesAgentId(""); setNewDispatcherId(""); setModalTab("details"); }}
         title={selectedTrucker?.legal_name || "Trucker Details"}
         width="640px"
       >
@@ -948,11 +998,34 @@ export default function TruckersPage() {
                 </div>
                 <Button
                   onClick={handleStatusChange}
-                  disabled={updateTrucker.isPending || newStatus === selectedTrucker.status_system}
+                  disabled={
+                    updateTrucker.isPending ||
+                    newStatus === selectedTrucker.status_system ||
+                    (commentRequired && !statusComment.trim())
+                  }
                 >
                   {updateTrucker.isPending ? "Updating..." : "Update Status"}
                 </Button>
               </div>
+
+              {commentRequired && newStatus !== selectedTrucker.status_system && (
+                <div className="mt-3">
+                  <label className="block text-[10px] font-mono uppercase tracking-wider text-txt-light mb-1">
+                    Comment <span className="text-red">*</span> — what happened on this lead?
+                  </label>
+                  <textarea
+                    value={statusComment}
+                    onChange={(e) => setStatusComment(e.target.value)}
+                    rows={3}
+                    autoFocus
+                    placeholder="e.g. Wants reefer loads FL → TX, call back Monday after 2pm"
+                    className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  />
+                  <div className="mt-1 text-[10px] text-txt-light">
+                    Required for Interested / Not Interested so the next person knows the context.
+                  </div>
+                </div>
+              )}
               <p className="mt-1.5 text-[10px] text-txt-light">
                 To fully onboard a trucker: set status to <span className="font-semibold">Start Onboarding</span>,
                 then upload the required documents on the Onboarding page and click Mark Fully Onboarded.
@@ -960,6 +1033,33 @@ export default function TruckersPage() {
               {statusError && (
                 <div className="mt-2 px-3 py-2 bg-red/5 border border-red/30 rounded-md text-xs text-red">
                   {statusError}
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-border pt-4 mt-4">
+              <div className="text-[10px] font-mono text-txt-light uppercase mb-2">Status History</div>
+              {!statusHistory?.length ? (
+                <div className="text-xs text-txt-light">No status changes recorded yet.</div>
+              ) : (
+                <div className="space-y-3">
+                  {statusHistory.map((h) => (
+                    <div key={h.id} className="border-l-2 border-border pl-3">
+                      <div className="text-[11px] text-txt-light">
+                        {formatOrdinalDateTime(h.changed_at)} · {h.changed_by_name || "self-onboarding"}
+                      </div>
+                      <div className="text-xs text-txt mt-0.5">
+                        {(statusLabels[h.old_status_system ?? ""] ?? (h.old_status_system ?? "—").replace(/_/g, " "))}
+                        {" → "}
+                        <span className="font-semibold">
+                          {statusLabels[h.new_status_system ?? ""] ?? (h.new_status_system ?? "—").replace(/_/g, " ")}
+                        </span>
+                      </div>
+                      {h.comment && (
+                        <div className="text-xs text-txt-light mt-1 italic">&ldquo;{h.comment}&rdquo;</div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

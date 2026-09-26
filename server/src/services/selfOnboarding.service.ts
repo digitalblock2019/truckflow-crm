@@ -502,8 +502,11 @@ export async function submitOnboarding(
     }
     if (sets.length > 0) {
       params.push(truckerId);
+      // updated_by is explicitly NULLed: the trucker made this change via the
+      // public form, not a CRM user. Leaving the previous value in place would
+      // misattribute the edit to whoever last touched the record internally.
       await client.query(
-        `UPDATE truckers SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $${p}`,
+        `UPDATE truckers SET ${sets.join(', ')}, updated_at = NOW(), updated_by = NULL WHERE id = $${p}`,
         params
       );
     }

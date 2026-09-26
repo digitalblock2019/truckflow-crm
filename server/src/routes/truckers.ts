@@ -12,6 +12,7 @@ router.get('/', (req, res) => ctrl.list(req, res));
 router.get('/batches', (req, res) => ctrl.listBatches(req, res));
 router.get('/activity', (req, res) => ctrl.activity(req, res));
 router.get('/:id', (req, res) => ctrl.getById(req, res));
+router.get('/:id/status-history', (req, res) => ctrl.statusHistory(req, res));
 router.post('/', (req, res) => ctrl.create(req, res));
 router.patch('/:id', (req, res) => ctrl.update(req, res));
 router.post('/import', authorize('admin', 'supervisor'), (req, res) => ctrl.bulkImport(req, res));

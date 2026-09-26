@@ -21,6 +21,7 @@ import type {
   Setting,
   LeaveRequest,
   TruckerDocument,
+  TruckerStatusHistoryEntry,
   Notification,
   PaginatedResponse,
   Shipper,
@@ -120,6 +121,7 @@ export function useUpdateTrucker() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["truckers"] });
       qc.invalidateQueries({ queryKey: ["trucker-documents"] });
+      qc.invalidateQueries({ queryKey: ["trucker-status-history"] });
     },
   });
 }
@@ -255,6 +257,14 @@ export function useTruckerDocuments(truckerId: string) {
   return useQuery({
     queryKey: ["trucker-documents", truckerId],
     queryFn: () => apiFetch<TruckerDocument[]>(`/api/truckers/${truckerId}/documents`),
+    enabled: !!truckerId,
+  });
+}
+
+export function useTruckerStatusHistory(truckerId: string) {
+  return useQuery({
+    queryKey: ["trucker-status-history", truckerId],
+    queryFn: () => apiFetch<TruckerStatusHistoryEntry[]>(`/api/truckers/${truckerId}/status-history`),
     enabled: !!truckerId,
   });
 }

@@ -4,6 +4,11 @@ import { NotificationsService } from './notifications.service';
 
 const notifications = new NotificationsService();
 
+// Statuses that can't be set without explaining why. Keeps the "what happened
+// to this lead?" trail usable instead of a wall of unexplained status flips.
+// Add 'sleeping_lead' here if the team wants the same gate on that move.
+const COMMENT_REQUIRED_STATUSES = ['interested', 'not_interested'];
+
 // Compute [start, end) bounds for a period+date selection. UTC-based so the
 // math doesn't drift across timezones — close enough until per-user TZ is added.
 function periodBounds(period: 'day' | 'week' | 'month', dateStr: string): { start: string; end: string } {
@@ -63,20 +68,47 @@ export class TruckersService {
     const offset = ((filters.page || 1) - 1) * limit;
 
     const countResult = await query(`SELECT count(*) FROM truckers t ${where}`, params);
+    // LATERAL pulls the newest status comment per row in one pass — a
+    // correlated subquery per trucker would be an N+1 across the whole page.
     const data = await query(
       `SELECT t.*,
               e.full_name  as agent_name,
               sa.full_name as sales_agent_name,
-              dp.full_name as dispatcher_name
+              dp.full_name as dispatcher_name,
+              ub.full_name as updated_by_name,
+              h.comment    as latest_status_comment
          FROM truckers t
          LEFT JOIN employees e  ON e.id  = t.assigned_agent_id
          LEFT JOIN employees sa ON sa.id = t.assigned_sales_agent_id
          LEFT JOIN employees dp ON dp.id = t.assigned_dispatcher_id
+         LEFT JOIN users     ub ON ub.id = t.updated_by
+         LEFT JOIN LATERAL (
+           SELECT comment
+             FROM trucker_status_history
+            WHERE trucker_id = t.id AND comment IS NOT NULL
+            ORDER BY changed_at DESC
+            LIMIT 1
+         ) h ON TRUE
         ${where} ORDER BY t.created_at DESC LIMIT $${idx++} OFFSET $${idx++}`,
       [...params, limit, offset]
     );
 
     return { data: data.rows, total: parseInt(countResult.rows[0].count), page: filters.page || 1, limit };
+  }
+
+  // Status trail for one trucker — powers the drawer timeline so the
+  // mandatory comments are actually readable, not just stored.
+  async listStatusHistory(id: string) {
+    const result = await query(
+      `SELECT h.id, h.old_status_system, h.new_status_system, h.comment, h.changed_at,
+              u.full_name as changed_by_name
+         FROM trucker_status_history h
+         LEFT JOIN users u ON u.id = h.changed_by
+        WHERE h.trucker_id = $1
+        ORDER BY h.changed_at DESC`,
+      [id]
+    );
+    return result.rows;
   }
 
   async getById(id: string) {
@@ -85,11 +117,13 @@ export class TruckersService {
               e.full_name  as agent_name,
               sa.full_name as sales_agent_name,
               dp.full_name as dispatcher_name,
+              ub.full_name as updated_by_name,
               op.docs_uploaded, op.docs_required, op.is_fully_onboarded
          FROM truckers t
          LEFT JOIN employees e  ON e.id  = t.assigned_agent_id
          LEFT JOIN employees sa ON sa.id = t.assigned_sales_agent_id
          LEFT JOIN employees dp ON dp.id = t.assigned_dispatcher_id
+         LEFT JOIN users     ub ON ub.id = t.updated_by
          LEFT JOIN v_onboarding_progress op ON op.id = t.id
         WHERE t.id = $1`, [id]
     );
@@ -303,6 +337,28 @@ export class TruckersService {
     if (!existing.rows.length) throw new AppError('Trucker not found', 404, 'NOT_FOUND');
     const old = existing.rows[0];
 
+    // status_comment is not a truckers column — it lands in
+    // trucker_status_history.comment. Pull it out before the dynamic UPDATE
+    // below builds its SET list, or we'd generate invalid SQL.
+    const statusComment: string | undefined = data.status_comment;
+    delete data.status_comment;
+
+    // Moving a lead to interested/not_interested requires a reason, so the
+    // next person to open the record knows what happened. Enforced here
+    // rather than only in the UI so the status dropdown can't bypass it.
+    if (
+      data.status_system &&
+      data.status_system !== old.status_system &&
+      COMMENT_REQUIRED_STATUSES.includes(data.status_system) &&
+      !statusComment?.trim()
+    ) {
+      throw new AppError(
+        'A comment is required when changing status to Interested or Not Interested',
+        400,
+        'STATUS_COMMENT_REQUIRED'
+      );
+    }
+
     // Block any path that tries to flip status to fully_onboarded without
     // the required document checklist being complete. Enforced server-side so
     // the Truckers-page status dropdown can't bypass the onboarding workflow.
@@ -315,9 +371,9 @@ export class TruckersService {
     // dispatcher slot is always set explicitly.)
     if (data.status_system && data.status_system !== old.status_system) {
       await query(
-        `INSERT INTO trucker_status_history (trucker_id, old_status_system, old_status_custom_id, new_status_system, new_status_custom_id, changed_by)
-         VALUES ($1,$2,$3,$4,$5,$6)`,
-        [id, old.status_system, old.status_custom_id, data.status_system, data.status_custom_id || null, userId]
+        `INSERT INTO trucker_status_history (trucker_id, old_status_system, old_status_custom_id, new_status_system, new_status_custom_id, comment, changed_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [id, old.status_system, old.status_custom_id, data.status_system, data.status_custom_id || null, statusComment?.trim() || null, userId]
       );
 
       // Also write a status_change row to audit_log with new_value populated so
@@ -360,6 +416,10 @@ export class TruckersService {
     }
     if (!fields.length) throw new AppError('No fields to update', 400, 'VALIDATION_ERROR');
     fields.push('updated_at = NOW()');
+    // Attribute every edit, not just status changes — the Truckers list shows
+    // "last updated by X" so anyone can see who last touched a record.
+    fields.push(`updated_by = $${idx++}`);
+    values.push(userId);
     values.push(id);
 
     await query(`UPDATE truckers SET ${fields.join(', ')} WHERE id = $${idx}`, values);
@@ -469,7 +529,7 @@ export class TruckersService {
 
     await query(
       `UPDATE truckers SET status_system='onboarded', status_custom_id=NULL,
-       onboarding_initiated_at=NOW(), onboarding_initiated_by=$1, updated_at=NOW() WHERE id=$2`,
+       onboarding_initiated_at=NOW(), onboarding_initiated_by=$1, updated_at=NOW(), updated_by=$1 WHERE id=$2`,
       [userId, id]
     );
 
@@ -575,6 +635,9 @@ export class TruckersService {
     const sets: string[] = ['updated_at = NOW()'];
     const params: any[] = [];
     let idx = 1;
+
+    sets.push(`updated_by = $${idx++}`);
+    params.push(userId);
 
     if (salesAgentId !== undefined) {
       sets.push(`assigned_sales_agent_id = $${idx}`);
@@ -695,8 +758,8 @@ export class TruckersService {
     // failures (the audit_log row is nice-to-have, not load-bearing).
     try {
       await query(
-        `UPDATE truckers SET status_system='fully_onboarded', fully_onboarded_at=NOW(), updated_at=NOW() WHERE id=$1`,
-        [id]
+        `UPDATE truckers SET status_system='fully_onboarded', fully_onboarded_at=NOW(), updated_at=NOW(), updated_by=$2 WHERE id=$1`,
+        [id, userId]
       );
     } catch (err: any) {
       console.error('[markFullyOnboarded] UPDATE truckers failed:', err?.message, err?.code);
