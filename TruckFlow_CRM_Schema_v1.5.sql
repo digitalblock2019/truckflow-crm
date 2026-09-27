@@ -90,6 +90,12 @@ CREATE TYPE leave_status AS ENUM (
   'rejected'
 );
 
+-- Order here mirrors the live production enum exactly (verified 2026-09-27 via
+-- SELECT unnest(enum_range(NULL::trucker_status))). Values below 'onboarded'
+-- were in the original v1.5 file; everything after it was added later by
+-- migrations or manual ALTERs and is backfilled here so a DB rebuilt from this
+-- file matches production. Integration/E2E tests build their DB from this
+-- file, so anything missing here is untestable.
 CREATE TYPE trucker_status AS ENUM (
   'called',
   'sms_sent',
@@ -98,7 +104,14 @@ CREATE TYPE trucker_status AS ENUM (
   'response_not_in_use',
   'interested',
   'not_interested',
-  'onboarded'
+  'onboarded',
+  'imported',                   -- set by the bulk importer
+  'fully_onboarded',            -- set once the document checklist is complete
+  'self_onboarding_sent',       -- added by 20260821_self_onboarding_phase_a.sql
+  'self_onboarding_submitted',
+  'self_onboarding_expired',
+  'duplicate_of',
+  'sleeping_lead'               -- added by 20260926_lead_tracking.sql
   -- custom statuses stored in trucker_custom_statuses table
 );
 
@@ -431,6 +444,9 @@ CREATE TABLE truckers (
   upload_batch_id   UUID REFERENCES trucker_upload_batches(id),
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  -- Added by 20260926_lead_tracking.sql. Nullable on purpose: self-onboarding
+  -- form submissions come from the trucker, not a CRM user.
+  updated_by        UUID REFERENCES users(id),
 
   CONSTRAINT chk_status CHECK (
     (status_system IS NOT NULL AND status_custom_id IS NULL) OR

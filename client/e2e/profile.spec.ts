@@ -1,12 +1,5 @@
-import { test, expect, Page } from '@playwright/test';
-
-async function loginAsAdmin(page: Page) {
-  await page.goto('/login');
-  await page.fill('input[type="email"]', 'admin@truckflow.com');
-  await page.fill('input[type="password"]', 'Password123!');
-  await page.click('button[type="submit"]');
-  await expect(page).toHaveURL('/', { timeout: 10000 });
-}
+import { test, expect } from '@playwright/test';
+import { loginAsAdmin } from './helpers';
 
 test.describe('Profile Page', () => {
   test.beforeEach(async ({ page }) => {
