@@ -15,6 +15,7 @@ router.get('/:id', (req, res) => ctrl.getById(req, res));
 router.get('/:id/status-history', (req, res) => ctrl.statusHistory(req, res));
 router.post('/', (req, res) => ctrl.create(req, res));
 router.patch('/:id', (req, res) => ctrl.update(req, res));
+router.post('/import/check-duplicates', authorize('admin', 'supervisor'), (req, res) => ctrl.checkImportDuplicates(req, res));
 router.post('/import', authorize('admin', 'supervisor'), (req, res) => ctrl.bulkImport(req, res));
 router.post('/bulk-delete', authorize('admin', 'supervisor'), (req, res) => ctrl.bulkDelete(req, res));
 router.post('/bulk-assign', authorize('admin', 'supervisor'), (req, res) => ctrl.bulkAssign(req, res));

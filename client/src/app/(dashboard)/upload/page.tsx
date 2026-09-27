@@ -8,7 +8,7 @@ import UploadZone from "@/components/ui/UploadZone";
 import Button from "@/components/ui/Button";
 import Card, { CardHeader } from "@/components/ui/Card";
 import Modal from "@/components/ui/Modal";
-import { useImportTruckers, useTruckerBatches, useDeleteBatch } from "@/lib/hooks";
+import { useImportTruckers, useTruckerBatches, useDeleteBatch, useCheckImportDuplicates, type ImportDuplicate } from "@/lib/hooks";
 import { useAuthStore } from "@/lib/auth";
 
 interface ParsedRow {
@@ -20,7 +20,30 @@ interface ImportResult {
   rows_added: number;
   rows_skipped: number;
   rows_errored: number;
+  rows_updated: number;
 }
+
+// What the file represents, which decides the status imported rows land on.
+// CarrierVault scrapes are raw leads; the other two are one-off migrations of
+// the Google Sheets the team tracked interested/sleeping leads in.
+const DATA_TYPES = [
+  { value: "imported", label: "New Leads (CarrierVault)", hint: "Raw scraped leads — land in the Imported tab, nobody has contacted them yet." },
+  { value: "interested", label: "Interested Leads (sheet migration)", hint: "Leads who reply actively — land in the Interested tab." },
+  { value: "sleeping_lead", label: "Sleeping Leads (sheet migration)", hint: "Leads who reply slowly or intermittently — land in the Sleeping Leads tab." },
+];
+
+// Fields worth showing side by side when deciding which version of a record
+// to keep. Anything not listed here is left untouched by the import either way.
+const COMPARE_FIELDS: { key: string; label: string }[] = [
+  { key: "legal_name", label: "Legal Name" },
+  { key: "dba_name", label: "DBA" },
+  { key: "phone", label: "Phone" },
+  { key: "email", label: "Email" },
+  { key: "state", label: "State" },
+  { key: "physical_address", label: "Address" },
+  { key: "dot_number", label: "DOT#" },
+  { key: "power_units", label: "Power Units" },
+];
 
 function parseCsv(text: string): { headers: string[]; rows: ParsedRow[] } {
   const lines = text.split("\n").filter((l) => l.trim());
@@ -115,7 +138,16 @@ export default function UploadPage() {
   const [chunkProgress, setChunkProgress] = useState<{ done: number; total: number } | null>(null);
   const [deleteBatchId, setDeleteBatchId] = useState<string | null>(null);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [targetStatus, setTargetStatus] = useState<string>("imported");
+  // Duplicate-resolution state. `pendingRows` holds the mapped rows while the
+  // user decides what to do about collisions, so the import can resume with
+  // their answers without re-parsing the file.
+  const [duplicates, setDuplicates] = useState<ImportDuplicate[]>([]);
+  const [resolutions, setResolutions] = useState<Record<string, "crm" | "sheet">>({});
+  const [pendingRows, setPendingRows] = useState<ParsedRow[] | null>(null);
+  const [dupIndex, setDupIndex] = useState(0);
   const importMut = useImportTruckers();
+  const checkDupsMut = useCheckImportDuplicates();
   const { data: batches } = useTruckerBatches();
   const deleteBatchMut = useDeleteBatch();
   const role = useAuthStore((s) => s.user?.role);
@@ -148,8 +180,8 @@ export default function UploadPage() {
   );
   const cleanPhone = (v: string): string => String(v ?? "").replace(/\D/g, "");
 
-  const handleImport = async () => {
-    const mapped = rows.map((row) => {
+  const buildMappedRows = (): ParsedRow[] => {
+    return rows.map((row) => {
       const out: ParsedRow = {};
       for (const [fileCol, val] of Object.entries(row)) {
         const apiField = apiFieldForHeader(fileCol);
@@ -167,9 +199,30 @@ export default function UploadPage() {
       }
       return out;
     });
+  };
 
-    // Chunk into batches of 500 rows. Each chunk reuses the same batch_id so
-    // the upload history shows one row, not N. Progress updates as chunks land.
+  // Step 1 — look for collisions before writing anything. If the file only
+  // contains MC#s we've never seen, skip the modal entirely and just import.
+  const handleImport = async () => {
+    const mapped = buildMappedRows();
+    try {
+      const { duplicates: found } = await checkDupsMut.mutateAsync({ rows: mapped });
+      if (found.length === 0) {
+        await runImport(mapped, {});
+        return;
+      }
+      setDuplicates(found);
+      setResolutions({});
+      setDupIndex(0);
+      setPendingRows(mapped);
+    } catch {
+      // mutation error state already surfaces below
+    }
+  };
+
+  // Step 2 — write. Chunk into batches of 500 rows; each chunk reuses the same
+  // batch_id so the upload history shows one row, not N.
+  const runImport = async (mapped: ParsedRow[], decisions: Record<string, "crm" | "sheet">) => {
     const CHUNK_SIZE = 500;
     const chunks: ParsedRow[][] = [];
     for (let i = 0; i < mapped.length; i += CHUNK_SIZE) {
@@ -179,6 +232,7 @@ export default function UploadPage() {
 
     let batchId: string | undefined;
     let lastResult: ImportResult | null = null;
+    let updatedTotal = 0;
     try {
       for (let i = 0; i < chunks.length; i++) {
         const isLast = i === chunks.length - 1;
@@ -187,9 +241,13 @@ export default function UploadPage() {
           filename: file?.name,
           batch_id: batchId,
           is_last_chunk: isLast,
+          target_status: targetStatus,
+          resolutions: decisions,
         });
         batchId = res.batch_id;
-        lastResult = res as unknown as ImportResult;
+        // rows_updated is per-chunk (not stored on the batch row), so sum it.
+        updatedTotal += res.rows_updated ?? 0;
+        lastResult = { ...res, rows_updated: updatedTotal } as unknown as ImportResult;
         setChunkProgress({ done: i + 1, total: chunks.length });
       }
       if (lastResult) setImportResult(lastResult);
@@ -200,12 +258,46 @@ export default function UploadPage() {
     }
   };
 
+  // Step 3 — user has answered every collision, apply their decisions.
+  const applyResolutions = async (decisions: Record<string, "crm" | "sheet">) => {
+    const mapped = pendingRows ?? [];
+    setDuplicates([]);
+    setPendingRows(null);
+    await runImport(mapped, decisions);
+  };
+
+  const resolveAllRemaining = (choice: "crm" | "sheet") => {
+    const next = { ...resolutions };
+    for (const d of duplicates) {
+      if (!next[d.mc_number]) next[d.mc_number] = choice;
+    }
+    applyResolutions(next);
+  };
+
+  const resolveCurrent = (choice: "crm" | "sheet") => {
+    const current = duplicates[dupIndex];
+    if (!current) return;
+    const next = { ...resolutions, [current.mc_number]: choice };
+    setResolutions(next);
+    if (dupIndex + 1 < duplicates.length) {
+      setDupIndex(dupIndex + 1);
+    } else {
+      applyResolutions(next);
+    }
+  };
+
   const handleReset = () => {
     setFile(null);
     setRows([]);
     setHeaders([]);
     setImportResult(null);
+    setDuplicates([]);
+    setResolutions({});
+    setPendingRows(null);
+    setDupIndex(0);
+    setTargetStatus("imported");
     importMut.reset();
+    checkDupsMut.reset();
   };
 
   // Success screen
@@ -226,6 +318,12 @@ export default function UploadPage() {
                   <div className="text-2xl font-bold text-green">{importResult.rows_added}</div>
                   <div className="text-xs text-txt-light mt-1">Added</div>
                 </div>
+                {importResult.rows_updated > 0 && (
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-blue">{importResult.rows_updated}</div>
+                    <div className="text-xs text-txt-light mt-1">Updated (existing)</div>
+                  </div>
+                )}
                 <div className="text-center">
                   <div className="text-2xl font-bold text-orange">{importResult.rows_skipped}</div>
                   <div className="text-xs text-txt-light mt-1">Skipped (duplicates)</div>
@@ -254,6 +352,95 @@ export default function UploadPage() {
     <>
       <Topbar title="Upload Truck Data" subtitle="Import trucker records from CSV or Excel" />
       <div className="flex-1 min-h-0 overflow-y-auto p-6 bg-surface">
+        {/* Duplicate resolution — these MC#s already exist in the CRM, so the
+            user picks which version survives before anything is written.
+            Bulk actions matter here: a sheet can collide on hundreds of rows
+            and nobody will click through them one at a time. */}
+        <Modal
+          open={duplicates.length > 0}
+          onClose={() => { setDuplicates([]); setPendingRows(null); setResolutions({}); setDupIndex(0); }}
+          title="Existing records found"
+          width="720px"
+        >
+          {duplicates[dupIndex] && (() => {
+            const dup = duplicates[dupIndex];
+            const crm = dup.crm as Record<string, unknown>;
+            const incoming = dup.incoming as Record<string, string>;
+            return (
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm text-txt-mid">
+                    MC# <span className="font-mono font-semibold">{dup.mc_number}</span> is already in the CRM.
+                    Which version should be kept?
+                  </p>
+                  <span className="text-xs font-mono text-txt-light shrink-0 ml-3">
+                    {dupIndex + 1} of {duplicates.length}
+                  </span>
+                </div>
+
+                <div className="border border-border rounded-md overflow-hidden mb-4">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-surface text-left text-txt-light">
+                        <th className="px-3 py-2 font-medium w-[22%]">Field</th>
+                        <th className="px-3 py-2 font-medium">In CRM</th>
+                        <th className="px-3 py-2 font-medium">In sheet</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {COMPARE_FIELDS.map((f) => {
+                        const crmVal = crm[f.key] == null || crm[f.key] === "" ? "—" : String(crm[f.key]);
+                        const sheetVal = !incoming[f.key] ? "—" : String(incoming[f.key]);
+                        const differs = crmVal !== sheetVal;
+                        return (
+                          <tr key={f.key} className="border-t border-border">
+                            <td className="px-3 py-1.5 text-txt-light">{f.label}</td>
+                            <td className={`px-3 py-1.5 ${differs ? "bg-orange/10 font-medium" : ""}`}>{crmVal}</td>
+                            <td className={`px-3 py-1.5 ${differs ? "bg-orange/10 font-medium" : ""}`}>{sheetVal}</td>
+                          </tr>
+                        );
+                      })}
+                      <tr className="border-t border-border">
+                        <td className="px-3 py-1.5 text-txt-light">Status</td>
+                        <td className="px-3 py-1.5" colSpan={2}>
+                          <span className="font-mono">{String(crm.status_system ?? "—")}</span>
+                          {" → "}
+                          <span className="font-mono font-semibold">{targetStatus}</span>
+                          <span className="text-txt-light"> (either way)</span>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button onClick={() => resolveCurrent("crm")}>Keep CRM record</Button>
+                  <Button variant="secondary" onClick={() => resolveCurrent("sheet")}>Keep sheet record</Button>
+                  <div className="ml-auto flex gap-2">
+                    <button
+                      onClick={() => resolveAllRemaining("crm")}
+                      className="text-[11px] text-blue hover:underline"
+                    >
+                      Keep CRM for all remaining
+                    </button>
+                    <button
+                      onClick={() => resolveAllRemaining("sheet")}
+                      className="text-[11px] text-blue hover:underline"
+                    >
+                      Keep sheet for all remaining
+                    </button>
+                  </div>
+                </div>
+                <p className="mt-3 text-[11px] text-txt-light">
+                  Either choice moves the record into <span className="font-mono">{targetStatus}</span> and logs where it
+                  came from in its status history. &ldquo;Keep CRM&rdquo; changes nothing else; &ldquo;Keep sheet&rdquo;
+                  also overwrites the highlighted contact fields.
+                </p>
+              </div>
+            );
+          })()}
+        </Modal>
+
         {/* Delete Batch Confirmation Modal */}
         <Modal
           open={!!deleteBatchId}
@@ -372,9 +559,11 @@ export default function UploadPage() {
                     <Button variant="secondary" onClick={handleReset}>
                       Cancel
                     </Button>
-                    <Button onClick={handleImport} disabled={importMut.isPending}>
+                    <Button onClick={handleImport} disabled={importMut.isPending || checkDupsMut.isPending}>
                       {chunkProgress
                         ? `Importing batch ${chunkProgress.done + (importMut.isPending ? 1 : 0)} of ${chunkProgress.total}...`
+                        : checkDupsMut.isPending
+                        ? "Checking for duplicates..."
                         : importMut.isPending
                         ? "Importing..."
                         : `Import ${rows.length} Records`}
@@ -382,9 +571,28 @@ export default function UploadPage() {
                   </div>
                 }
               />
-              {importMut.isError && (
+
+              <div className="mb-4 max-w-lg">
+                <label className="block text-[10px] font-mono uppercase tracking-wider text-txt-light mb-1">
+                  Data type
+                </label>
+                <select
+                  value={targetStatus}
+                  onChange={(e) => setTargetStatus(e.target.value)}
+                  className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                >
+                  {DATA_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
+                <div className="mt-1 text-[11px] text-txt-light">
+                  {DATA_TYPES.find((t) => t.value === targetStatus)?.hint}
+                </div>
+              </div>
+
+              {(importMut.isError || checkDupsMut.isError) && (
                 <div className="bg-red-bg border border-red/30 rounded-md px-3 py-2 mb-4 text-xs text-red">
-                  {importMut.error?.message || "Import failed"}
+                  {importMut.error?.message || checkDupsMut.error?.message || "Import failed"}
                 </div>
               )}
             </Card>

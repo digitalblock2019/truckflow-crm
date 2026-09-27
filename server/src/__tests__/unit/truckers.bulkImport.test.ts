@@ -55,6 +55,7 @@ describe('TruckersService.bulkImport — chunked-upload support', () => {
       rows_added: 1,
       rows_skipped: 0,
       rows_errored: 0,
+      rows_updated: 0,
     });
     expect(mockQuery.mock.calls[0][0]).toMatch(/INSERT INTO trucker_upload_batches/);
   });
@@ -80,6 +81,7 @@ describe('TruckersService.bulkImport — chunked-upload support', () => {
       rows_added: 100,
       rows_skipped: 1,
       rows_errored: 0,
+      rows_updated: 0,
     });
     // Verify the service did NOT create a new batch row
     const insertedBatch = mockQuery.mock.calls.find((c) =>
@@ -153,5 +155,85 @@ describe('TruckersService.bulkImport — chunked-upload support', () => {
 
     expect(result.rows_added).toBe(1);
     expect(result.rows_errored).toBe(1);
+  });
+});
+
+describe('TruckersService.bulkImport — sheet migration (target status + duplicate resolutions)', () => {
+  beforeEach(() => {
+    mockQuery.mockReset();
+    createForRole.mockClear();
+  });
+
+  it('inserts new rows at the target status and records where they came from', async () => {
+    mockQuery
+      .mockResolvedValueOnce(ok([{ id: 'batch-1' }]))                                        // INSERT batch
+      .mockResolvedValueOnce(ok([]))                                                          // dup check — none
+      .mockResolvedValueOnce(ok([{ id: 'new-trucker' }]))                                     // INSERT trucker
+      .mockResolvedValueOnce(ok([]))                                                          // INSERT status history
+      .mockResolvedValueOnce(ok([{ rows_added: 1, rows_skipped: 0, rows_errored: 0 }]));     // UPDATE totals
+
+    const result = await svc.bulkImport(
+      [ROW('MC-1')], 'user-1', 'sleeping.xlsx', undefined, true, 'sleeping_lead',
+    );
+
+    expect(result.rows_added).toBe(1);
+    const insert = mockQuery.mock.calls.find((c) => String(c[0]).includes('INSERT INTO truckers'));
+    expect(insert![1]).toContain('sleeping_lead');
+    const history = mockQuery.mock.calls.find((c) =>
+      String(c[0]).includes('INSERT INTO trucker_status_history'),
+    );
+    expect(String(history![1]![2])).toMatch(/Migrated from "sleeping\.xlsx"/);
+  });
+
+  it('leaves a duplicate untouched when no resolution was recorded for it', async () => {
+    mockQuery
+      .mockResolvedValueOnce(ok([{ id: 'batch-1' }]))                                        // INSERT batch
+      .mockResolvedValueOnce(ok([{ id: 'existing', status_system: 'called' }]))              // dup check — found
+      .mockResolvedValueOnce(ok([{ rows_added: 0, rows_skipped: 1, rows_errored: 0 }]));     // UPDATE totals
+
+    const result = await svc.bulkImport(
+      [ROW('MC-999')], 'user-1', 'sheet.xlsx', undefined, true, 'interested', {},
+    );
+
+    expect(result.rows_skipped).toBe(1);
+    expect(result.rows_updated).toBe(0);
+    expect(mockQuery.mock.calls.find((c) => String(c[0]).includes('UPDATE truckers'))).toBeUndefined();
+  });
+
+  it("resolution 'crm' moves the status but does not overwrite the record's fields", async () => {
+    mockQuery
+      .mockResolvedValueOnce(ok([{ id: 'batch-1' }]))                                        // INSERT batch
+      .mockResolvedValueOnce(ok([{ id: 'existing', status_system: 'called' }]))              // dup check — found
+      .mockResolvedValueOnce(ok([]))                                                          // UPDATE status only
+      .mockResolvedValueOnce(ok([]))                                                          // INSERT status history
+      .mockResolvedValueOnce(ok([{ rows_added: 0, rows_skipped: 0, rows_errored: 0 }]));     // UPDATE totals
+
+    const result = await svc.bulkImport(
+      [ROW('MC-999')], 'user-1', 'sheet.xlsx', undefined, true, 'interested', { '999': 'crm' },
+    );
+
+    expect(result.rows_updated).toBe(1);
+    const update = mockQuery.mock.calls.find((c) => String(c[0]).includes('UPDATE truckers'));
+    // Status-only update — contact columns must not appear in the SET list.
+    expect(String(update![0])).not.toMatch(/legal_name/);
+    expect(update![1]).toEqual(['existing', 'interested', 'user-1']);
+  });
+
+  it("resolution 'sheet' overwrites contact fields as well as the status", async () => {
+    mockQuery
+      .mockResolvedValueOnce(ok([{ id: 'batch-1' }]))                                        // INSERT batch
+      .mockResolvedValueOnce(ok([{ id: 'existing', status_system: 'called' }]))              // dup check — found
+      .mockResolvedValueOnce(ok([]))                                                          // UPDATE fields + status
+      .mockResolvedValueOnce(ok([]))                                                          // INSERT status history
+      .mockResolvedValueOnce(ok([{ rows_added: 0, rows_skipped: 0, rows_errored: 0 }]));     // UPDATE totals
+
+    const result = await svc.bulkImport(
+      [ROW('MC-999')], 'user-1', 'sheet.xlsx', undefined, true, 'interested', { '999': 'sheet' },
+    );
+
+    expect(result.rows_updated).toBe(1);
+    const update = mockQuery.mock.calls.find((c) => String(c[0]).includes('UPDATE truckers'));
+    expect(String(update![0])).toMatch(/legal_name/);
+    expect(update![1]).toContain('interested');
   });
 });

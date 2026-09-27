@@ -219,15 +219,38 @@ export function useImportTruckers() {
       filename?: string;
       batch_id?: string;
       is_last_chunk?: boolean;
+      target_status?: string;
+      resolutions?: Record<string, "crm" | "sheet">;
     }) =>
-      apiFetch<{ batch_id: string; rows_added: number; rows_skipped: number; rows_errored: number }>(
-        "/api/truckers/import",
-        { method: "POST", body: JSON.stringify(input) }
-      ),
+      apiFetch<{
+        batch_id: string;
+        rows_added: number;
+        rows_skipped: number;
+        rows_errored: number;
+        rows_updated: number;
+      }>("/api/truckers/import", { method: "POST", body: JSON.stringify(input) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["truckers"] });
       qc.invalidateQueries({ queryKey: ["trucker-batches"] });
     },
+  });
+}
+
+export interface ImportDuplicate {
+  mc_number: string;
+  crm: Record<string, unknown>;
+  incoming: Record<string, string>;
+}
+
+// Read-only pre-flight: which MC#s in this file already exist, and what does
+// the CRM hold for them? Drives the keep-which-version modal before any write.
+export function useCheckImportDuplicates() {
+  return useMutation({
+    mutationFn: (input: { rows: Record<string, string>[] }) =>
+      apiFetch<{ duplicates: ImportDuplicate[]; incoming_count: number }>(
+        "/api/truckers/import/check-duplicates",
+        { method: "POST", body: JSON.stringify(input) }
+      ),
   });
 }
 

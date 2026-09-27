@@ -452,7 +452,56 @@ export class TruckersService {
     return this.getById(id);
   }
 
-  async bulkImport(rows: any[], userId: string, filename?: string, existingBatchId?: string, isLastChunk: boolean = true) {
+  // Pre-flight for the import flow: which incoming MC#s already exist, and
+  // what does the CRM currently hold for them? The upload page uses this to
+  // ask the user which version to keep before anything is written.
+  async checkImportDuplicates(rows: any[]) {
+    const byMc = new Map<string, any>();
+    for (const row of rows) {
+      const mcNumber = row.mc_number ? String(row.mc_number).replace(/\D/g, '') : '';
+      if (!mcNumber) continue;
+      // Last row wins if a sheet lists the same MC# twice.
+      byMc.set(mcNumber, { ...row, mc_number: mcNumber });
+    }
+    const mcNumbers = [...byMc.keys()];
+    if (!mcNumbers.length) return { duplicates: [], incoming_count: 0 };
+
+    const existing = await query(
+      `SELECT t.id, t.mc_number, t.dot_number, t.legal_name, t.dba_name, t.phone, t.email,
+              t.state, t.physical_address, t.power_units, t.status_system, t.updated_at,
+              ub.full_name as updated_by_name
+         FROM truckers t
+         LEFT JOIN users ub ON ub.id = t.updated_by
+        WHERE t.mc_number = ANY($1::text[])`,
+      [mcNumbers]
+    );
+
+    const duplicates = existing.rows.map((crm: any) => ({
+      mc_number: crm.mc_number,
+      crm,
+      incoming: byMc.get(crm.mc_number),
+    }));
+    return { duplicates, incoming_count: mcNumbers.length };
+  }
+
+  /**
+   * @param targetStatus  status assigned to imported/updated rows. Defaults to
+   *   'imported' (the CarrierVault scrape path). The sheet-migration paths pass
+   *   'interested' or 'sleeping_lead'.
+   * @param resolutions   per-MC# decision for rows that already exist:
+   *   'crm'   — keep the CRM record's fields, only move its status
+   *   'sheet' — overwrite contact fields from the sheet, and move its status
+   *   absent  — skip the row entirely (previous behaviour)
+   */
+  async bulkImport(
+    rows: any[],
+    userId: string,
+    filename?: string,
+    existingBatchId?: string,
+    isLastChunk: boolean = true,
+    targetStatus: string = 'imported',
+    resolutions: Record<string, 'crm' | 'sheet'> = {},
+  ) {
     // If a batch_id is passed (subsequent chunk), append to that batch instead of
     // creating a new one. Large client-side uploads chunk into ~500-row pieces and
     // thread the batch_id through so they roll up into a single upload-history row.
@@ -469,7 +518,12 @@ export class TruckersService {
       batchId = batch.rows[0].id;
     }
 
-    let added = 0, skipped = 0, errored = 0;
+    // Where a record came from matters later — stamp the origin on the status
+    // history so a trucker sitting in Interested can be traced back to the
+    // sheet it was migrated from rather than looking like an agent set it.
+    const migrationNote = `Migrated from "${filename || 'import'}" on ${new Date().toISOString().slice(0, 10)}`;
+
+    let added = 0, updated = 0, skipped = 0, errored = 0;
     for (const row of rows) {
       try {
         // Strip "MC"/"MC-" prefixes and any other non-digits from MC/DOT so the
@@ -478,17 +532,71 @@ export class TruckersService {
         const mcNumber = row.mc_number ? String(row.mc_number).replace(/\D/g, '') : '';
         const dotNumber = row.dot_number ? String(row.dot_number).replace(/\D/g, '') : null;
         if (!mcNumber) { errored++; continue; }
-        const dup = await query('SELECT id FROM truckers WHERE mc_number = $1', [mcNumber]);
-        if (dup.rows.length) { skipped++; continue; }
-        await query(
+        const powerUnits = row.power_units ? parseInt(row.power_units) || null : null;
+
+        const dup = await query('SELECT id, status_system FROM truckers WHERE mc_number = $1', [mcNumber]);
+        if (dup.rows.length) {
+          const resolution = resolutions[mcNumber];
+          // No decision recorded for this MC# — leave it alone, same as before.
+          if (!resolution) { skipped++; continue; }
+
+          const existingRow = dup.rows[0];
+          if (resolution === 'sheet') {
+            // Sheet is treated as the fresher source: overwrite contact fields.
+            // COALESCE so a blank cell doesn't wipe good CRM data.
+            await query(
+              `UPDATE truckers
+                  SET dot_number       = COALESCE($2, dot_number),
+                      legal_name       = COALESCE(NULLIF($3, ''), legal_name),
+                      dba_name         = COALESCE(NULLIF($4, ''), dba_name),
+                      phone            = COALESCE(NULLIF($5, ''), phone),
+                      email            = COALESCE(NULLIF($6, ''), email),
+                      state            = COALESCE(NULLIF($7, ''), state),
+                      physical_address = COALESCE(NULLIF($8, ''), physical_address),
+                      power_units      = COALESCE($9, power_units),
+                      status_system    = $10,
+                      updated_at       = NOW(),
+                      updated_by       = $11
+                WHERE id = $1`,
+              [existingRow.id, dotNumber, row.legal_name ?? '', row.dba_name ?? '', row.phone ?? '',
+               row.email ?? '', row.state ?? '', row.physical_address ?? '', powerUnits, targetStatus, userId]
+            );
+          } else {
+            // Keep the CRM record as-is; only move it into the target status.
+            await query(
+              `UPDATE truckers SET status_system = $2, updated_at = NOW(), updated_by = $3 WHERE id = $1`,
+              [existingRow.id, targetStatus, userId]
+            );
+          }
+
+          if (existingRow.status_system !== targetStatus) {
+            await query(
+              `INSERT INTO trucker_status_history (trucker_id, old_status_system, new_status_system, comment, changed_by)
+               VALUES ($1,$2,$3,$4,$5)`,
+              [existingRow.id, existingRow.status_system, targetStatus,
+               `${migrationNote} — kept ${resolution === 'sheet' ? 'sheet' : 'CRM'} version`, userId]
+            );
+          }
+          updated++;
+          continue;
+        }
+
+        const inserted = await query(
           `INSERT INTO truckers (mc_number, dot_number, legal_name, dba_name, phone, email, state,
-           physical_address, power_units, status_system, upload_batch_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'imported',$10)`,
+           physical_address, power_units, status_system, upload_batch_id, updated_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
           [mcNumber, dotNumber, row.legal_name, row.dba_name, row.phone, row.email,
-           row.state, row.physical_address,
-           row.power_units ? parseInt(row.power_units) || null : null,
-           batchId]
+           row.state, row.physical_address, powerUnits, targetStatus, batchId, userId]
         );
+        // Only worth a history row when the import lands somewhere other than
+        // the default 'imported' bucket — otherwise it's noise on every row.
+        if (targetStatus !== 'imported') {
+          await query(
+            `INSERT INTO trucker_status_history (trucker_id, old_status_system, new_status_system, comment, changed_by)
+             VALUES ($1,NULL,$2,$3,$4)`,
+            [inserted.rows[0].id, targetStatus, migrationNote, userId]
+          );
+        }
         added++;
       } catch { errored++; }
     }
@@ -520,6 +628,10 @@ export class TruckersService {
       rows_added: cumulative.rows_added,
       rows_skipped: cumulative.rows_skipped,
       rows_errored: cumulative.rows_errored,
+      // Per-chunk, not cumulative — trucker_upload_batches has no
+      // rows_updated column, and updated rows aren't "added" to the batch so
+      // folding them into rows_added would misreport the upload history.
+      rows_updated: updated,
     };
   }
 

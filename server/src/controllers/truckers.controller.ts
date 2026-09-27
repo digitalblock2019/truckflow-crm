@@ -4,6 +4,10 @@ import { AppError } from '../utils/AppError';
 
 const svc = new TruckersService();
 
+// Whitelisted so a crafted request can't drop imported rows into an arbitrary
+// status (e.g. straight to fully_onboarded, bypassing the document checklist).
+const IMPORT_TARGET_STATUSES = ['imported', 'interested', 'sleeping_lead'];
+
 export class TruckersController {
   async list(req: Request, res: Response) {
     const result = await svc.list({
@@ -41,10 +45,23 @@ export class TruckersController {
     res.json(result);
   }
 
+  async checkImportDuplicates(req: Request, res: Response) {
+    if (!req.body.rows || !Array.isArray(req.body.rows)) throw new AppError('rows array required', 400, 'VALIDATION_ERROR');
+    const result = await svc.checkImportDuplicates(req.body.rows);
+    res.json(result);
+  }
+
   async bulkImport(req: Request, res: Response) {
     if (!req.body.rows || !Array.isArray(req.body.rows)) throw new AppError('rows array required', 400, 'VALIDATION_ERROR');
     const isLastChunk = req.body.is_last_chunk !== false; // default true for backward compat
-    const result = await svc.bulkImport(req.body.rows, req.user!.id, req.body.filename, req.body.batch_id, isLastChunk);
+    const targetStatus = req.body.target_status || 'imported';
+    if (!IMPORT_TARGET_STATUSES.includes(targetStatus)) {
+      throw new AppError(`target_status must be one of: ${IMPORT_TARGET_STATUSES.join(', ')}`, 400, 'VALIDATION_ERROR');
+    }
+    const result = await svc.bulkImport(
+      req.body.rows, req.user!.id, req.body.filename, req.body.batch_id, isLastChunk,
+      targetStatus, req.body.resolutions || {},
+    );
     res.status(201).json(result);
   }
 
