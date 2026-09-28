@@ -32,8 +32,11 @@ export async function apiFetch<T = unknown>(
     headers,
   });
 
-  if (res.status === 401) {
-    // Try refresh
+  // A 401 only means "session expired" if we actually sent a session. Without
+  // a token it's a plain auth failure — signing in with the wrong password,
+  // say — and redirecting to /login there reloads the page and throws away
+  // the error before the user can read it.
+  if (res.status === 401 && token) {
     const refreshed = await tryRefresh();
     if (refreshed) {
       headers["Authorization"] = `Bearer ${useAuthStore.getState().tokens?.access_token}`;
@@ -48,8 +51,15 @@ export async function apiFetch<T = unknown>(
   }
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({ message: res.statusText }));
-    throw new ApiError(res.status, body.message || res.statusText, body.code);
+    // The API shapes failures as { error: { key, message } } (see
+    // server/src/middleware/errorHandler.ts). Reading body.message/body.code
+    // silently discarded every real message and left code undefined, so
+    // callers keying off it — the duplicate-MC confirm flow, for one — could
+    // never match. Older/plainer shapes are still accepted as fallbacks.
+    const body = await res.json().catch(() => ({}));
+    const message = body?.error?.message || body?.message || res.statusText;
+    const code = body?.error?.key || body?.code;
+    throw new ApiError(res.status, message, code);
   }
 
   if (res.status === 204) return undefined as T;
