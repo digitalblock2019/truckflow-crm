@@ -1,0 +1,179 @@
+name: CI
+
+# main deploys straight to production (Vercel + Render auto-deploy on push),
+# so a bad merge is live immediately. These checks are the gate — make them
+# required in Settings → Branches → Branch protection rules for `main`.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# A new push to the same PR makes the previous run irrelevant.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  server:
+    name: Server — typecheck, unit, integration
+    runs-on: ubuntu-latest
+
+    # Mirrors server/docker-compose.test.yml. The port must stay 5433 to match
+    # DATABASE_URL in server/.env.test, which is committed.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: truckflow_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d truckflow_test"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install
+        working-directory: server
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: server
+        run: npx tsc --noEmit
+
+      - name: Unit tests
+        working-directory: server
+        run: npx jest --testPathPatterns=unit --ci
+
+      # globalSetup builds the schema from TruckFlow_CRM_Schema_v1.5.sql and
+      # seeds the test users. runInBand because the suites share one database.
+      - name: Integration tests
+        working-directory: server
+        run: npx jest --testPathPatterns=integration --runInBand --forceExit --ci
+
+  client:
+    name: Client — typecheck and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install
+        working-directory: client
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: client
+        run: npx tsc --noEmit
+
+      - name: Build
+        working-directory: client
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3000
+
+  e2e:
+    name: End-to-end — API and UI
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: truckflow_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d truckflow_test"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install server
+        working-directory: server
+        run: npm ci
+
+      - name: Install client
+        working-directory: client
+        run: npm ci
+
+      # Reuses the integration run purely to build and seed the schema — the
+      # E2E suites sign in as the admin it seeds.
+      - name: Build and seed the test database
+        working-directory: server
+        run: npx jest --testPathPatterns=integration --runInBand --forceExit --ci
+
+      - name: Start the API
+        working-directory: server
+        run: |
+          DOTENV_CONFIG_PATH=.env.test npx ts-node -r dotenv/config src/server.ts > /tmp/api.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:3000/api/health > /dev/null && exit 0
+            sleep 2
+          done
+          echo "API did not come up:"; cat /tmp/api.log; exit 1
+
+      - name: Build and start the client
+        working-directory: client
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3000
+        run: |
+          npm run build
+          npx next start -p 3001 > /tmp/client.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:3001/login > /dev/null && exit 0
+            sleep 2
+          done
+          echo "Client did not come up:"; cat /tmp/client.log; exit 1
+
+      - name: Install Playwright browsers
+        working-directory: client
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E suites
+        working-directory: client
+        run: npx playwright test
+
+      # Server logs are usually where the real cause is when a UI spec fails.
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failures
+          path: |
+            client/test-results/
+            client/playwright-report/
+            /tmp/api.log
+            /tmp/client.log
+          retention-days: 7
+          if-no-files-found: ignore
