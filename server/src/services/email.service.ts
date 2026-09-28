@@ -1,7 +1,12 @@
 import { Resend } from 'resend';
 import { query } from '../config/database';
 
-const resend = new Resend(process.env.RESEND_API_KEY || '');
+// Resend's constructor throws when handed an empty key, and it runs at import
+// time — which took down every test suite that loads the app, plus any
+// environment without email configured. sendEmail() already returns early
+// when RESEND_API_KEY is unset, so this client is never actually used in that
+// case; the placeholder only keeps the module importable.
+const resend = new Resend(process.env.RESEND_API_KEY || 're_placeholder_unused');
 
 interface EmailBranding {
   companyName: string;

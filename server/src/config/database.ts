@@ -7,9 +7,14 @@ dotenv.config();
 // Force IPv4 — Render defaults to IPv6 which Supabase doesn't support
 dns.setDefaultResultOrder('ipv4first');
 
+// Supabase requires SSL; the Dockerised test Postgres doesn't support it at
+// all and rejects every statement when it's forced on. Detect a local target
+// rather than making each environment set another variable.
+const isLocalDb = /@(localhost|127\.0\.0\.1|postgres-test)[:/]/.test(process.env.DATABASE_URL || '');
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
+  ssl: isLocalDb ? false : { rejectUnauthorized: false },
 });
 
 pool.on('error', (err) => {

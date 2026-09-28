@@ -24,6 +24,7 @@ CREATE TYPE user_role AS ENUM (
 CREATE TYPE employee_type AS ENUM (
   'sales_agent',
   'dispatcher',
+  'sales_and_dispatcher',   -- backfilled 2026-09-27; mirrors user_role above
   'fixed_salary',
   'contractor'
 );
@@ -188,12 +189,33 @@ CREATE TABLE users (
   employee_id       UUID,                        -- FK to employees (nullable for admin-only accounts)
   is_active         BOOLEAN NOT NULL DEFAULT TRUE,
   last_login_at     TIMESTAMPTZ,
+  -- Auth columns, originally added by scripts/addAuthTables.ts and
+  -- scripts/addResetTokenColumns.ts. Backfilled here 2026-09-27 so a DB built
+  -- from this file can actually authenticate — integration and E2E tests build
+  -- from this file and every request 401'd without them.
+  password_hash       TEXT,
+  reset_token         TEXT,
+  reset_token_expires TIMESTAMPTZ,
+  profile_image_path  TEXT,          -- avatar object key
+  last_seen_at        TIMESTAMPTZ,   -- chat presence
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_role  ON users(role);
+
+-- Also from scripts/addAuthTables.ts.
+CREATE TABLE refresh_tokens (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token       TEXT NOT NULL,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_refresh_tokens_user  ON refresh_tokens(user_id);
+CREATE INDEX idx_refresh_tokens_token ON refresh_tokens(token);
 
 -- ============================================================
 --  2. EMPLOYEES  (HR records — all staff types)
@@ -1177,6 +1199,10 @@ CREATE TABLE invoices (
   pdf_file_path       TEXT,                   -- S3/R2 key — generated on send, regenerated on edit
   view_token          TEXT UNIQUE,            -- token for view-in-browser link (open tracking)
   view_token_expires_at TIMESTAMPTZ,
+
+  -- Stripe, added by scripts/migrateStripe.ts and backfilled here 2026-09-27.
+  stripe_payment_link_id  TEXT,
+  stripe_payment_link_url TEXT,
 
   created_by          UUID NOT NULL REFERENCES users(id),
   created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
