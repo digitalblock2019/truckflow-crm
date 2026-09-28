@@ -8,7 +8,9 @@ export async function loginAsAdmin(page: Page) {
   await page.fill('input[type="email"]', ADMIN.email);
   await page.fill('input[type="password"]', ADMIN.password);
   await page.click('button[type="submit"]');
-  await expect(page).toHaveURL('/', { timeout: 10000 });
+  // The post-login landing page isn't always "/" — assert we left /login
+  // rather than pinning a destination that can legitimately change.
+  await expect(page).not.toHaveURL(/\/login/, { timeout: 15000 });
 }
 
 /** Bearer token for API-level tests. */

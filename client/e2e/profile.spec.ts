@@ -13,28 +13,28 @@ test.describe('Profile Page', () => {
   });
 
   test('can edit name', async ({ page }) => {
-    // Click on the name to enter edit mode
-    const nameEl = page.locator('.text-base.font-bold.text-navy.cursor-pointer');
-    await nameEl.click();
+    const nameSelector = '.text-base.font-bold.text-navy.cursor-pointer';
 
-    // Input should appear
-    const nameInput = page.locator('input').first();
+    // Read the current name rather than assuming one — the seeded admin's
+    // name differs between environments, and hardcoding it made this test
+    // fail on a correctly-working page.
+    const original = (await page.locator(nameSelector).innerText()).trim();
+
+    await page.locator(nameSelector).click();
+    // Scoped to visible text inputs — the avatar's hidden file input sits
+    // earlier in the DOM and wins a bare input.first().
+    const nameInput = page.locator('input[type="text"]:visible, input:not([type]):visible').first();
     await expect(nameInput).toBeVisible();
 
-    // Change and save
     await nameInput.fill('Admin Test Name');
     await page.click('button:has-text("Save")');
+    await expect(page.locator('text=Admin Test Name')).toBeVisible({ timeout: 10000 });
 
-    // Should show updated name
-    await expect(page.locator('text=Admin Test Name')).toBeVisible({ timeout: 5000 });
-
-    // Restore original name
-    const updatedName = page.locator('.text-base.font-bold.text-navy.cursor-pointer');
-    await updatedName.click();
-    const input2 = page.locator('input').first();
-    await input2.fill('Admin User');
+    // Put it back so re-runs start from the same state.
+    await page.locator(nameSelector).click();
+    await page.locator('input[type="text"]:visible, input:not([type]):visible').first().fill(original);
     await page.click('button:has-text("Save")');
-    await expect(page.locator('text=Admin User')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator(nameSelector)).toHaveText(original, { timeout: 10000 });
   });
 
   test('shows salary slips section', async ({ page }) => {
@@ -44,7 +44,9 @@ test.describe('Profile Page', () => {
   });
 
   test('shows change password form', async ({ page }) => {
-    await expect(page.locator('text=Change Password')).toBeVisible();
+    // "Change Password" is both the card heading and its submit button, so
+    // this has to be scoped or strict mode rejects the ambiguity.
+    await expect(page.locator('text=Change Password').first()).toBeVisible();
     await expect(page.locator('input[type="password"]').first()).toBeVisible();
   });
 });

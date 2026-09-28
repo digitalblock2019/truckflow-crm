@@ -29,7 +29,9 @@ test.describe('API — status change comment gate', () => {
     });
 
     expect(res.status()).toBe(400);
-    expect((await res.json()).error?.code ?? (await res.json()).code).toBe('STATUS_COMMENT_REQUIRED');
+    // The error handler shapes failures as { error: { key, message } }.
+    const body = await res.json();
+    expect(body.error?.key).toBe('STATUS_COMMENT_REQUIRED');
   });
 
   test('rejects a whitespace-only comment', async ({ request }) => {

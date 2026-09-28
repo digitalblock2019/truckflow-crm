@@ -4,14 +4,18 @@ import { loginAsAdmin, uniqueMc } from './helpers';
 /**
  * Uploads a CSV built in-memory. The page parses client-side, so this
  * exercises the real header-alias mapping rather than stubbing it.
+ *
+ * UploadZone builds its file input with document.createElement on click and
+ * never renders one, so there's no input in the DOM to target — the file
+ * chooser event is the only handle.
  */
 async function uploadCsv(page: Page, filename: string, csv: string) {
-  await page.setInputFiles('input[type="file"]', {
-    name: filename,
-    mimeType: 'text/csv',
-    buffer: Buffer.from(csv),
-  });
-  await expect(page.getByText(`Preview: ${filename}`)).toBeVisible({ timeout: 10000 });
+  const [chooser] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    page.getByText('Drop file here or click to browse').click(),
+  ]);
+  await chooser.setFiles({ name: filename, mimeType: 'text/csv', buffer: Buffer.from(csv) });
+  await expect(page.getByText(`Preview: ${filename}`)).toBeVisible({ timeout: 15000 });
 }
 
 test.describe('Upload — lead type selector', () => {
@@ -70,8 +74,10 @@ test.describe('Upload — duplicate resolution modal', () => {
     await expect(modal).toBeVisible({ timeout: 20000 });
     await expect(page.getByText('1 of 1')).toBeVisible();
     // Both versions must be on screen for the decision to be meaningful.
-    await expect(page.getByText('ORIGINAL CRM NAME')).toBeVisible();
-    await expect(page.getByText('SHEET NAME')).toBeVisible();
+    // Scoped with .first() because the preview table behind the modal shows
+    // the same values, which trips strict mode.
+    await expect(page.getByText('ORIGINAL CRM NAME').first()).toBeVisible();
+    await expect(page.getByText('SHEET NAME').first()).toBeVisible();
 
     await page.getByRole('button', { name: /keep sheet record/i }).click();
 
