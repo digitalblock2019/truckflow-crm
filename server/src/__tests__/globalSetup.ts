@@ -10,7 +10,21 @@ import pool, { query } from '../config/database';
 import { runSchema } from '../../scripts/runSchema';
 
 // Test seed data — every integration test can assume these exist.
+//
+// `autotest` deliberately uses a .invalid domain (RFC 2606 — reserved, can
+// never be a real address). It is seeded ONLY into the local test database,
+// so if a test run is ever accidentally pointed at production the login
+// simply fails instead of writing junk into live data. Automated suites
+// should use this account, not `admin`.
+export const AUTOTEST_USER = {
+  email: 'autotest@truckflow.invalid',
+  password: 'Autotest123!',
+  role: 'admin' as const,
+  full_name: 'Automated Tests',
+};
+
 export const TEST_USERS = {
+  autotest: AUTOTEST_USER,
   admin: {
     email: 'admin@truckflow.com',
     password: 'Password123!',
@@ -116,11 +130,33 @@ async function seedUsers(): Promise<void> {
   }
 }
 
+/**
+ * Refuse to touch anything that isn't an obviously-local database.
+ *
+ * This setup TRUNCATEs tables and deletes users. Pointed at production —
+ * one stale shell, one wrong DATABASE_URL — it would destroy real data.
+ * A hard stop is worth more than a warning nobody reads.
+ */
+function assertLocalDatabase(): void {
+  const url = process.env.DATABASE_URL || '';
+  const isLocal = /@(localhost|127\.0\.0\.1|postgres-test)[:/]/.test(url);
+  if (!isLocal) {
+    throw new Error(
+      'Refusing to run tests against a non-local database.\n' +
+      `  DATABASE_URL points at: ${url.replace(/:[^:@/]*@/, ':***@') || '(unset)'}\n` +
+      '  Tests wipe tables and delete users. Start the local test DB with\n' +
+      '  `npm run test:db:up` and make sure .env.test is being loaded.',
+    );
+  }
+}
+
 export default async function globalSetup(): Promise<void> {
   // Skip the DB dance entirely on unit-only runs — they mock the database.
   if (isUnitOnlyRun()) {
     return;
   }
+
+  assertLocalDatabase();
 
   const up = await dbIsUp();
   if (!up) {

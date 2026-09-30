@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginAsAdmin } from './helpers';
+import { loginAsAdmin, ADMIN } from './helpers';
 
 test.describe('Profile Page', () => {
   test.beforeEach(async ({ page }) => {
@@ -9,7 +9,7 @@ test.describe('Profile Page', () => {
   });
 
   test('displays user info', async ({ page }) => {
-    await expect(page.locator('text=admin@truckflow.com')).toBeVisible();
+    await expect(page.locator(`text=${ADMIN.email}`)).toBeVisible();
   });
 
   test('can edit name', async ({ page }) => {
@@ -21,18 +21,21 @@ test.describe('Profile Page', () => {
     const original = (await page.locator(nameSelector).innerText()).trim();
 
     await page.locator(nameSelector).click();
-    // Scoped to visible text inputs — the avatar's hidden file input sits
-    // earlier in the DOM and wins a bare input.first().
-    const nameInput = page.locator('input[type="text"]:visible, input:not([type]):visible').first();
+    // The name field carries `text-center` (profile/page.tsx). A bare
+    // input.first() hits the avatar's hidden file input, and "first visible
+    // text input" can hit the leave-request form further down the page.
+    const nameInput = page.locator('input.text-center');
     await expect(nameInput).toBeVisible();
 
     await nameInput.fill('Admin Test Name');
     await page.click('button:has-text("Save")');
-    await expect(page.locator('text=Admin Test Name')).toBeVisible({ timeout: 10000 });
+    // Assert on the profile's own name element — the sidebar footer shows the
+    // same name, which trips strict mode on a bare text match.
+    await expect(page.locator(nameSelector)).toHaveText('Admin Test Name', { timeout: 10000 });
 
     // Put it back so re-runs start from the same state.
     await page.locator(nameSelector).click();
-    await page.locator('input[type="text"]:visible, input:not([type]):visible').first().fill(original);
+    await page.locator('input.text-center').fill(original);
     await page.click('button:has-text("Save")');
     await expect(page.locator(nameSelector)).toHaveText(original, { timeout: 10000 });
   });

@@ -114,10 +114,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Both lockfiles, since this job installs server and client.
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
+          cache-dependency-path: |
+            server/package-lock.json
+            client/package-lock.json
 
       - name: Install server
         working-directory: server

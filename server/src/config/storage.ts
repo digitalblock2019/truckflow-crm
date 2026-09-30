@@ -10,7 +10,22 @@ if (!supabaseUrl || !supabaseServiceKey) {
   console.warn('SUPABASE_URL or SUPABASE_SERVICE_KEY not set — file storage will not work');
 }
 
-const supabase = createClient(supabaseUrl || '', supabaseServiceKey || '');
+// Built on first use, not at import. createClient throws on an empty URL, and
+// doing that at module scope took down every test suite that imports anything
+// touching storage — in an environment that never intended to upload a file.
+// Failing here instead means the error names the real problem, at the moment
+// something actually tries to use storage.
+let client: ReturnType<typeof createClient> | null = null;
+
+function supabaseClient() {
+  if (!client) {
+    if (!supabaseUrl || !supabaseServiceKey) {
+      throw new Error('File storage is not configured — set SUPABASE_URL and SUPABASE_SERVICE_KEY');
+    }
+    client = createClient(supabaseUrl, supabaseServiceKey);
+  }
+  return client;
+}
 
 const DEFAULT_BUCKET = 'trucker-documents';
 
@@ -20,7 +35,7 @@ export async function uploadFile(
   contentType: string,
   bucket: string = DEFAULT_BUCKET
 ): Promise<string> {
-  const { error } = await supabase.storage.from(bucket).upload(path, buffer, {
+  const { error } = await supabaseClient().storage.from(bucket).upload(path, buffer, {
     contentType,
     upsert: true,
   });
@@ -33,7 +48,7 @@ export async function getSignedUrl(
   expiresIn = 3600,
   bucket: string = DEFAULT_BUCKET
 ): Promise<string> {
-  const { data, error } = await supabase.storage
+  const { data, error } = await supabaseClient().storage
     .from(bucket)
     .createSignedUrl(path, expiresIn);
   if (error || !data?.signedUrl) throw new Error(`Signed URL failed: ${error?.message}`);
@@ -41,6 +56,6 @@ export async function getSignedUrl(
 }
 
 export async function deleteFile(path: string, bucket: string = DEFAULT_BUCKET): Promise<void> {
-  const { error } = await supabase.storage.from(bucket).remove([path]);
+  const { error } = await supabaseClient().storage.from(bucket).remove([path]);
   if (error) throw new Error(`Storage delete failed: ${error.message}`);
 }

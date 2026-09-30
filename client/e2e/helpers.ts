@@ -1,7 +1,14 @@
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
 
-// Seeded by server/src/__tests__/globalSetup.ts when the test DB is built.
-export const ADMIN = { email: 'admin@truckflow.com', password: 'Password123!' };
+/**
+ * Seeded by server/src/__tests__/globalSetup.ts when the test DB is built.
+ *
+ * The .invalid domain is reserved by RFC 2606 and can never be a real
+ * address, so this account exists ONLY in the local test database. If these
+ * suites are ever accidentally pointed at production, login fails and the
+ * run stops — instead of filling live data with test carriers.
+ */
+export const ADMIN = { email: 'autotest@truckflow.invalid', password: 'Autotest123!' };
 
 export async function loginAsAdmin(page: Page) {
   await page.goto('/login');

@@ -40,12 +40,19 @@ npx playwright test                  # both
 
 Tear down with `cd server && npm run test:db:down`.
 
-## Login
+## Login — and why the account looks odd
 
-Both suites sign in as `admin@truckflow.com` / `Password123!`, seeded by
-`server/src/__tests__/globalSetup.ts`. That account exists in the **test** DB;
-in production it's kept disabled as a backup, which is another reason not to
-point these at prod.
+Both suites sign in as **`autotest@truckflow.invalid`** / `Autotest123!`, seeded
+by `server/src/__tests__/globalSetup.ts`.
+
+`.invalid` is reserved by RFC 2606 and can never be a real address, so this
+account exists *only* in the local test database. If a run is ever accidentally
+pointed at production, login simply fails and the suite stops — rather than
+filling live data with test carriers. Don't "fix" it to a real-looking address.
+
+There's a second layer: `globalSetup` refuses to run at all unless
+`DATABASE_URL` points at localhost. It truncates tables and deletes users, so
+one stale shell with the wrong env would otherwise be catastrophic.
 
 ## Gotcha: the schema file is the test DB
 
